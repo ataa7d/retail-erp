@@ -1,0 +1,92 @@
+import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { pool, withTransaction } from "../db.js";
+import { createCreditNote, postCreditNote } from "../../sales/salesService.js";
+import { NotFoundError } from "../errors.js";
+
+const lineSchema = z.object({
+  sourceLineId: z.string().uuid(),
+  itemVariantId: z.string().uuid().nullable(),
+  itemDescription: z.string().min(1),
+  qty: z.number().positive(),
+  unitPrice: z.number().nonnegative(),
+  discountAmount: z.number().nonnegative().default(0),
+  vatRate: z.number().nonnegative(),
+  priceIncludesVat: z.boolean(),
+});
+
+const createSchema = z.object({
+  storeId: z.string().uuid(),
+  originalInvoiceId: z.string().uuid(),
+  zatcaInvoiceCategory: z.enum(["simplified", "standard"]),
+  creditNoteDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  fiscalPeriodId: z.string().uuid(),
+  customerId: z.string().uuid().nullable().optional(),
+  reason: z.string().min(1),
+  lines: z.array(lineSchema).min(1),
+});
+
+export async function creditNoteRoutes(app: FastifyInstance): Promise<void> {
+  app.post(
+    "/credit-notes",
+    { preHandler: [app.authenticate, app.requirePermission("sales.return.create")] },
+    async (request, reply) => {
+      const body = createSchema.parse(request.body);
+
+      const creditNoteId = await withTransaction(async (client) => {
+        return createCreditNote(client, {
+          companyId: request.companyId,
+          storeId: body.storeId,
+          originalInvoiceId: body.originalInvoiceId,
+          zatcaInvoiceCategory: body.zatcaInvoiceCategory,
+          creditNoteDate: body.creditNoteDate,
+          fiscalPeriodId: body.fiscalPeriodId,
+          customerId: body.customerId ?? null,
+          reason: body.reason,
+          createdBy: request.authUser.id,
+          lines: body.lines,
+        });
+      }, request.authUser.id);
+
+      reply.status(201);
+      return { id: creditNoteId };
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/credit-notes/:id",
+    { preHandler: app.authenticate },
+    async (request) => {
+      const header = await pool.query(
+        `SELECT * FROM credit_notes WHERE id = $1 AND company_id = $2`,
+        [request.params.id, request.companyId],
+      );
+      if (header.rows.length === 0) throw new NotFoundError("credit note not found");
+
+      const lines = await pool.query(
+        `SELECT * FROM credit_note_lines WHERE credit_note_id = $1 ORDER BY line_number`,
+        [request.params.id],
+      );
+
+      return { ...header.rows[0], lines: lines.rows };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/credit-notes/:id/post",
+    { preHandler: [app.authenticate, app.requirePermission("sales.return.create")] },
+    async (request) => {
+      await withTransaction(async (client) => {
+        const existing = await client.query(
+          `SELECT id FROM credit_notes WHERE id = $1 AND company_id = $2`,
+          [request.params.id, request.companyId],
+        );
+        if (existing.rows.length === 0) throw new NotFoundError("credit note not found");
+
+        await postCreditNote(client, request.params.id, request.authUser.id);
+      }, request.authUser.id);
+
+      return { id: request.params.id, status: "posted" };
+    },
+  );
+}
