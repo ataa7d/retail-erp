@@ -24,7 +24,11 @@ export interface RequestOptions {
  * errors, it doesn't retry or dedupe anything.
  */
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = {};
+  // Fastify's JSON body parser rejects an empty body when Content-Type is
+  // set to application/json — only set it when there's actually a body
+  // (e.g. the many "create X, then POST X/:id/post" calls send no body).
+  if (options.body !== undefined) headers["Content-Type"] = "application/json";
   if (options.token) headers["Authorization"] = `Bearer ${options.token}`;
   if (options.companyId) headers["X-Company-Id"] = options.companyId;
 

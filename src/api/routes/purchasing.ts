@@ -1,14 +1,68 @@
 import type { FastifyInstance } from "fastify";
-import { pool } from "../db.js";
+import { z } from "zod";
+import { pool, withTransaction } from "../db.js";
+import { createPurchaseOrder, postPurchaseOrder } from "../../purchasing/purchasingService.js";
 import { NotFoundError } from "../errors.js";
 
-// Read-only for now — purchasing.po.create exists as a permission and
-// src/purchasing/purchasingService.ts has the full PO -> GR -> invoice
-// chain, but write routes for it were never wired to HTTP (only sales was
-// built out as the "representative pattern" in the Phase-8-prerequisite
-// API work). These list/detail routes are enough for the frontend to show
-// purchasing data; POST routes are a follow-up.
+const lineSchema = z.object({
+  itemVariantId: z.string().uuid(),
+  qty: z.number().positive(),
+  unitPrice: z.number().nonnegative(),
+  discountAmount: z.number().nonnegative().default(0),
+  vatRate: z.number().nonnegative(),
+  priceIncludesVat: z.boolean(),
+});
+
+const createSchema = z.object({
+  storeId: z.string().uuid(),
+  supplierId: z.string().uuid(),
+  orderDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  expectedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  fiscalPeriodId: z.string().uuid(),
+  lines: z.array(lineSchema).min(1),
+});
+
 export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
+  app.post(
+    "/purchase-orders",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.po.create")] },
+    async (request, reply) => {
+      const body = createSchema.parse(request.body);
+      const id = await withTransaction(
+        (client) =>
+          createPurchaseOrder(client, {
+            companyId: request.companyId,
+            storeId: body.storeId,
+            supplierId: body.supplierId,
+            orderDate: body.orderDate,
+            expectedDate: body.expectedDate ?? null,
+            fiscalPeriodId: body.fiscalPeriodId,
+            createdBy: request.authUser.id,
+            lines: body.lines,
+          }),
+        request.authUser.id,
+      );
+      reply.status(201);
+      return { id };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/purchase-orders/:id/post",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.po.create")] },
+    async (request) => {
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM purchase_orders WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("purchase order not found");
+        await postPurchaseOrder(client, request.params.id, request.authUser.id);
+      }, request.authUser.id);
+      return { id: request.params.id, status: "posted" };
+    },
+  );
+
   app.get("/purchase-orders", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
       `SELECT po.id, po.document_number, po.order_date, po.expected_date, po.document_status,
