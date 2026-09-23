@@ -1,12 +1,47 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { pool } from "../db.js";
+import { pool, withTransaction } from "../db.js";
 
 const listQuerySchema = z.object({
   updatedSince: z.string().datetime().optional(),
 });
 
+const createSchema = z.object({
+  itemCode: z.string().min(1),
+  nameEn: z.string().min(1),
+  nameAr: z.string().min(1),
+  // Minimal single-variant creation, not the full color/size matrix a real
+  // "new item" wizard would offer -- variantCode is required, color/size
+  // optional, matching what item_variants actually requires (UNIQUE on
+  // (item_id, color, size), so a second variant would need its own call).
+  variantCode: z.string().min(1),
+  color: z.string().nullable().optional(),
+  size: z.string().nullable().optional(),
+});
+
 export async function itemRoutes(app: FastifyInstance): Promise<void> {
+  app.post(
+    "/items",
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    async (request, reply) => {
+      const body = createSchema.parse(request.body);
+      const itemId = await withTransaction(async (client) => {
+        const item = await client.query<{ id: string }>(
+          `INSERT INTO items (company_id, item_code, name_en, name_ar) VALUES ($1, $2, $3, $4) RETURNING id`,
+          [request.companyId, body.itemCode, body.nameEn, body.nameAr],
+        );
+        await client.query(
+          `INSERT INTO item_variants (company_id, item_id, variant_code, color, size)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [request.companyId, item.rows[0]!.id, body.variantCode, body.color ?? null, body.size ?? null],
+        );
+        return item.rows[0]!.id;
+      }, request.authUser.id);
+      reply.status(201);
+      return { id: itemId };
+    },
+  );
+
   // Master data syncs one way, down — updatedSince lets a client (POS,
   // admin UI) pull only what changed since its last sync.
   app.get("/items", { preHandler: app.authenticate }, async (request) => {

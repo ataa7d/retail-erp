@@ -10,6 +10,7 @@ import Customers from "./pages/Customers";
 import Inventory from "./pages/Inventory";
 import Purchasing from "./pages/Purchasing";
 import Reports from "./pages/Reports";
+import Accounting from "./pages/Accounting";
 import Hr from "./pages/Hr";
 import Assets from "./pages/Assets";
 import Admin from "./pages/Admin";
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="inventory" element={<Inventory />} />
           <Route path="purchasing" element={<Purchasing />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="accounting" element={<Accounting />} />
           <Route path="hr" element={<Hr />} />
           <Route path="assets" element={<Assets />} />
           <Route path="admin" element={<Admin />} />
