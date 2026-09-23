@@ -4,7 +4,7 @@ import { pool } from "../db.js";
 export async function meRoutes(app: FastifyInstance): Promise<void> {
   app.get("/me", { preHandler: app.authenticate }, async (request) => {
     const roles = await pool.query(
-      `SELECT r.id, r.name, ur.store_id
+      `SELECT DISTINCT r.id, r.name, ur.store_id
        FROM user_roles ur
        JOIN roles r ON r.id = ur.role_id
        WHERE ur.user_id = $1 AND ur.company_id = $2`,
