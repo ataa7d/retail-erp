@@ -1,10 +1,12 @@
 import Fastify, { type FastifyInstance } from "fastify";
+import cors from "@fastify/cors";
 import { ZodError } from "zod";
 import { registerAuth } from "./plugins/auth.js";
 import { HttpError, pgErrorStatus } from "./errors.js";
 import { healthRoutes } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { meRoutes } from "./routes/me.js";
+import { companyRoutes } from "./routes/companies.js";
 import { itemRoutes } from "./routes/items.js";
 import { customerRoutes } from "./routes/customers.js";
 import { priceListRoutes } from "./routes/priceLists.js";
@@ -21,6 +23,14 @@ import { adminRoutes } from "./routes/admin.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+
+  // Dev-friendly default: reflect any origin. A deployed frontend's real
+  // origin(s) should replace this via CORS_ORIGIN before going to
+  // production — left wide open here since there's no browser-facing
+  // deployment yet.
+  await app.register(cors, {
+    origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(",") : true,
+  });
 
   app.setErrorHandler((err: Error, _request, reply) => {
     if (err instanceof HttpError) {
@@ -46,6 +56,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(healthRoutes);
   await app.register(authRoutes, { prefix: "/api/auth" });
   await app.register(meRoutes, { prefix: "/api" });
+  await app.register(companyRoutes, { prefix: "/api" });
   await app.register(itemRoutes, { prefix: "/api" });
   await app.register(customerRoutes, { prefix: "/api" });
   await app.register(priceListRoutes, { prefix: "/api" });

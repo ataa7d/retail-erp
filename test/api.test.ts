@@ -205,6 +205,15 @@ describe("auth", () => {
     expect(body.roles[0]).toMatchObject({ name: "Full Access", store_id: null });
   });
 
+  it("lists the companies a token's user has access to, with no X-Company-Id needed", async () => {
+    const res = await app.inject({
+      method: "GET", url: "/api/companies",
+      headers: { authorization: `Bearer ${authToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().some((c: { id: string }) => c.id === companyId)).toBe(true);
+  });
+
   it("rejects a second company-wide grant of the same role for the same user", async () => {
     // The user_roles unique index treats a NULL store_id as a single value
     // (uq_user_roles_company_wide), so re-granting the same company-wide

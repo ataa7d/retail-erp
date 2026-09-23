@@ -15,6 +15,7 @@ declare module "fastify" {
   }
   interface FastifyInstance {
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    authenticateUser: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     requirePermission: (code: string) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
 }
@@ -37,7 +38,10 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
 
   await app.register(jwt, { secret });
 
-  app.decorate("authenticate", async (request: FastifyRequest) => {
+  // JWT + user lookup only, no company selected yet — the one thing a
+  // frontend needs before it can even offer a company picker, since every
+  // other route requires X-Company-Id up front.
+  app.decorate("authenticateUser", async (request: FastifyRequest) => {
     try {
       await request.jwtVerify();
     } catch {
@@ -53,6 +57,10 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
       throw new UnauthorizedError("user not found or inactive");
     }
     request.authUser = { id: userResult.rows[0]!.id, email: userResult.rows[0]!.email };
+  });
+
+  app.decorate("authenticate", async (request: FastifyRequest, reply: FastifyReply) => {
+    await app.authenticateUser(request, reply);
 
     const companyIdHeader = request.headers["x-company-id"];
     const companyId = Array.isArray(companyIdHeader) ? companyIdHeader[0] : companyIdHeader;
@@ -62,7 +70,7 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
 
     const accessResult = await pool.query(
       `SELECT 1 FROM user_company_access WHERE user_id = $1 AND company_id = $2 AND is_active = true`,
-      [userId, companyId],
+      [request.authUser.id, companyId],
     );
     if (accessResult.rows.length === 0) {
       throw new ForbiddenError("no access to this company");
