@@ -1,0 +1,39 @@
+{
+  "app": { "title": "Retail ERP" },
+  "login": {
+    "title": "Sign in",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "error": "Invalid email or password"
+  },
+  "companyPicker": {
+    "title": "Choose a company",
+    "subtitle": "Select which company to work in",
+    "none": "You don't have access to any company yet."
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "items": "Items",
+    "customers": "Customers",
+    "sales": "Sales",
+    "purchasing": "Purchasing",
+    "inventory": "Inventory",
+    "reports": "Reports",
+    "hr": "HR & Payroll",
+    "assets": "Fixed Assets",
+    "admin": "Administration",
+    "logout": "Log out",
+    "switchCompany": "Switch company"
+  },
+  "dashboard": {
+    "welcome": "Welcome",
+    "company": "Company"
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "error": "Something went wrong"
+  }
+}
