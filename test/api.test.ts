@@ -201,6 +201,54 @@ describe("auth", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.permissions).toContain("sales.pos_invoice.create");
+    expect(body.roles).toHaveLength(1);
+    expect(body.roles[0]).toMatchObject({ name: "Full Access", store_id: null });
+  });
+
+  it("rejects a second company-wide grant of the same role for the same user", async () => {
+    // The user_roles unique index treats a NULL store_id as a single value
+    // (uq_user_roles_company_wide), so re-granting the same company-wide
+    // role is a constraint violation rather than a silent duplicate row.
+    const roleRow = await client.query(`SELECT id FROM roles WHERE company_id = $1 AND name = 'Full Access'`, [companyId]);
+    const roleId = roleRow.rows[0].id;
+    await expect(
+      client.query(
+        `INSERT INTO user_roles (user_id, company_id, role_id, store_id) VALUES ($1, $2, $3, NULL)`,
+        [userId, companyId, roleId],
+      ),
+    ).rejects.toThrow(/duplicate key value violates unique constraint "uq_user_roles_company_wide"/);
+  });
+
+  it("returns one role entry per store when the same role is scoped to multiple stores", async () => {
+    const roleRow = await client.query(`SELECT id FROM roles WHERE company_id = $1 AND name = 'Full Access'`, [companyId]);
+    const roleId = roleRow.rows[0].id;
+    const store2 = await client.query(
+      `INSERT INTO stores (company_id, branch_id, store_code, name_en, name_ar)
+       VALUES ($1, (SELECT id FROM branches WHERE company_id = $1 LIMIT 1), 'S2', 'Store 2', 'متجر 2') RETURNING id`,
+      [companyId],
+    );
+    await client.query(
+      `INSERT INTO user_roles (user_id, company_id, role_id, store_id) VALUES ($1, $2, $3, $4)`,
+      [userId, companyId, roleId, storeId],
+    );
+    await client.query(
+      `INSERT INTO user_roles (user_id, company_id, role_id, store_id) VALUES ($1, $2, $3, $4)`,
+      [userId, companyId, roleId, store2.rows[0].id],
+    );
+
+    const res = await app.inject({
+      method: "GET", url: "/api/me",
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    const storeIds = body.roles
+      .filter((r: { name: string; store_id: string | null }) => r.name === "Full Access" && r.store_id !== null)
+      .map((r: { store_id: string | null }) => r.store_id);
+    expect(storeIds.sort()).toEqual([storeId, store2.rows[0].id].sort());
+
+    await client.query(`DELETE FROM user_roles WHERE user_id = $1 AND store_id IN ($2, $3)`, [userId, storeId, store2.rows[0].id]);
+    await client.query(`DELETE FROM stores WHERE id = $1`, [store2.rows[0].id]);
   });
 });
 

@@ -74,7 +74,7 @@ async function main() {
     await client.query(
       `INSERT INTO user_roles (user_id, company_id, role_id, store_id)
        VALUES ($1, $2, $3, NULL)
-       ON CONFLICT (user_id, company_id, role_id, store_id) DO NOTHING`,
+       ON CONFLICT (user_id, company_id, role_id) WHERE store_id IS NULL DO NOTHING`,
       [userId, companyId, roleId],
     );
 
