@@ -7,6 +7,8 @@ import { healthRoutes } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { meRoutes } from "./routes/me.js";
 import { companyRoutes } from "./routes/companies.js";
+import { storeRoutes } from "./routes/stores.js";
+import { purchasingRoutes } from "./routes/purchasing.js";
 import { itemRoutes } from "./routes/items.js";
 import { customerRoutes } from "./routes/customers.js";
 import { priceListRoutes } from "./routes/priceLists.js";
@@ -57,6 +59,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(authRoutes, { prefix: "/api/auth" });
   await app.register(meRoutes, { prefix: "/api" });
   await app.register(companyRoutes, { prefix: "/api" });
+  await app.register(storeRoutes, { prefix: "/api" });
+  await app.register(purchasingRoutes, { prefix: "/api" });
   await app.register(itemRoutes, { prefix: "/api" });
   await app.register(customerRoutes, { prefix: "/api" });
   await app.register(priceListRoutes, { prefix: "/api" });

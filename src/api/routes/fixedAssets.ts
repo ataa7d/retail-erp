@@ -155,6 +155,14 @@ export async function fixedAssetRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  app.get("/depreciation-runs", { preHandler: app.authenticate }, async (request) => {
+    const result = await pool.query(
+      `SELECT id, document_number, run_date, document_status FROM depreciation_runs WHERE company_id = $1 ORDER BY run_date DESC`,
+      [request.companyId],
+    );
+    return result.rows;
+  });
+
   app.get<{ Params: { id: string } }>("/depreciation-runs/:id", { preHandler: app.authenticate }, async (request) => {
     const header = await pool.query(`SELECT * FROM depreciation_runs WHERE id = $1 AND company_id = $2`, [
       request.params.id,

@@ -6,7 +6,13 @@ import Login from "./pages/Login";
 import CompanyPicker from "./pages/CompanyPicker";
 import Dashboard from "./pages/Dashboard";
 import Items from "./pages/Items";
-import ComingSoon from "./pages/ComingSoon";
+import Customers from "./pages/Customers";
+import Inventory from "./pages/Inventory";
+import Purchasing from "./pages/Purchasing";
+import Reports from "./pages/Reports";
+import Hr from "./pages/Hr";
+import Assets from "./pages/Assets";
+import Admin from "./pages/Admin";
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const { token, loading } = useAuth();
@@ -52,13 +58,13 @@ export default function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="items" element={<Items />} />
-          <Route path="customers" element={<ComingSoon title="Customers" />} />
-          <Route path="inventory" element={<ComingSoon title="Inventory" />} />
-          <Route path="purchasing" element={<ComingSoon title="Purchasing" />} />
-          <Route path="reports" element={<ComingSoon title="Reports" />} />
-          <Route path="hr" element={<ComingSoon title="HR & Payroll" />} />
-          <Route path="assets" element={<ComingSoon title="Fixed Assets" />} />
-          <Route path="admin" element={<ComingSoon title="Administration" />} />
+          <Route path="customers" element={<Customers />} />
+          <Route path="inventory" element={<Inventory />} />
+          <Route path="purchasing" element={<Purchasing />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="hr" element={<Hr />} />
+          <Route path="assets" element={<Assets />} />
+          <Route path="admin" element={<Admin />} />
         </Route>
       </Routes>
     </AuthProvider>

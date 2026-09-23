@@ -12,6 +12,15 @@ const createSchema = z.object({
 });
 
 export async function payrollRoutes(app: FastifyInstance): Promise<void> {
+  app.get("/payroll-runs", { preHandler: app.authenticate }, async (request) => {
+    const result = await pool.query(
+      `SELECT id, document_number, pay_period_start, pay_period_end, run_date, document_status
+       FROM payroll_runs WHERE company_id = $1 ORDER BY run_date DESC`,
+      [request.companyId],
+    );
+    return result.rows;
+  });
+
   app.post(
     "/payroll-runs",
     { preHandler: [app.authenticate, app.requirePermission("hr.payroll.post")] },

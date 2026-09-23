@@ -35,6 +35,21 @@ const createSchema = z.object({
 });
 
 export async function salesInvoiceRoutes(app: FastifyInstance): Promise<void> {
+  app.get("/sales-invoices", { preHandler: app.authenticate }, async (request) => {
+    const result = await pool.query(
+      `SELECT si.id, si.document_number, si.invoice_channel, si.invoice_date, si.document_status,
+              si.net_amount, si.vat_amount, si.gross_amount,
+              c.name_en AS customer_name_en, c.name_ar AS customer_name_ar
+       FROM sales_invoices si
+       LEFT JOIN customers c ON c.id = si.customer_id
+       WHERE si.company_id = $1
+       ORDER BY si.invoice_date DESC, si.created_at DESC
+       LIMIT 200`,
+      [request.companyId],
+    );
+    return result.rows;
+  });
+
   app.post(
     "/sales-invoices",
     { preHandler: [app.authenticate, app.requirePermission("sales.pos_invoice.create")] },
