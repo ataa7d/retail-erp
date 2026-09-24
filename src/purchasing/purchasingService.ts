@@ -76,6 +76,21 @@ export async function createPurchaseOrder(client: Client, p: CreatePurchaseOrder
         amounts.netAmount, amounts.vatAmount, amounts.grossAmount,
       ],
     );
+
+    // Keep the supplier's cost catalog (supplier_item_prices) current with
+    // what was actually just ordered -- net of VAT, since input VAT is
+    // reclaimed separately and isn't part of the item's cost. This is a
+    // "last PO wins" update, not a negotiated-price change requiring
+    // approval: placing a PO at a new cost is itself the record of that
+    // new cost.
+    const netUnitCost = round2(amounts.netAmount / line.qty);
+    await client.query(
+      `INSERT INTO supplier_item_prices (company_id, supplier_id, item_variant_id, unit_cost)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (supplier_id, item_variant_id)
+         DO UPDATE SET unit_cost = EXCLUDED.unit_cost, is_active = true`,
+      [p.companyId, p.supplierId, line.itemVariantId, netUnitCost],
+    );
   }
 
   return poId;

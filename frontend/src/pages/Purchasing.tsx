@@ -27,9 +27,25 @@ interface Supplier {
   supplier_code: string;
   name_en: string;
   name_ar: string;
+  cr_number: string | null;
+  vat_registration_number: string | null;
+  address: string | null;
   city: string | null;
   country: string | null;
+  phone: string | null;
+  email: string | null;
   payment_terms_days: number;
+  lead_time_days: number | null;
+  is_active: boolean;
+}
+
+interface SupplierItemPrice {
+  id: string;
+  item_variant_id: string;
+  unit_cost: string;
+  currency: string;
+  lead_time_days: number | null;
+  moq: string | null;
   is_active: boolean;
 }
 
@@ -153,6 +169,15 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
   ]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [supplierPrices, setSupplierPrices] = useState<SupplierItemPrice[] | null>(null);
+
+  useEffect(() => {
+    if (!supplierId || !token || !companyId) {
+      setSupplierPrices(null);
+      return;
+    }
+    apiRequest<SupplierItemPrice[]>(`/api/supplier-item-prices?supplierId=${supplierId}`, { token, companyId }).then(setSupplierPrices);
+  }, [supplierId, token, companyId]);
 
   const totalGross = lines.reduce((s, l) => {
     const qty = Number(l.qty) || 0;
@@ -163,7 +188,24 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
   }, 0);
 
   function updateLine(index: number, patch: Partial<PoLineDraft>) {
-    setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
+    setLines((prev) =>
+      prev.map((l, i) => {
+        if (i !== index) return l;
+        const next = { ...l, ...patch };
+        // Auto-fill from the supplier's cost catalog when the item changes,
+        // same as the sales-side price-list auto-fill -- the common case
+        // (re-ordering at the supplier's last quoted/last-paid cost) needs
+        // no typing. Cost catalog entries are always net of VAT.
+        if (patch.itemVariantId !== undefined) {
+          const priced = supplierPrices?.find((sp) => sp.item_variant_id === patch.itemVariantId);
+          if (priced) {
+            next.unitPrice = priced.unit_cost;
+            next.priceIncludesVat = false;
+          }
+        }
+        return next;
+      }),
+    );
   }
   function addLine() {
     setLines((prev) => [...prev, { itemVariantId: "", qty: "1", unitPrice: "0", vatRate: "15", priceIncludesVat: false }]);
@@ -716,29 +758,300 @@ function PurchaseOrdersTab() {
   );
 }
 
+function NewSupplierForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const [supplierCode, setSupplierCode] = useState("");
+  const [nameEn, setNameEn] = useState("");
+  const [nameAr, setNameAr] = useState("");
+  const [crNumber, setCrNumber] = useState("");
+  const [vatRegistrationNumber, setVatRegistrationNumber] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [country, setCountry] = useState("Saudi Arabia");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [paymentTermsDays, setPaymentTermsDays] = useState(30);
+  const [leadTimeDays, setLeadTimeDays] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/suppliers", {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          supplierCode,
+          nameEn,
+          nameAr,
+          crNumber: crNumber || null,
+          vatRegistrationNumber: vatRegistrationNumber || null,
+          address: address || null,
+          city: city || null,
+          country: country || null,
+          phone: phone || null,
+          email: email || null,
+          paymentTermsDays,
+          leadTimeDays: leadTimeDays ? Number(leadTimeDays) : null,
+        },
+      });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create supplier");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Field label="Supplier Code" required>
+        <TextInput required value={supplierCode} onChange={(e) => setSupplierCode(e.target.value)} />
+      </Field>
+      <Field label="Name (English)" required>
+        <TextInput required value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
+      </Field>
+      <Field label="Name (Arabic)" required>
+        <TextInput required dir="rtl" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="CR Number">
+          <TextInput value={crNumber} onChange={(e) => setCrNumber(e.target.value)} />
+        </Field>
+        <Field label="VAT Registration #">
+          <TextInput value={vatRegistrationNumber} onChange={(e) => setVatRegistrationNumber(e.target.value)} />
+        </Field>
+        <Field label="City">
+          <TextInput value={city} onChange={(e) => setCity(e.target.value)} />
+        </Field>
+        <Field label="Country">
+          <TextInput value={country} onChange={(e) => setCountry(e.target.value)} />
+        </Field>
+        <Field label="Phone">
+          <TextInput value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </Field>
+        <Field label="Email">
+          <TextInput type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </Field>
+      </div>
+      <Field label="Address">
+        <TextInput value={address} onChange={(e) => setAddress(e.target.value)} />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Payment Terms (days)">
+          <TextInput type="number" min={0} value={paymentTermsDays} onChange={(e) => setPaymentTermsDays(Number(e.target.value))} />
+        </Field>
+        <Field label="Lead Time (days)">
+          <TextInput type="number" min={0} value={leadTimeDays} onChange={(e) => setLeadTimeDays(e.target.value)} />
+        </Field>
+      </div>
+      <FormActions error={error} submitting={submitting} submitLabel="Create Supplier" />
+    </form>
+  );
+}
+
+function SupplierPriceCatalog({ supplier, onChanged }: { supplier: Supplier; onChanged: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: prices, reload } = useApiList<SupplierItemPrice>(`/api/supplier-item-prices?supplierId=${supplier.id}`);
+  const variantOptions = useVariantOptions();
+  const [itemVariantId, setItemVariantId] = useState("");
+  const [unitCost, setUnitCost] = useState("");
+  const [leadTimeDays, setLeadTimeDays] = useState("");
+  const [moq, setMoq] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [busyVariantId, setBusyVariantId] = useState<string | null>(null);
+
+  const variantLabel = (id: string) => variantOptions.find((v) => v.id === id)?.label ?? id;
+
+  async function setLinePrice(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest(`/api/suppliers/${supplier.id}/prices`, {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          itemVariantId,
+          unitCost: Number(unitCost),
+          leadTimeDays: leadTimeDays ? Number(leadTimeDays) : null,
+          moq: moq ? Number(moq) : null,
+        },
+      });
+      setItemVariantId("");
+      setUnitCost("");
+      setLeadTimeDays("");
+      setMoq("");
+      reload();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to set price");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function removeLine(variantId: string) {
+    setBusyVariantId(variantId);
+    try {
+      await apiRequest(`/api/suppliers/${supplier.id}/prices/${variantId}/remove`, { method: "POST", token, companyId });
+      reload();
+      onChanged();
+    } finally {
+      setBusyVariantId(null);
+    }
+  }
+
+  return (
+    <div>
+      <form onSubmit={setLinePrice} className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+        <Field label="Item">
+          <SelectInput required value={itemVariantId} onChange={(e) => setItemVariantId(e.target.value)}>
+            <option value="">Select...</option>
+            {variantOptions.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.label}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Unit Cost (net)">
+            <TextInput required type="number" min="0" step="0.01" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />
+          </Field>
+          <Field label="Lead Time (days)">
+            <TextInput type="number" min="0" value={leadTimeDays} onChange={(e) => setLeadTimeDays(e.target.value)} />
+          </Field>
+          <Field label="MOQ">
+            <TextInput type="number" min="0" step="0.001" value={moq} onChange={(e) => setMoq(e.target.value)} />
+          </Field>
+        </div>
+        {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
+        <button
+          type="submit"
+          disabled={submitting}
+          className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+        >
+          {submitting ? "Saving..." : "Set Price"}
+        </button>
+      </form>
+
+      <p className="mb-2 text-xs text-slate-400">
+        Every purchase order placed with this supplier also updates these costs automatically to whatever was last ordered.
+      </p>
+      {prices && prices.length === 0 && <p className="text-sm text-slate-400">No quoted prices on file yet.</p>}
+      <div className="space-y-1.5">
+        {prices?.map((p) => (
+          <div key={p.item_variant_id} className="flex items-center justify-between rounded-md border border-slate-100 px-3 py-2 text-sm">
+            <div>
+              <div className="text-slate-700">{variantLabel(p.item_variant_id)}</div>
+              <div className="text-xs text-slate-400">
+                {p.lead_time_days != null ? `${p.lead_time_days}d lead time` : "no lead time set"}
+                {p.moq ? ` · MOQ ${Number(p.moq)}` : ""}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="font-medium tabular-nums text-slate-900">
+                {Number(p.unit_cost).toFixed(2)} {p.currency}
+              </span>
+              <button
+                onClick={() => removeLine(p.item_variant_id)}
+                disabled={busyVariantId === p.item_variant_id}
+                className="text-slate-300 hover:text-red-500 disabled:opacity-50"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SuppliersTab() {
-  const { data, error } = useApiList<Supplier>("/api/suppliers");
+  const { token, companyId } = useAuth();
+  const { data, error, reload } = useApiList<Supplier>("/api/suppliers");
+  const [showNew, setShowNew] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function toggleActive(supplier: Supplier) {
+    setBusyId(supplier.id);
+    try {
+      await apiRequest(`/api/suppliers/${supplier.id}/${supplier.is_active ? "deactivate" : "reactivate"}`, {
+        method: "POST",
+        token,
+        companyId,
+      });
+      reload();
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   const columns: Column<Supplier>[] = [
     { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.supplier_code}</span> },
     { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900">{r.name_en}</span> },
     { key: "location", header: "Location", render: (r) => [r.city, r.country].filter(Boolean).join(", ") || "—" },
     { key: "terms", header: "Payment Terms", render: (r) => `${r.payment_terms_days}d`, numeric: true },
-    { key: "status", header: "Status", render: (r) => <StatusBadge status={r.is_active ? "active" : "inactive"} /> },
+    {
+      key: "status",
+      header: "Status",
+      render: (r) => (
+        <div className="flex items-center gap-2">
+          <StatusBadge status={r.is_active ? "active" : "inactive"} />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleActive(r);
+            }}
+            disabled={busyId === r.id}
+            className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50"
+          >
+            {r.is_active ? "Deactivate" : "Reactivate"}
+          </button>
+        </div>
+      ),
+    },
   ];
 
+  const detailSupplier = data?.find((s) => s.id === detailId) ?? null;
+
   return (
-    <ListPage
-      title=""
-      data={data}
-      error={error}
-      columns={columns}
-      getRowKey={(r) => r.id}
-      getSearchText={(r) => `${r.supplier_code} ${r.name_en}`}
-      emptyIcon={Truck}
-      emptyText="No suppliers yet."
-      searchPlaceholder="Search suppliers..."
-    />
+    <>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => `${r.supplier_code} ${r.name_en}`}
+        emptyIcon={Truck}
+        emptyText="No suppliers yet."
+        searchPlaceholder="Search suppliers..."
+        actionLabel="New Supplier"
+        onAction={() => setShowNew(true)}
+        onRowClick={(r) => setDetailId(r.id)}
+      />
+      {showNew && (
+        <Modal title="New Supplier" onClose={() => setShowNew(false)}>
+          <NewSupplierForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+      {detailSupplier && (
+        <Modal title={`${detailSupplier.name_en} — Cost Catalog`} onClose={() => setDetailId(null)}>
+          <SupplierPriceCatalog supplier={detailSupplier} onChanged={reload} />
+        </Modal>
+      )}
+    </>
   );
 }
 

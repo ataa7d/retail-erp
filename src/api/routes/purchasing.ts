@@ -71,6 +71,29 @@ const supplierInvoiceCreateSchema = z.object({
   lines: z.array(supplierInvoiceLineSchema).min(1),
 });
 
+const createSupplierSchema = z.object({
+  supplierCode: z.string().min(1),
+  nameEn: z.string().min(1),
+  nameAr: z.string().min(1),
+  crNumber: z.string().nullable().optional(),
+  vatRegistrationNumber: z.string().nullable().optional(),
+  address: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  country: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  email: z.string().email().nullable().optional(),
+  paymentTermsDays: z.number().int().nonnegative().default(0),
+  leadTimeDays: z.number().int().nonnegative().nullable().optional(),
+});
+
+const setSupplierPriceSchema = z.object({
+  itemVariantId: z.string().uuid(),
+  unitCost: z.number().nonnegative(),
+  currency: z.string().min(1).default("SAR"),
+  leadTimeDays: z.number().int().nonnegative().nullable().optional(),
+  moq: z.number().positive().nullable().optional(),
+});
+
 export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/purchase-orders",
@@ -150,12 +173,136 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/suppliers", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
-      `SELECT id, supplier_code, name_en, name_ar, city, country, payment_terms_days, lead_time_days, is_active
+      `SELECT id, supplier_code, name_en, name_ar, cr_number, vat_registration_number, address,
+              city, country, phone, email, payment_terms_days, lead_time_days, is_active
        FROM suppliers WHERE company_id = $1 ORDER BY name_en`,
       [request.companyId],
     );
     return result.rows;
   });
+
+  app.post(
+    "/suppliers",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.manage")] },
+    async (request, reply) => {
+      const body = createSupplierSchema.parse(request.body);
+      const result = await pool.query<{ id: string }>(
+        `INSERT INTO suppliers
+           (company_id, supplier_code, name_en, name_ar, cr_number, vat_registration_number,
+            address, city, country, phone, email, payment_terms_days, lead_time_days)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
+        [
+          request.companyId,
+          body.supplierCode,
+          body.nameEn,
+          body.nameAr,
+          body.crNumber ?? null,
+          body.vatRegistrationNumber ?? null,
+          body.address ?? null,
+          body.city ?? null,
+          body.country ?? null,
+          body.phone ?? null,
+          body.email ?? null,
+          body.paymentTermsDays,
+          body.leadTimeDays ?? null,
+        ],
+      );
+      reply.status(201);
+      return { id: result.rows[0]!.id };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/suppliers/:id/deactivate",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.manage")] },
+    async (request) => {
+      const existing = await pool.query(`SELECT id FROM suppliers WHERE id = $1 AND company_id = $2`, [
+        request.params.id,
+        request.companyId,
+      ]);
+      if (existing.rows.length === 0) throw new NotFoundError("supplier not found");
+      await pool.query(`UPDATE suppliers SET is_active = false WHERE id = $1`, [request.params.id]);
+      return { id: request.params.id, status: "inactive" };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/suppliers/:id/reactivate",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.manage")] },
+    async (request) => {
+      const existing = await pool.query(`SELECT id FROM suppliers WHERE id = $1 AND company_id = $2`, [
+        request.params.id,
+        request.companyId,
+      ]);
+      if (existing.rows.length === 0) throw new NotFoundError("supplier not found");
+      await pool.query(`UPDATE suppliers SET is_active = true WHERE id = $1`, [request.params.id]);
+      return { id: request.params.id, status: "active" };
+    },
+  );
+
+  // ---- Supplier item prices (cost catalog) ----
+  // Every purchase order also upserts this catalog (see
+  // purchasingService.createPurchaseOrder) so it stays current with what
+  // was actually last paid; these routes let it be reviewed and edited by
+  // hand too -- e.g. entering a supplier's quoted price before ever placing
+  // an order against it.
+
+  app.get("/supplier-item-prices", { preHandler: app.authenticate }, async (request) => {
+    const query = z.object({ supplierId: z.string().uuid() }).parse(request.query);
+    const result = await pool.query(
+      `SELECT sip.id, sip.item_variant_id, sip.unit_cost, sip.currency, sip.lead_time_days, sip.moq, sip.is_active
+       FROM supplier_item_prices sip
+       JOIN suppliers s ON s.id = sip.supplier_id
+       WHERE sip.supplier_id = $1 AND s.company_id = $2 AND sip.is_active = true`,
+      [query.supplierId, request.companyId],
+    );
+    return result.rows;
+  });
+
+  app.post<{ Params: { id: string } }>(
+    "/suppliers/:id/prices",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.manage")] },
+    async (request, reply) => {
+      const body = setSupplierPriceSchema.parse(request.body);
+      await withTransaction(async (client) => {
+        const supplier = await client.query(`SELECT id FROM suppliers WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (supplier.rows.length === 0) throw new NotFoundError("supplier not found");
+
+        await client.query(
+          `INSERT INTO supplier_item_prices (company_id, supplier_id, item_variant_id, unit_cost, currency, lead_time_days, moq, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+           ON CONFLICT (supplier_id, item_variant_id)
+             DO UPDATE SET unit_cost = EXCLUDED.unit_cost, currency = EXCLUDED.currency,
+                            lead_time_days = EXCLUDED.lead_time_days, moq = EXCLUDED.moq, is_active = true`,
+          [request.companyId, request.params.id, body.itemVariantId, body.unitCost, body.currency, body.leadTimeDays ?? null, body.moq ?? null],
+        );
+      }, request.authUser.id);
+      reply.status(200);
+      return { itemVariantId: body.itemVariantId, unitCost: body.unitCost };
+    },
+  );
+
+  app.post<{ Params: { id: string; variantId: string } }>(
+    "/suppliers/:id/prices/:variantId/remove",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.manage")] },
+    async (request) => {
+      await withTransaction(async (client) => {
+        const supplier = await client.query(`SELECT id FROM suppliers WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (supplier.rows.length === 0) throw new NotFoundError("supplier not found");
+        await client.query(
+          `UPDATE supplier_item_prices SET is_active = false WHERE supplier_id = $1 AND item_variant_id = $2`,
+          [request.params.id, request.params.variantId],
+        );
+      }, request.authUser.id);
+      return { itemVariantId: request.params.variantId, status: "removed" };
+    },
+  );
 
   // ---- Goods receipts ----
   // Reuses purchasing.goods_receipt.post for both create and post (same
