@@ -254,6 +254,88 @@ export async function postStocktake(client: Client, stocktakeId: string, postedB
   );
 }
 
+export interface CreateInventoryTransferParams {
+  companyId: string;
+  sourceStoreId: string;
+  destStoreId: string;
+  transferDate: string;
+  fiscalPeriodId: string;
+  notes?: string | null;
+  lines: Array<{ itemVariantId: string; qty: number }>;
+  createdBy?: string | null;
+}
+
+/** Creates a draft multi-line transfer document. No stock moves yet --
+ * that only happens on post, same draft/post separation as stocktakes. */
+export async function createInventoryTransfer(client: Client, p: CreateInventoryTransferParams): Promise<string> {
+  const fiscalYear = Number(p.transferDate.slice(0, 4));
+  const documentNumber = await nextDocumentNumber(client, p.companyId, "inventory_transfer", fiscalYear, "IT-");
+
+  const header = await client.query<{ id: string }>(
+    `INSERT INTO inventory_transfers
+       (company_id, source_store_id, dest_store_id, document_number, transfer_date, fiscal_period_id, notes, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+    [p.companyId, p.sourceStoreId, p.destStoreId, documentNumber, p.transferDate, p.fiscalPeriodId, p.notes ?? null, p.createdBy ?? null],
+  );
+  const transferId = header.rows[0]!.id;
+
+  for (const line of p.lines) {
+    await client.query(
+      `INSERT INTO inventory_transfer_lines (company_id, transfer_id, item_variant_id, qty) VALUES ($1, $2, $3, $4)`,
+      [p.companyId, transferId, line.itemVariantId, line.qty],
+    );
+  }
+
+  return transferId;
+}
+
+/** Posts every line as a linked transfer_out/transfer_in movement pair,
+ * same costing rule as the instant transferStock: the destination is
+ * costed at exactly what the goods left the source at. */
+export async function postInventoryTransfer(client: Client, transferId: string, postedBy: string): Promise<void> {
+  const headerResult = await client.query<{ company_id: string; source_store_id: string; dest_store_id: string; transfer_date: string }>(
+    `SELECT company_id, source_store_id, dest_store_id, transfer_date FROM inventory_transfers WHERE id = $1`,
+    [transferId],
+  );
+  if (headerResult.rows.length === 0) throw new Error(`inventory transfer ${transferId} not found`);
+  const header = headerResult.rows[0]!;
+
+  const lines = await client.query<{ id: string; item_variant_id: string; qty: string }>(
+    `SELECT id, item_variant_id, qty FROM inventory_transfer_lines WHERE transfer_id = $1`,
+    [transferId],
+  );
+
+  for (const line of lines.rows) {
+    const out = await recordStockMovement(client, {
+      companyId: header.company_id,
+      storeId: header.source_store_id,
+      itemVariantId: line.item_variant_id,
+      movementType: "transfer_out",
+      qty: -Math.abs(Number(line.qty)),
+      sourceType: "transfer",
+      sourceId: transferId,
+      sourceLineId: line.id,
+      createdBy: postedBy,
+    });
+
+    await recordStockMovement(client, {
+      companyId: header.company_id,
+      storeId: header.dest_store_id,
+      itemVariantId: line.item_variant_id,
+      movementType: "transfer_in",
+      qty: Math.abs(Number(line.qty)),
+      explicitUnitCost: out.unitCost,
+      sourceType: "transfer",
+      sourceId: transferId,
+      sourceLineId: line.id,
+      linkedMovementId: out.id,
+      createdBy: postedBy,
+    });
+  }
+
+  await client.query(`UPDATE inventory_transfers SET document_status = 'posted', posted_by = $2 WHERE id = $1`, [transferId, postedBy]);
+}
+
 async function getAccountId(client: Client, companyId: string, code: string): Promise<string> {
   const r = await client.query<{ id: string }>(
     `SELECT id FROM chart_of_accounts WHERE company_id = $1 AND account_code = $2`,

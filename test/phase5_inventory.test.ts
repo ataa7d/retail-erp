@@ -8,6 +8,8 @@ import {
   recordStockMovement,
   recordStocktakeCount,
   transferStock,
+  createInventoryTransfer,
+  postInventoryTransfer,
 } from "../src/inventory/inventoryService.js";
 import { createSalesInvoice, postSalesInvoice, createCreditNote, postCreditNote } from "../src/sales/salesService.js";
 
@@ -119,6 +121,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await client.query(`SET app.bypass_immutability = 'true'`);
   await client.query(`DELETE FROM audit_log WHERE company_id = $1`, [companyId]);
+  await client.query(`DELETE FROM inventory_transfer_lines WHERE company_id = $1`, [companyId]);
+  await client.query(`DELETE FROM inventory_transfers WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM stocktake_lines WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM stocktakes WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM credit_note_lines WHERE company_id = $1`, [companyId]);
@@ -270,6 +274,94 @@ describe("transfers conserve total quantity", () => {
 
     const linked = await client.query(`SELECT linked_movement_id FROM stock_movements WHERE id = $1`, [result.transferInId]);
     expect(linked.rows[0].linked_movement_id).toBe(result.transferOutId);
+  });
+});
+
+describe("inventory transfers: multi-line draft/post document", () => {
+  it("posts every line as a linked transfer_out/transfer_in pair, cost carried from source", async () => {
+    const variantA = await newItemVariant();
+    const variantB = await newItemVariant();
+    await recordStockMovement(client, {
+      companyId, storeId: storeAId, itemVariantId: variantA, movementType: "receipt",
+      qty: 20, explicitUnitCost: 9, sourceType: "test", createdBy: userId,
+    });
+    await recordStockMovement(client, {
+      companyId, storeId: storeAId, itemVariantId: variantB, movementType: "receipt",
+      qty: 30, explicitUnitCost: 4, sourceType: "test", createdBy: userId,
+    });
+
+    const transferId = await createInventoryTransfer(client, {
+      companyId, sourceStoreId: storeAId, destStoreId: storeBId,
+      transferDate: "2026-03-24", fiscalPeriodId: periodId,
+      lines: [{ itemVariantId: variantA, qty: 5 }, { itemVariantId: variantB, qty: 10 }],
+      createdBy: userId,
+    });
+
+    const draft = await client.query(`SELECT document_status FROM inventory_transfers WHERE id = $1`, [transferId]);
+    expect(draft.rows[0].document_status).toBe("draft");
+    // No stock movement yet -- creating the draft doesn't touch balances.
+    expect((await balance(storeBId, variantA)).qty).toBe(0);
+
+    await postInventoryTransfer(client, transferId, userId);
+
+    expect((await balance(storeAId, variantA)).qty).toBe(15);
+    expect((await balance(storeBId, variantA)).qty).toBe(5);
+    expect((await balance(storeBId, variantA)).avgCost).toBe(9);
+    expect((await balance(storeAId, variantB)).qty).toBe(20);
+    expect((await balance(storeBId, variantB)).qty).toBe(10);
+    expect((await balance(storeBId, variantB)).avgCost).toBe(4);
+
+    const posted = await client.query(`SELECT document_status, posted_at FROM inventory_transfers WHERE id = $1`, [transferId]);
+    expect(posted.rows[0].document_status).toBe("posted");
+    expect(posted.rows[0].posted_at).not.toBeNull();
+
+    const movements = await client.query(
+      `SELECT movement_type, linked_movement_id, item_variant_id FROM stock_movements WHERE source_type = 'transfer' AND source_id = $1`,
+      [transferId],
+    );
+    expect(movements.rows.length).toBe(4); // 2 lines x (out + in)
+    const inRows = movements.rows.filter((r) => r.movement_type === "transfer_in");
+    expect(inRows.every((r) => r.linked_movement_id)).toBe(true);
+  });
+
+  it("rejects posting a transfer with no lines, and blocks editing lines once posted", async () => {
+    const variantId = await newItemVariant();
+    const emptyTransferId = await createInventoryTransfer(client, {
+      companyId, sourceStoreId: storeAId, destStoreId: storeBId,
+      transferDate: "2026-03-25", fiscalPeriodId: periodId, lines: [], createdBy: userId,
+    });
+    await expect(
+      client.query(`UPDATE inventory_transfers SET document_status = 'posted' WHERE id = $1`, [emptyTransferId]),
+    ).rejects.toThrow(/no lines/);
+
+    await recordStockMovement(client, {
+      companyId, storeId: storeAId, itemVariantId: variantId, movementType: "receipt",
+      qty: 10, explicitUnitCost: 5, sourceType: "test", createdBy: userId,
+    });
+    const transferId = await createInventoryTransfer(client, {
+      companyId, sourceStoreId: storeAId, destStoreId: storeBId,
+      transferDate: "2026-03-25", fiscalPeriodId: periodId,
+      lines: [{ itemVariantId: variantId, qty: 3 }], createdBy: userId,
+    });
+    await postInventoryTransfer(client, transferId, userId);
+
+    const line = await client.query(`SELECT id FROM inventory_transfer_lines WHERE transfer_id = $1`, [transferId]);
+    await expect(
+      client.query(`UPDATE inventory_transfer_lines SET qty = 99 WHERE id = $1`, [line.rows[0].id]),
+    ).rejects.toThrow(/immutable/);
+    await expect(
+      client.query(`UPDATE inventory_transfers SET document_status = 'posted' WHERE id = $1`, [transferId]),
+    ).rejects.toThrow(/posted and cannot be modified/);
+  });
+
+  it("rejects a transfer whose source and destination store are the same", async () => {
+    await expect(
+      client.query(
+        `INSERT INTO inventory_transfers (company_id, source_store_id, dest_store_id, document_number, transfer_date, fiscal_period_id)
+         VALUES ($1, $2, $2, 'IT-SELF-1', '2026-03-25', $3)`,
+        [companyId, storeAId, periodId],
+      ),
+    ).rejects.toThrow();
   });
 });
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Warehouse, ArrowLeftRight, ClipboardList } from "lucide-react";
+import { Warehouse, ArrowLeftRight, ClipboardList, Truck, Plus, X } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -89,6 +89,29 @@ interface StocktakeDetail {
   document_status: string;
   document_number: string;
   lines: StocktakeLine[];
+}
+
+interface InventoryTransferOrder {
+  id: string;
+  document_number: string;
+  transfer_date: string;
+  document_status: string;
+  notes: string | null;
+  source_store_name_en: string;
+  dest_store_name_en: string;
+  line_count: string;
+}
+
+interface InventoryTransferLine {
+  id: string;
+  item_variant_id: string;
+  qty: string;
+  variant_code: string;
+  item_name_en: string;
+}
+
+interface InventoryTransferDetail extends InventoryTransferOrder {
+  lines: InventoryTransferLine[];
 }
 
 function useVariantOptions() {
@@ -328,6 +351,271 @@ function TransfersTab() {
   );
 }
 
+function NewInventoryTransferForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: stores } = useApiList<Store>("/api/stores");
+  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
+  const variantOptions = useVariantOptions();
+  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
+
+  const [sourceStoreId, setSourceStoreId] = useState("");
+  const [destStoreId, setDestStoreId] = useState("");
+  const [transferDate, setTransferDate] = useState(new Date().toISOString().slice(0, 10));
+  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
+  const [notes, setNotes] = useState("");
+  const [lines, setLines] = useState<Array<{ itemVariantId: string; qty: string }>>([{ itemVariantId: "", qty: "1" }]);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  function updateLine(index: number, patch: Partial<{ itemVariantId: string; qty: string }>) {
+    setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
+  }
+  function addLine() {
+    setLines((prev) => [...prev, { itemVariantId: "", qty: "1" }]);
+  }
+  function removeLine(index: number) {
+    setLines((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (sourceStoreId && sourceStoreId === destStoreId) {
+      setError("Source and destination stores must be different.");
+      return;
+    }
+    const validLines = lines.filter((l) => l.itemVariantId && Number(l.qty) > 0);
+    if (validLines.length === 0) {
+      setError("Add at least one line with an item and quantity.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/inventory-transfers", {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          sourceStoreId,
+          destStoreId,
+          transferDate,
+          fiscalPeriodId,
+          notes: notes || undefined,
+          lines: validLines.map((l) => ({ itemVariantId: l.itemVariantId, qty: Number(l.qty) })),
+        },
+      });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create transfer order");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="From Store" required>
+          <SelectInput required value={sourceStoreId} onChange={(e) => setSourceStoreId(e.target.value)}>
+            <option value="">Select...</option>
+            {stores?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name_en}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="To Store" required>
+          <SelectInput required value={destStoreId} onChange={(e) => setDestStoreId(e.target.value)}>
+            <option value="">Select...</option>
+            {stores?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name_en}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="Transfer Date" required>
+          <TextInput type="date" required value={transferDate} onChange={(e) => setTransferDate(e.target.value)} />
+        </Field>
+        <Field label="Fiscal Period" required>
+          <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
+            <option value="">Select...</option>
+            {openPeriods.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.year_name} — P{p.period_number}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+      </div>
+      <Field label="Notes">
+        <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" />
+      </Field>
+
+      <div className="mb-2 mt-3 text-sm font-medium text-slate-700">Lines</div>
+      <div className="space-y-2">
+        {lines.map((line, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <SelectInput value={line.itemVariantId} onChange={(e) => updateLine(i, { itemVariantId: e.target.value })}>
+                <option value="">Select item...</option>
+                {variantOptions.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.label}
+                  </option>
+                ))}
+              </SelectInput>
+            </div>
+            <div className="w-24 flex-none">
+              <TextInput type="number" min={0.001} step="0.001" value={line.qty} onChange={(e) => updateLine(i, { qty: e.target.value })} />
+            </div>
+            <button
+              type="button"
+              onClick={() => removeLine(i)}
+              disabled={lines.length === 1}
+              className="flex-none rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600 disabled:opacity-30"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={addLine}
+        className="mb-3 mt-2 flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
+      >
+        <Plus size={13} /> Add line
+      </button>
+
+      <p className="mb-3 text-xs text-slate-400">
+        Created as a draft — nothing moves until it's posted. Each line's destination is costed at exactly what the goods left the source at.
+      </p>
+      <FormActions error={error} submitting={submitting} submitLabel="Create Draft" />
+    </form>
+  );
+}
+
+function InventoryTransferDetailModal({
+  transferId,
+  onClose,
+  onPosted,
+}: {
+  transferId: string;
+  onClose: () => void;
+  onPosted: () => void;
+}) {
+  const { token, companyId } = useAuth();
+  const [detail, setDetail] = useState<InventoryTransferDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [posting, setPosting] = useState(false);
+
+  useEffect(() => {
+    if (!token || !companyId) return;
+    apiRequest<InventoryTransferDetail>(`/api/inventory-transfers/${transferId}`, { token, companyId }).then(setDetail);
+  }, [transferId, token, companyId]);
+
+  async function handlePost() {
+    setError(null);
+    setPosting(true);
+    try {
+      await apiRequest(`/api/inventory-transfers/${transferId}/post`, { method: "POST", token, companyId });
+      onPosted();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to post transfer");
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <div className="font-mono text-xs text-slate-500">{detail.document_number}</div>
+          <div className="text-sm text-slate-700">
+            {detail.source_store_name_en} → {detail.dest_store_name_en} · {new Date(detail.transfer_date).toLocaleDateString()}
+          </div>
+        </div>
+        <StatusBadge status={detail.document_status} />
+      </div>
+      {detail.notes && <p className="mb-3 text-xs text-slate-500">{detail.notes}</p>}
+
+      <div className="mb-3 space-y-1 rounded-md border border-slate-200 p-2">
+        {detail.lines.map((line) => (
+          <div key={line.id} className="flex items-center justify-between text-sm">
+            <span className="text-slate-700">
+              {line.item_name_en} <span className="text-xs text-slate-400">({line.variant_code})</span>
+            </span>
+            <span className="font-medium text-slate-900">{Number(line.qty).toLocaleString()}</span>
+          </div>
+        ))}
+      </div>
+
+      {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+
+      {detail.document_status === "draft" && (
+        <button
+          onClick={handlePost}
+          disabled={posting}
+          className="rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+        >
+          {posting ? "Posting..." : "Post Transfer"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function TransferOrdersTab() {
+  const { data, error, reload } = useApiList<InventoryTransferOrder>("/api/inventory-transfers");
+  const [showNew, setShowNew] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  const columns: Column<InventoryTransferOrder>[] = [
+    { key: "number", header: "IT #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "date", header: "Date", render: (r) => new Date(r.transfer_date).toLocaleDateString() },
+    { key: "from", header: "From", render: (r) => r.source_store_name_en },
+    { key: "to", header: "To", render: (r) => r.dest_store_name_en },
+    { key: "lines", header: "Items", render: (r) => r.line_count, numeric: true },
+    { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
+  ];
+
+  return (
+    <>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => `${r.document_number} ${r.source_store_name_en} ${r.dest_store_name_en}`}
+        emptyIcon={Truck}
+        emptyText="No transfer orders yet."
+        searchPlaceholder="Search transfer orders..."
+        actionLabel="New Transfer Order"
+        onAction={() => setShowNew(true)}
+        onRowClick={(r) => setOpenId(r.id)}
+      />
+      {showNew && (
+        <Modal title="New Inventory Transfer" onClose={() => setShowNew(false)}>
+          <NewInventoryTransferForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+      {openId && (
+        <Modal title="Inventory Transfer" onClose={() => setOpenId(null)}>
+          <InventoryTransferDetailModal transferId={openId} onClose={() => setOpenId(null)} onPosted={reload} />
+        </Modal>
+      )}
+    </>
+  );
+}
+
 function NewStocktakeForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
@@ -560,6 +848,7 @@ export default function Inventory() {
     () => [
       { key: "stock", label: "Stock", content: <StockTab /> },
       { key: "transfers", label: "Transfers", content: <TransfersTab /> },
+      { key: "transfer-orders", label: "Transfer Orders", content: <TransferOrdersTab /> },
       { key: "adjustments", label: "Adjustments", content: <AdjustmentsTab /> },
     ],
     [],

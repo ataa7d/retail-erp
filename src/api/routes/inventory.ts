@@ -1,7 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
-import { transferStock, createStocktake, recordStocktakeCount, postStocktake } from "../../inventory/inventoryService.js";
+import {
+  transferStock,
+  createStocktake,
+  recordStocktakeCount,
+  postStocktake,
+  createInventoryTransfer,
+  postInventoryTransfer,
+} from "../../inventory/inventoryService.js";
 import { NotFoundError } from "../errors.js";
 
 const transferSchema = z.object({
@@ -21,6 +28,15 @@ const stocktakeCreateSchema = z.object({
 
 const countSchema = z.object({
   countedQty: z.number().nonnegative(),
+});
+
+const inventoryTransferCreateSchema = z.object({
+  sourceStoreId: z.string().uuid(),
+  destStoreId: z.string().uuid(),
+  transferDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  fiscalPeriodId: z.string().uuid(),
+  notes: z.string().optional(),
+  lines: z.array(z.object({ itemVariantId: z.string().uuid(), qty: z.number().positive() })).min(1),
 });
 
 export async function inventoryRoutes(app: FastifyInstance): Promise<void> {
@@ -72,6 +88,91 @@ export async function inventoryRoutes(app: FastifyInstance): Promise<void> {
     );
     return result.rows;
   });
+
+  // ---- Inventory Transfers (multi-line, draft/post document -- for
+  // planned, multi-item moves between stores. The single-item instant
+  // /stock-transfers endpoint above stays as-is for quick one-off moves;
+  // both write the same transfer_out/transfer_in stock_movements pair and
+  // show up together in the GET /stock-transfers history.) ----
+
+  app.post(
+    "/inventory-transfers",
+    { preHandler: [app.authenticate, app.requirePermission("inventory.transfer.post")] },
+    async (request, reply) => {
+      const body = inventoryTransferCreateSchema.parse(request.body);
+      const id = await withTransaction(
+        (client) =>
+          createInventoryTransfer(client, {
+            companyId: request.companyId,
+            sourceStoreId: body.sourceStoreId,
+            destStoreId: body.destStoreId,
+            transferDate: body.transferDate,
+            fiscalPeriodId: body.fiscalPeriodId,
+            notes: body.notes,
+            lines: body.lines,
+            createdBy: request.authUser.id,
+          }),
+        request.authUser.id,
+      );
+      reply.status(201);
+      return { id };
+    },
+  );
+
+  app.get("/inventory-transfers", { preHandler: app.authenticate }, async (request) => {
+    const result = await pool.query(
+      `SELECT it.id, it.document_number, it.transfer_date, it.document_status, it.notes,
+              so.name_en AS source_store_name_en, sd.name_en AS dest_store_name_en,
+              (SELECT COUNT(*) FROM inventory_transfer_lines WHERE transfer_id = it.id) AS line_count
+       FROM inventory_transfers it
+       JOIN stores so ON so.id = it.source_store_id
+       JOIN stores sd ON sd.id = it.dest_store_id
+       WHERE it.company_id = $1
+       ORDER BY it.transfer_date DESC, it.created_at DESC
+       LIMIT 200`,
+      [request.companyId],
+    );
+    return result.rows;
+  });
+
+  app.get<{ Params: { id: string } }>("/inventory-transfers/:id", { preHandler: app.authenticate }, async (request) => {
+    const header = await pool.query(
+      `SELECT it.*, so.name_en AS source_store_name_en, sd.name_en AS dest_store_name_en
+       FROM inventory_transfers it
+       JOIN stores so ON so.id = it.source_store_id
+       JOIN stores sd ON sd.id = it.dest_store_id
+       WHERE it.id = $1 AND it.company_id = $2`,
+      [request.params.id, request.companyId],
+    );
+    if (header.rows.length === 0) throw new NotFoundError("inventory transfer not found");
+
+    const lines = await pool.query(
+      `SELECT itl.*, iv.variant_code, i.name_en AS item_name_en, i.name_ar AS item_name_ar
+       FROM inventory_transfer_lines itl
+       JOIN item_variants iv ON iv.id = itl.item_variant_id
+       JOIN items i ON i.id = iv.item_id
+       WHERE itl.transfer_id = $1
+       ORDER BY i.name_en`,
+      [request.params.id],
+    );
+    return { ...header.rows[0], lines: lines.rows };
+  });
+
+  app.post<{ Params: { id: string } }>(
+    "/inventory-transfers/:id/post",
+    { preHandler: [app.authenticate, app.requirePermission("inventory.transfer.post")] },
+    async (request) => {
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM inventory_transfers WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("inventory transfer not found");
+        await postInventoryTransfer(client, request.params.id, request.authUser.id);
+      }, request.authUser.id);
+      return { id: request.params.id, status: "posted" };
+    },
+  );
 
   // ---- Stocktakes (the GL-posting adjustment mechanism: count a store's
   // stock, post the variance as stock_movements plus a journal against
