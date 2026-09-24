@@ -60,6 +60,7 @@ interface Store {
 interface Customer {
   id: string;
   name_en: string;
+  default_price_list_id: string | null;
 }
 
 interface FiscalPeriod {
@@ -275,7 +276,21 @@ function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => void; onCr
       </div>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Customer">
-          <SelectInput value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+          <SelectInput
+            value={customerId}
+            onChange={(e) => {
+              const newCustomerId = e.target.value;
+              setCustomerId(newCustomerId);
+              // A B2B customer's contracted price list applies by default --
+              // still just a starting point, so it only fills an empty
+              // selection rather than overriding a price list already
+              // chosen by hand.
+              const customer = customers?.find((c) => c.id === newCustomerId);
+              if (customer?.default_price_list_id && !priceListId) {
+                setPriceListId(customer.default_price_list_id);
+              }
+            }}
+          >
             <option value="">Walk-in / none</option>
             {customers?.map((c) => (
               <option key={c.id} value={c.id}>

@@ -306,6 +306,39 @@ async function main() {
       );
     }
 
+    // Wholesale price book: exclusive of VAT (rule A -- a whole book is
+    // either all-inclusive or all-exclusive), priced below the retail
+    // shelf price to reflect bulk-buy terms.
+    const wholesalePriceList = await client.query(
+      `INSERT INTO price_lists (company_id, code, name_en, name_ar, price_includes_vat, is_default)
+       VALUES ($1, 'WHOLESALE', 'Wholesale Price List', 'قائمة أسعار الجملة', false, false)
+       ON CONFLICT (company_id, code) DO UPDATE SET name_en = EXCLUDED.name_en
+       RETURNING id`,
+      [companyId],
+    );
+    const wholesalePriceListId = wholesalePriceList.rows[0].id as string;
+
+    for (const row of priceListVariants.rows as Array<{ id: string }>) {
+      await client.query(
+        `INSERT INTO price_list_items (price_list_id, item_variant_id, price)
+         VALUES ($1, $2, 32.00)
+         ON CONFLICT (price_list_id, item_variant_id) DO NOTHING`,
+        [wholesalePriceListId, row.id],
+      );
+    }
+
+    await client.query(
+      `INSERT INTO customers
+         (company_id, customer_code, name_en, name_ar, customer_type, cr_number, vat_registration_number,
+          address, city, phone, email, credit_limit, payment_terms_days, default_price_list_id)
+       VALUES ($1, 'CUST-002', 'Al Majd Trading Est.', 'مؤسسة المجد التجارية', 'wholesale',
+               '2050505050', '300500000000003', 'Industrial Area, Al Kharj Road', 'Riyadh',
+               '+966112345678', 'purchasing@almajd-demo.local', 50000, 30, $2)
+       ON CONFLICT (company_id, customer_code)
+         DO UPDATE SET name_en = EXCLUDED.name_en, default_price_list_id = EXCLUDED.default_price_list_id`,
+      [companyId, wholesalePriceListId],
+    );
+
     await client.query(
       `INSERT INTO asset_categories
          (company_id, code, name_en, name_ar, default_useful_life_months,
