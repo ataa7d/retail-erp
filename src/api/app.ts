@@ -14,6 +14,7 @@ import { itemRoutes } from "./routes/items.js";
 import { customerRoutes } from "./routes/customers.js";
 import { priceListRoutes } from "./routes/priceLists.js";
 import { stockRoutes } from "./routes/stock.js";
+import { inventoryRoutes } from "./routes/inventory.js";
 import { salesInvoiceRoutes } from "./routes/salesInvoices.js";
 import { creditNoteRoutes } from "./routes/creditNotes.js";
 import { posDeviceRoutes } from "./routes/posDevices.js";
@@ -67,6 +68,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(customerRoutes, { prefix: "/api" });
   await app.register(priceListRoutes, { prefix: "/api" });
   await app.register(stockRoutes, { prefix: "/api" });
+  await app.register(inventoryRoutes, { prefix: "/api" });
   await app.register(salesInvoiceRoutes, { prefix: "/api" });
   await app.register(creditNoteRoutes, { prefix: "/api" });
   await app.register(posDeviceRoutes, { prefix: "/api" });
