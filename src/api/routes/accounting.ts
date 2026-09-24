@@ -49,6 +49,8 @@ const paymentCreateSchema = z.object({
   amount: z.number().positive(),
   reference: z.string().optional(),
   allocations: z.array(z.object({ supplierInvoiceId: z.string().uuid(), allocatedAmount: z.number().positive() })).optional(),
+  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+  exchangeRate: z.number().positive().nullable().optional(),
 });
 
 const statementLineCreateSchema = z.object({
@@ -277,6 +279,7 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
   app.get("/supplier-payments", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
       `SELECT sp.id, sp.document_number, sp.payment_date, sp.payment_method, sp.amount, sp.document_status,
+              sp.currency, sp.exchange_rate, sp.base_amount,
               s.name_en AS supplier_name_en, s.name_ar AS supplier_name_ar
        FROM supplier_payments sp JOIN suppliers s ON s.id = sp.supplier_id
        WHERE sp.company_id = $1 ORDER BY sp.payment_date DESC LIMIT 200`,
@@ -302,6 +305,8 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
           reference: body.reference ?? null,
           createdBy: request.authUser.id,
           allocations: body.allocations,
+          currency: body.currency ?? null,
+          exchangeRate: body.exchangeRate ?? null,
         });
         await postSupplierPayment(client, paymentId, request.authUser.id);
         return paymentId;

@@ -7,7 +7,7 @@ import { pool } from "../db.js";
 export async function companyRoutes(app: FastifyInstance): Promise<void> {
   app.get("/companies", { preHandler: app.authenticateUser }, async (request) => {
     const result = await pool.query(
-      `SELECT c.id, c.company_code, c.name_en, c.name_ar
+      `SELECT c.id, c.company_code, c.name_en, c.name_ar, c.base_currency
        FROM companies c
        JOIN user_company_access uca ON uca.company_id = c.id
        WHERE uca.user_id = $1 AND uca.is_active = true

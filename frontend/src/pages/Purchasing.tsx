@@ -8,6 +8,8 @@ import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
 import Tabs from "../components/Tabs";
+import ExchangeRateField from "../components/ExchangeRateField";
+import { useBaseCurrency, formatMoney } from "../lib/currency";
 import { Field, TextInput, SelectInput, FormActions } from "../components/FormField";
 import type { Column } from "../components/DataTable";
 
@@ -18,6 +20,8 @@ interface PurchaseOrder {
   expected_date: string | null;
   document_status: string;
   gross_amount: string;
+  currency: string;
+  exchange_rate: string;
   supplier_name_en: string;
   supplier_name_ar: string;
 }
@@ -36,6 +40,7 @@ interface Supplier {
   email: string | null;
   payment_terms_days: number;
   lead_time_days: number | null;
+  currency: string;
   is_active: boolean;
 }
 
@@ -97,6 +102,7 @@ interface PoDetail {
   store_id: string;
   supplier_id: string;
   document_number: string;
+  currency: string;
   lines: PoLine[];
 }
 
@@ -107,6 +113,8 @@ interface GoodsReceipt {
   document_status: string;
   purchase_order_id: string;
   po_document_number: string;
+  currency: string;
+  exchange_rate: string;
   supplier_name_en: string;
   supplier_name_ar: string;
 }
@@ -115,7 +123,8 @@ interface GrLine {
   id: string;
   item_variant_id: string;
   qty_received: string;
-  unit_cost: string;
+  base_unit_cost: string; // merchandise cost in the PO's own currency -- what the supplier invoice price is matched against
+  unit_cost: string; // base currency, merchandise + landed cost -- inventory valuation, not for invoice matching
   variant_code: string;
   item_name_en: string;
 }
@@ -125,6 +134,7 @@ interface GrDetail {
   supplier_id: string;
   purchase_order_id: string;
   document_number: string;
+  currency: string;
   lines: GrLine[];
 }
 
@@ -135,6 +145,9 @@ interface SupplierInvoice {
   invoice_date: string;
   document_status: string;
   gross_amount: string;
+  currency: string;
+  exchange_rate: string;
+  base_gross_amount: string | null;
   supplier_name_en: string;
   supplier_name_ar: string;
 }
@@ -153,6 +166,7 @@ function useVariantOptions() {
 
 function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
+  const baseCurrency = useBaseCurrency();
   const { data: suppliers } = useApiList<Supplier>("/api/suppliers");
   const { data: stores } = useApiList<Store>("/api/stores");
   const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
@@ -164,6 +178,8 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
   const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [orderDate, setOrderDate] = useState(new Date().toISOString().slice(0, 10));
   const [expectedDate, setExpectedDate] = useState("");
+  const [currency, setCurrency] = useState(baseCurrency);
+  const [exchangeRate, setExchangeRate] = useState("1");
   const [lines, setLines] = useState<PoLineDraft[]>([
     { itemVariantId: "", qty: "1", unitPrice: "0", vatRate: "15", priceIncludesVat: false },
   ]);
@@ -178,6 +194,15 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
     }
     apiRequest<SupplierItemPrice[]>(`/api/supplier-item-prices?supplierId=${supplierId}`, { token, companyId }).then(setSupplierPrices);
   }, [supplierId, token, companyId]);
+
+  function selectSupplier(id: string) {
+    setSupplierId(id);
+    // A supplier's invoicing currency is a strong default, but the order
+    // can still be placed in any currency (some overseas suppliers will
+    // still quote in SAR on request) -- so it's a suggestion, not a lock.
+    const supplier = suppliers?.find((s) => s.id === id);
+    if (supplier) setCurrency(supplier.currency);
+  }
 
   const totalGross = lines.reduce((s, l) => {
     const qty = Number(l.qty) || 0;
@@ -239,6 +264,8 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
               vatRate: Number(l.vatRate),
               priceIncludesVat: l.priceIncludesVat,
             })),
+          currency,
+          exchangeRate: currency === baseCurrency ? null : Number(exchangeRate),
         },
       });
       await apiRequest(`/api/purchase-orders/${created.id}/post`, { method: "POST", token, companyId });
@@ -255,11 +282,11 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
     <form onSubmit={handleSubmit}>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Supplier" required>
-          <SelectInput required value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="w-full min-w-0">
+          <SelectInput required value={supplierId} onChange={(e) => selectSupplier(e.target.value)} className="w-full min-w-0">
             <option value="">Select...</option>
             {suppliers?.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name_en}
+                {s.name_en} ({s.currency})
               </option>
             ))}
           </SelectInput>
@@ -282,6 +309,12 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
         <Field label="Expected Date">
           <TextInput type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} />
         </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Currency" required>
+          <TextInput required value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={3} />
+        </Field>
+        <ExchangeRateField currency={currency} date={orderDate} value={exchangeRate} onChange={setExchangeRate} />
       </div>
       <Field label="Fiscal Period" required>
         <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
@@ -330,11 +363,12 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
       </button>
 
       <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
-        Estimated Total: {totalGross.toFixed(2)}
+        Estimated Total: {formatMoney(totalGross, currency)}
       </div>
 
       <p className="mb-3 mt-2 text-xs text-slate-400">
         Purchase orders don't post a GL journal — they're a commitment, not a financial transaction. Posting here approves and locks it for receiving.
+        {currency !== baseCurrency && " Lines above are priced in the order's own currency."}
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Create & Approve PO" />
     </form>
@@ -353,8 +387,10 @@ function NewGoodsReceiptForm({ onClose, onCreated }: { onClose: () => void; onCr
   const [receiptDate, setReceiptDate] = useState(new Date().toISOString().slice(0, 10));
   const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [qtyByLine, setQtyByLine] = useState<Record<string, string>>({});
+  const [exchangeRate, setExchangeRate] = useState("1");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const baseCurrency = useBaseCurrency();
 
   useEffect(() => {
     if (!purchaseOrderId || !token || !companyId) {
@@ -394,6 +430,7 @@ function NewGoodsReceiptForm({ onClose, onCreated }: { onClose: () => void; onCr
           receiptDate,
           fiscalPeriodId,
           lines,
+          exchangeRate: poDetail.currency === baseCurrency ? null : Number(exchangeRate),
         },
       });
       await apiRequest(`/api/goods-receipts/${created.id}/post`, { method: "POST", token, companyId });
@@ -413,7 +450,7 @@ function NewGoodsReceiptForm({ onClose, onCreated }: { onClose: () => void; onCr
           <option value="">Select a posted PO...</option>
           {postedPOs.map((po) => (
             <option key={po.id} value={po.id}>
-              {po.document_number} — {po.supplier_name_en}
+              {po.document_number} — {po.supplier_name_en} ({po.currency})
             </option>
           ))}
         </SelectInput>
@@ -433,6 +470,9 @@ function NewGoodsReceiptForm({ onClose, onCreated }: { onClose: () => void; onCr
           </SelectInput>
         </Field>
       </div>
+      {poDetail && (
+        <ExchangeRateField currency={poDetail.currency} date={receiptDate} value={exchangeRate} onChange={setExchangeRate} />
+      )}
 
       {poDetail && (
         <>
@@ -490,8 +530,11 @@ function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => void; o
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [lineData, setLineData] = useState<Record<string, { qty: string; unitPrice: string; vatRate: string; priceIncludesVat: boolean }>>({});
+  const [exchangeRate, setExchangeRate] = useState("1");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const baseCurrency = useBaseCurrency();
+  const selectedPo = postedPOs.find((po) => po.id === purchaseOrderId) ?? null;
 
   useEffect(() => {
     setGoodsReceiptId("");
@@ -507,7 +550,7 @@ function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => void; o
       setGrDetail(detail);
       const init: Record<string, { qty: string; unitPrice: string; vatRate: string; priceIncludesVat: boolean }> = {};
       for (const line of detail.lines) {
-        init[line.id] = { qty: line.qty_received, unitPrice: line.unit_cost, vatRate: "15", priceIncludesVat: false };
+        init[line.id] = { qty: line.qty_received, unitPrice: line.base_unit_cost, vatRate: "15", priceIncludesVat: false };
       }
       setLineData(init);
     });
@@ -540,6 +583,7 @@ function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => void; o
           invoiceDate,
           fiscalPeriodId,
           lines,
+          exchangeRate: (selectedPo?.currency ?? baseCurrency) === baseCurrency ? null : Number(exchangeRate),
         },
       });
       await apiRequest(`/api/supplier-invoices/${created.id}/post`, { method: "POST", token, companyId });
@@ -559,7 +603,7 @@ function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => void; o
           <option value="">Select a posted PO...</option>
           {postedPOs.map((po) => (
             <option key={po.id} value={po.id}>
-              {po.document_number} — {po.supplier_name_en}
+              {po.document_number} — {po.supplier_name_en} ({po.currency})
             </option>
           ))}
         </SelectInput>
@@ -592,10 +636,15 @@ function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => void; o
           ))}
         </SelectInput>
       </Field>
+      {selectedPo && (
+        <ExchangeRateField currency={selectedPo.currency} date={invoiceDate} value={exchangeRate} onChange={setExchangeRate} />
+      )}
 
       {grDetail && (
         <>
-          <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Lines</div>
+          <div className="mb-2 mt-4 text-sm font-medium text-slate-700">
+            Lines {selectedPo && selectedPo.currency !== baseCurrency && <span className="font-normal text-slate-400">(priced in {selectedPo.currency})</span>}
+          </div>
           <div className="space-y-2">
             {grDetail.lines.map((line) => (
               <div key={line.id} className="rounded-md border border-slate-200 p-2">
@@ -647,12 +696,14 @@ function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => void; o
 function GoodsReceiptsTab() {
   const { data, error, reload } = useApiList<GoodsReceipt>("/api/goods-receipts");
   const [showNew, setShowNew] = useState(false);
+  const baseCurrency = useBaseCurrency();
 
   const columns: Column<GoodsReceipt>[] = [
     { key: "number", header: "GR #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
     { key: "po", header: "PO #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.po_document_number}</span> },
     { key: "supplier", header: "Supplier", render: (r) => r.supplier_name_en },
     { key: "date", header: "Receipt Date", render: (r) => new Date(r.receipt_date).toLocaleDateString() },
+    { key: "currency", header: "Currency", render: (r) => (r.currency !== baseCurrency ? `${r.currency} @ ${Number(r.exchange_rate).toFixed(4)}` : "—") },
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
   ];
 
@@ -683,13 +734,20 @@ function GoodsReceiptsTab() {
 function SupplierInvoicesTab() {
   const { data, error, reload } = useApiList<SupplierInvoice>("/api/supplier-invoices");
   const [showNew, setShowNew] = useState(false);
+  const baseCurrency = useBaseCurrency();
 
   const columns: Column<SupplierInvoice>[] = [
     { key: "number", header: "Invoice #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
     { key: "supplierRef", header: "Supplier Ref", render: (r) => r.supplier_invoice_number },
     { key: "supplier", header: "Supplier", render: (r) => r.supplier_name_en },
     { key: "date", header: "Invoice Date", render: (r) => new Date(r.invoice_date).toLocaleDateString() },
-    { key: "amount", header: "Total", render: (r) => Number(r.gross_amount).toFixed(2), numeric: true },
+    { key: "amount", header: "Total", render: (r) => formatMoney(r.gross_amount, r.currency), numeric: true },
+    {
+      key: "base",
+      header: `${baseCurrency} Total`,
+      render: (r) => (r.currency !== baseCurrency && r.base_gross_amount ? formatMoney(r.base_gross_amount) : "—"),
+      numeric: true,
+    },
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
   ];
 
@@ -721,6 +779,7 @@ function PurchaseOrdersTab() {
   const { i18n } = useTranslation();
   const { data, error, reload } = useApiList<PurchaseOrder>("/api/purchase-orders");
   const [showNew, setShowNew] = useState(false);
+  const baseCurrency = useBaseCurrency();
 
   const columns: Column<PurchaseOrder>[] = [
     { key: "number", header: "PO #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
@@ -730,7 +789,7 @@ function PurchaseOrdersTab() {
       render: (r) => <span className="font-medium text-slate-900">{i18n.language.startsWith("ar") ? r.supplier_name_ar : r.supplier_name_en}</span>,
     },
     { key: "date", header: "Order Date", render: (r) => new Date(r.order_date).toLocaleDateString() },
-    { key: "amount", header: "Total", render: (r) => Number(r.gross_amount).toFixed(2), numeric: true },
+    { key: "amount", header: "Total", render: (r) => formatMoney(r.gross_amount, r.currency !== baseCurrency ? r.currency : undefined), numeric: true },
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
   ];
 
@@ -760,6 +819,7 @@ function PurchaseOrdersTab() {
 
 function NewSupplierForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
+  const baseCurrency = useBaseCurrency();
   const [supplierCode, setSupplierCode] = useState("");
   const [nameEn, setNameEn] = useState("");
   const [nameAr, setNameAr] = useState("");
@@ -768,6 +828,7 @@ function NewSupplierForm({ onClose, onCreated }: { onClose: () => void; onCreate
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [country, setCountry] = useState("Saudi Arabia");
+  const [currency, setCurrency] = useState(baseCurrency);
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [paymentTermsDays, setPaymentTermsDays] = useState(30);
@@ -797,6 +858,7 @@ function NewSupplierForm({ onClose, onCreated }: { onClose: () => void; onCreate
           email: email || null,
           paymentTermsDays,
           leadTimeDays: leadTimeDays ? Number(leadTimeDays) : null,
+          currency,
         },
       });
       onCreated();
@@ -850,6 +912,10 @@ function NewSupplierForm({ onClose, onCreated }: { onClose: () => void; onCreate
           <TextInput type="number" min={0} value={leadTimeDays} onChange={(e) => setLeadTimeDays(e.target.value)} />
         </Field>
       </div>
+      <Field label="Invoicing Currency" required>
+        <TextInput required value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={3} />
+      </Field>
+      <p className="mb-3 text-xs text-slate-400">Pre-fills the currency on new purchase orders for this supplier — an overseas supplier is usually {baseCurrency !== "USD" ? "USD" : "EUR"} or similar.</p>
       <FormActions error={error} submitting={submitting} submitLabel="Create Supplier" />
     </form>
   );
@@ -1001,6 +1067,7 @@ function SuppliersTab() {
     { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.supplier_code}</span> },
     { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900">{r.name_en}</span> },
     { key: "location", header: "Location", render: (r) => [r.city, r.country].filter(Boolean).join(", ") || "—" },
+    { key: "currency", header: "Currency", render: (r) => r.currency },
     { key: "terms", header: "Payment Terms", render: (r) => `${r.payment_terms_days}d`, numeric: true },
     {
       key: "status",

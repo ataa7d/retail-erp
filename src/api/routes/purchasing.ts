@@ -20,6 +20,8 @@ const lineSchema = z.object({
   priceIncludesVat: z.boolean(),
 });
 
+const currencyCode = z.string().regex(/^[A-Z]{3}$/, "currency must be a 3-letter ISO code like USD");
+
 const createSchema = z.object({
   storeId: z.string().uuid(),
   supplierId: z.string().uuid(),
@@ -27,6 +29,8 @@ const createSchema = z.object({
   expectedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   fiscalPeriodId: z.string().uuid(),
   lines: z.array(lineSchema).min(1),
+  currency: currencyCode.optional(),
+  exchangeRate: z.number().positive().nullable().optional(),
 });
 
 const goodsReceiptLineSchema = z.object({
@@ -50,6 +54,7 @@ const goodsReceiptCreateSchema = z.object({
   fiscalPeriodId: z.string().uuid(),
   lines: z.array(goodsReceiptLineSchema).min(1),
   charges: z.array(goodsReceiptChargeSchema).optional(),
+  exchangeRate: z.number().positive().nullable().optional(),
 });
 
 const supplierInvoiceLineSchema = z.object({
@@ -69,6 +74,7 @@ const supplierInvoiceCreateSchema = z.object({
   invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   fiscalPeriodId: z.string().uuid(),
   lines: z.array(supplierInvoiceLineSchema).min(1),
+  exchangeRate: z.number().positive().nullable().optional(),
 });
 
 const createSupplierSchema = z.object({
@@ -84,6 +90,7 @@ const createSupplierSchema = z.object({
   email: z.string().email().nullable().optional(),
   paymentTermsDays: z.number().int().nonnegative().default(0),
   leadTimeDays: z.number().int().nonnegative().nullable().optional(),
+  currency: currencyCode.optional(),
 });
 
 const setSupplierPriceSchema = z.object({
@@ -111,6 +118,8 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
             fiscalPeriodId: body.fiscalPeriodId,
             createdBy: request.authUser.id,
             lines: body.lines,
+            currency: body.currency ?? null,
+            exchangeRate: body.exchangeRate ?? null,
           }),
         request.authUser.id,
       );
@@ -138,7 +147,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
   app.get("/purchase-orders", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
       `SELECT po.id, po.document_number, po.order_date, po.expected_date, po.document_status,
-              po.net_amount, po.vat_amount, po.gross_amount,
+              po.net_amount, po.vat_amount, po.gross_amount, po.currency, po.exchange_rate,
               s.name_en AS supplier_name_en, s.name_ar AS supplier_name_ar
        FROM purchase_orders po
        JOIN suppliers s ON s.id = po.supplier_id
@@ -174,7 +183,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
   app.get("/suppliers", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
       `SELECT id, supplier_code, name_en, name_ar, cr_number, vat_registration_number, address,
-              city, country, phone, email, payment_terms_days, lead_time_days, is_active
+              city, country, phone, email, payment_terms_days, lead_time_days, currency, is_active
        FROM suppliers WHERE company_id = $1 ORDER BY name_en`,
       [request.companyId],
     );
@@ -189,8 +198,9 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
       const result = await pool.query<{ id: string }>(
         `INSERT INTO suppliers
            (company_id, supplier_code, name_en, name_ar, cr_number, vat_registration_number,
-            address, city, country, phone, email, payment_terms_days, lead_time_days)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
+            address, city, country, phone, email, payment_terms_days, lead_time_days, currency)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                 COALESCE($14, (SELECT base_currency FROM companies WHERE id = $1))) RETURNING id`,
         [
           request.companyId,
           body.supplierCode,
@@ -205,6 +215,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
           body.email ?? null,
           body.paymentTermsDays,
           body.leadTimeDays ?? null,
+          body.currency ?? null,
         ],
       );
       reply.status(201);
@@ -327,6 +338,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
             createdBy: request.authUser.id,
             lines: body.lines,
             charges: body.charges,
+            exchangeRate: body.exchangeRate ?? null,
           }),
         request.authUser.id,
       );
@@ -353,7 +365,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/goods-receipts", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
-      `SELECT gr.id, gr.document_number, gr.receipt_date, gr.document_status, gr.purchase_order_id,
+      `SELECT gr.id, gr.document_number, gr.receipt_date, gr.document_status, gr.purchase_order_id, gr.currency, gr.exchange_rate,
               po.document_number AS po_document_number,
               s.name_en AS supplier_name_en, s.name_ar AS supplier_name_ar
        FROM goods_receipts gr
@@ -406,6 +418,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
             fiscalPeriodId: body.fiscalPeriodId,
             createdBy: request.authUser.id,
             lines: body.lines,
+            exchangeRate: body.exchangeRate ?? null,
           }),
         request.authUser.id,
       );
@@ -433,7 +446,8 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
   app.get("/supplier-invoices", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
       `SELECT si.id, si.document_number, si.supplier_invoice_number, si.invoice_date, si.document_status,
-              si.gross_amount, s.name_en AS supplier_name_en, s.name_ar AS supplier_name_ar
+              si.gross_amount, si.currency, si.exchange_rate, si.base_gross_amount,
+              s.name_en AS supplier_name_en, s.name_ar AS supplier_name_ar
        FROM supplier_invoices si
        JOIN suppliers s ON s.id = si.supplier_id
        WHERE si.company_id = $1

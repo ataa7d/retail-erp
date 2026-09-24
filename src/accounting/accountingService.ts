@@ -5,6 +5,8 @@
  */
 
 import type { Client } from "pg";
+import { round2 } from "../money.js";
+import { getBaseCurrency, resolveExchangeRate } from "../currency/exchangeRates.js";
 
 async function nextDocumentNumber(client: Client, companyId: string, documentType: string, fiscalYear: number, prefix: string) {
   const r = await client.query<{ fn_next_document_number: string }>(
@@ -119,18 +121,29 @@ export interface CreateSupplierPaymentParams {
   amount: number;
   reference?: string | null;
   createdBy?: string | null;
+  /** Allocated amounts are in the payment's currency, which must match each invoice's. */
   allocations?: Array<{ supplierInvoiceId: string; allocatedAmount: number }>;
+  /** Payment currency; defaults to the base currency. */
+  currency?: string | null;
+  /** Rate on the payment date (e.g. the bank's actual conversion rate); looked up when omitted. */
+  exchangeRate?: number | null;
 }
 
 export async function createSupplierPayment(client: Client, p: CreateSupplierPaymentParams): Promise<string> {
   const fiscalYear = Number(p.paymentDate.slice(0, 4));
   const documentNumber = await nextDocumentNumber(client, p.companyId, "supplier_payment", fiscalYear, "SP-");
+  const currency = p.currency ?? (await getBaseCurrency(client, p.companyId));
+  const exchangeRate = await resolveExchangeRate(client, p.companyId, currency, p.paymentDate, p.exchangeRate);
 
   const header = await client.query<{ id: string }>(
     `INSERT INTO supplier_payments
-       (company_id, supplier_id, bank_account_id, document_number, payment_date, fiscal_period_id, payment_method, amount, reference, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
-    [p.companyId, p.supplierId, p.bankAccountId ?? null, documentNumber, p.paymentDate, p.fiscalPeriodId, p.paymentMethod, p.amount, p.reference ?? null, p.createdBy ?? null],
+       (company_id, supplier_id, bank_account_id, document_number, payment_date, fiscal_period_id, payment_method, amount, reference, created_by,
+        currency, exchange_rate)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+    [
+      p.companyId, p.supplierId, p.bankAccountId ?? null, documentNumber, p.paymentDate, p.fiscalPeriodId, p.paymentMethod, p.amount,
+      p.reference ?? null, p.createdBy ?? null, currency, exchangeRate,
+    ],
   );
   const paymentId = header.rows[0]!.id;
 
@@ -147,16 +160,39 @@ export async function createSupplierPayment(client: Client, p: CreateSupplierPay
 
 export async function postSupplierPayment(client: Client, paymentId: string, postedBy: string): Promise<void> {
   const paymentResult = await client.query(
-    `SELECT company_id, bank_account_id, payment_date, fiscal_period_id, amount FROM supplier_payments WHERE id = $1`,
+    `SELECT company_id, bank_account_id, payment_date, fiscal_period_id, amount, currency, exchange_rate
+     FROM supplier_payments WHERE id = $1`,
     [paymentId],
   );
   if (paymentResult.rows.length === 0) throw new Error(`supplier payment ${paymentId} not found`);
   const payment = paymentResult.rows[0]!;
+  const paymentRate = Number(payment.exchange_rate);
+  const amount = Number(payment.amount);
 
   const cashOrBankAccountId = payment.bank_account_id
     ? (await client.query<{ gl_account_id: string }>(`SELECT gl_account_id FROM bank_accounts WHERE id = $1`, [payment.bank_account_id])).rows[0]!.gl_account_id
     : await getAccountId(client, payment.company_id, "1110");
   const apAccountId = await getAccountId(client, payment.company_id, "2130");
+
+  // The bank pays at today's rate; AP is relieved at the rate each invoice
+  // was booked at. The gap is a realized FX gain/loss. Any unallocated
+  // remainder (an advance) sits in AP at today's rate.
+  const allocations = await client.query<{ allocated_amount: string; exchange_rate: string }>(
+    `SELECT spa.allocated_amount, si.exchange_rate
+     FROM supplier_payment_allocations spa
+     JOIN supplier_invoices si ON si.id = spa.supplier_invoice_id
+     WHERE spa.supplier_payment_id = $1`,
+    [paymentId],
+  );
+  let allocatedForeign = 0;
+  let apRelief = 0;
+  for (const alloc of allocations.rows) {
+    allocatedForeign += Number(alloc.allocated_amount);
+    apRelief = round2(apRelief + round2(Number(alloc.allocated_amount) * Number(alloc.exchange_rate)));
+  }
+  apRelief = round2(apRelief + round2((amount - allocatedForeign) * paymentRate));
+  const baseAmount = round2(amount * paymentRate);
+  const fxDifference = round2(baseAmount - apRelief); // positive = paid more base currency than carried = loss
 
   const fiscalYear = Number(payment.payment_date.toISOString().slice(0, 4));
   const journalNumber = await nextDocumentNumber(client, payment.company_id, "journal", fiscalYear, "GJ-");
@@ -170,18 +206,32 @@ export async function postSupplierPayment(client: Client, paymentId: string, pos
   await client.query(
     `INSERT INTO journal_lines (company_id, journal_id, line_number, account_id, debit_amount, description)
      VALUES ($1, $2, 1, $3, $4, 'accounts payable settlement')`,
-    [payment.company_id, journalId, apAccountId, payment.amount],
+    [payment.company_id, journalId, apAccountId, apRelief],
   );
   await client.query(
     `INSERT INTO journal_lines (company_id, journal_id, line_number, account_id, credit_amount, description)
-     VALUES ($1, $2, 2, $3, $4, 'supplier payment')`,
-    [payment.company_id, journalId, cashOrBankAccountId, payment.amount],
+     VALUES ($1, $2, 2, $3, $4, $5)`,
+    [
+      payment.company_id, journalId, cashOrBankAccountId, baseAmount,
+      paymentRate === 1 ? "supplier payment" : `supplier payment (${payment.currency} ${amount.toFixed(2)} @ ${paymentRate})`,
+    ],
   );
+  if (fxDifference !== 0) {
+    const fxAccountId = await getAccountId(client, payment.company_id, "5400");
+    await client.query(
+      `INSERT INTO journal_lines (company_id, journal_id, line_number, account_id, ${fxDifference > 0 ? "debit_amount" : "credit_amount"}, description)
+       VALUES ($1, $2, 3, $3, $4, $5)`,
+      [
+        payment.company_id, journalId, fxAccountId, Math.abs(fxDifference),
+        `realized FX ${fxDifference > 0 ? "loss" : "gain"} on ${payment.currency} settlement`,
+      ],
+    );
+  }
 
   await client.query(`UPDATE journals SET document_status = 'posted' WHERE id = $1`, [journalId]);
   await client.query(
-    `UPDATE supplier_payments SET document_status = 'posted', posted_by = $2, journal_id = $3 WHERE id = $1`,
-    [paymentId, postedBy, journalId],
+    `UPDATE supplier_payments SET document_status = 'posted', posted_by = $2, journal_id = $3, base_amount = $4 WHERE id = $1`,
+    [paymentId, postedBy, journalId, baseAmount],
   );
 }
 

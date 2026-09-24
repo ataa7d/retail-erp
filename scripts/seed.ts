@@ -146,6 +146,7 @@ async function main() {
       ["5210", "Loss on Disposal of Assets", "خسائر استبعاد الأصول", "expense", "debit", "5000"],
       ["5300", "Salaries Expense", "مصروف الرواتب", "expense", "debit", "5000"],
       ["5310", "GOSI Expense (Employer)", "مصروف التأمينات الاجتماعية (صاحب العمل)", "expense", "debit", "5000"],
+      ["5400", "Foreign Exchange Gain/Loss", "أرباح وخسائر فروق العملة", "expense", "debit", "5000"],
     ];
     const leafAccountIds: Record<string, string> = {};
     for (const [code, nameEn, nameAr, type, balance, parentCode] of leafAccounts) {
@@ -282,6 +283,22 @@ async function main() {
        VALUES ($1, 'SUP-001', 'Demo Textile Supplier', 'مورد المنسوجات التجريبي', 'Jeddah', 'Saudi Arabia', 30, 14)
        ON CONFLICT (company_id, supplier_code) DO UPDATE SET name_en = EXCLUDED.name_en`,
       [companyId],
+    );
+
+    // An overseas supplier invoicing in USD, plus a starting USD rate
+    // (SAR has been pegged at 3.75 since 1986), so import purchasing can be
+    // exercised out of the box.
+    await client.query(
+      `INSERT INTO suppliers (company_id, supplier_code, name_en, name_ar, city, country, payment_terms_days, lead_time_days, currency)
+       VALUES ($1, 'SUP-100', 'Guangzhou Textile Export Co.', 'شركة قوانغتشو لتصدير المنسوجات', 'Guangzhou', 'China', 60, 45, 'USD')
+       ON CONFLICT (company_id, supplier_code) DO UPDATE SET name_en = EXCLUDED.name_en, currency = EXCLUDED.currency`,
+      [companyId],
+    );
+    await client.query(
+      `INSERT INTO exchange_rates (company_id, currency, rate_date, rate, created_by)
+       VALUES ($1, 'USD', '2026-01-01', 3.75, $2)
+       ON CONFLICT (company_id, currency, rate_date) DO NOTHING`,
+      [companyId, userId],
     );
 
     const priceList = await client.query(

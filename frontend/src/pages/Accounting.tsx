@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { BookOpen, ScrollText, Wallet, Banknote, Clock, Plus, Trash2, Link2, CheckCircle2, Lock, Unlock, CalendarCheck } from "lucide-react";
+import { BookOpen, ScrollText, Wallet, Banknote, Clock, Plus, Trash2, Link2, CheckCircle2, Lock, Unlock, CalendarCheck, Coins } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -8,6 +8,8 @@ import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
 import Tabs from "../components/Tabs";
+import ExchangeRateField from "../components/ExchangeRateField";
+import { useBaseCurrency, formatMoney } from "../lib/currency";
 import { Field, TextInput, SelectInput, FormActions } from "../components/FormField";
 import type { Column } from "../components/DataTable";
 
@@ -52,6 +54,7 @@ interface Customer {
 interface Supplier {
   id: string;
   name_en: string;
+  currency: string;
 }
 
 interface Journal {
@@ -80,6 +83,16 @@ interface Payment {
   amount: string;
   document_status: string;
   supplier_name_en: string;
+  currency: string;
+  exchange_rate: string;
+  base_amount: string | null;
+}
+
+interface ExchangeRate {
+  id: string;
+  currency: string;
+  rate_date: string;
+  rate: string;
 }
 
 interface AgeingRow {
@@ -91,6 +104,7 @@ interface AgeingRow {
   ageing_bucket: string;
   customer_name_en?: string;
   supplier_name_en?: string;
+  currency?: string;
 }
 
 interface FullBankAccount {
@@ -471,6 +485,7 @@ function CustomerReceiptsTab() {
 
 function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
+  const baseCurrency = useBaseCurrency();
   const { data: suppliers } = useApiList<Supplier>("/api/suppliers");
   const { data: bankAccounts } = useApiList<BankAccount>("/api/bank-accounts");
   const openPeriods = useOpenPeriods();
@@ -481,8 +496,16 @@ function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; onCreated
   const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [amount, setAmount] = useState(0);
+  const [currency, setCurrency] = useState(baseCurrency);
+  const [exchangeRate, setExchangeRate] = useState("1");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  function selectSupplier(id: string) {
+    setSupplierId(id);
+    const supplier = suppliers?.find((s) => s.id === id);
+    if (supplier) setCurrency(supplier.currency);
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -493,7 +516,16 @@ function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; onCreated
         method: "POST",
         token,
         companyId,
-        body: { supplierId, bankAccountId: bankAccountId || null, paymentDate, fiscalPeriodId, paymentMethod, amount },
+        body: {
+          supplierId,
+          bankAccountId: bankAccountId || null,
+          paymentDate,
+          fiscalPeriodId,
+          paymentMethod,
+          amount,
+          currency,
+          exchangeRate: currency === baseCurrency ? null : Number(exchangeRate),
+        },
       });
       onCreated();
       onClose();
@@ -507,11 +539,11 @@ function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; onCreated
   return (
     <form onSubmit={handleSubmit}>
       <Field label="Supplier" required>
-        <SelectInput required value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+        <SelectInput required value={supplierId} onChange={(e) => selectSupplier(e.target.value)}>
           <option value="">Select...</option>
           {suppliers?.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.name_en}
+              {s.name_en} ({s.currency})
             </option>
           ))}
         </SelectInput>
@@ -534,9 +566,15 @@ function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; onCreated
           </SelectInput>
         </Field>
       )}
-      <Field label="Amount" required>
-        <TextInput type="number" min={0.01} step="0.01" required value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
-      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Amount" required>
+          <TextInput type="number" min={0.01} step="0.01" required value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
+        </Field>
+        <Field label="Currency" required>
+          <TextInput required value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={3} />
+        </Field>
+      </div>
+      <ExchangeRateField currency={currency} date={paymentDate} value={exchangeRate} onChange={setExchangeRate} label={`Exchange Rate (${baseCurrency} per 1 ${currency}, today's bank rate)`} />
       <Field label="Payment Date" required>
         <TextInput type="date" required value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
       </Field>
@@ -559,12 +597,19 @@ function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; onCreated
 function SupplierPaymentsTab() {
   const { data, error, reload } = useApiList<Payment>("/api/supplier-payments");
   const [showNew, setShowNew] = useState(false);
+  const baseCurrency = useBaseCurrency();
 
   const columns: Column<Payment>[] = [
     { key: "number", header: "Payment #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
     { key: "supplier", header: "Supplier", render: (r) => r.supplier_name_en },
     { key: "date", header: "Date", render: (r) => new Date(r.payment_date).toLocaleDateString() },
-    { key: "amount", header: "Amount", render: (r) => Number(r.amount).toFixed(2), numeric: true },
+    { key: "amount", header: "Amount", render: (r) => formatMoney(r.amount, r.currency !== baseCurrency ? r.currency : undefined), numeric: true },
+    {
+      key: "base",
+      header: `${baseCurrency} Equiv.`,
+      render: (r) => (r.currency !== baseCurrency && r.base_amount ? formatMoney(r.base_amount) : "—"),
+      numeric: true,
+    },
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
   ];
 
@@ -624,7 +669,7 @@ function ApAgeingTab() {
     { key: "number", header: "Invoice #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
     { key: "supplier", header: "Supplier", render: (r) => r.supplier_name_en },
     { key: "due", header: "Due Date", render: (r) => new Date(r.due_date).toLocaleDateString() },
-    { key: "open", header: "Open Amount", render: (r) => Number(r.open_amount).toFixed(2), numeric: true },
+    { key: "open", header: "Open Amount", render: (r) => formatMoney(r.open_amount, r.currency), numeric: true },
     { key: "bucket", header: "Bucket", render: (r) => <StatusBadge status={r.ageing_bucket === "current" ? "active" : "draft"} /> },
   ];
   return (
@@ -639,6 +684,94 @@ function ApAgeingTab() {
       emptyText="Nothing outstanding."
       searchPlaceholder="Search..."
     />
+  );
+}
+
+// ---- Exchange Rates ----
+
+function NewExchangeRateForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const [currency, setCurrency] = useState("");
+  const [rateDate, setRateDate] = useState(new Date().toISOString().slice(0, 10));
+  const [rate, setRate] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/exchange-rates", {
+        method: "POST",
+        token,
+        companyId,
+        body: { currency: currency.toUpperCase(), rateDate, rate: Number(rate) },
+      });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save rate");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Field label="Currency" required>
+        <TextInput required value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={3} placeholder="USD" />
+      </Field>
+      <Field label="Date" required>
+        <TextInput type="date" required value={rateDate} onChange={(e) => setRateDate(e.target.value)} />
+      </Field>
+      <Field label="Rate" required>
+        <TextInput type="number" min="0.00000001" step="any" required value={rate} onChange={(e) => setRate(e.target.value)} placeholder="3.75" />
+      </Field>
+      <p className="mb-3 text-xs text-slate-400">
+        How many units of the base currency one unit of this currency buys on this date. Re-entering the same currency and date corrects that day's rate.
+      </p>
+      <FormActions error={error} submitting={submitting} submitLabel="Save Rate" />
+    </form>
+  );
+}
+
+function ExchangeRatesTab() {
+  const { data, error, reload } = useApiList<ExchangeRate>("/api/exchange-rates");
+  const baseCurrency = useBaseCurrency();
+  const [showNew, setShowNew] = useState(false);
+
+  const columns: Column<ExchangeRate>[] = [
+    { key: "currency", header: "Currency", render: (r) => <span className="font-medium text-slate-900">{r.currency}</span> },
+    { key: "date", header: "Date", render: (r) => new Date(r.rate_date).toLocaleDateString() },
+    { key: "rate", header: `Rate (${baseCurrency} per 1 unit)`, render: (r) => Number(r.rate).toFixed(4), numeric: true },
+  ];
+
+  return (
+    <>
+      <p className="mb-3 max-w-2xl text-sm text-slate-500">
+        Documents in a foreign currency snapshot the latest rate on or before their own date when posted, so correcting or adding a rate
+        here never changes anything already posted. A document can also override this with its own rate (e.g. the bank's actual contract rate).
+      </p>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => r.currency}
+        emptyIcon={Coins}
+        emptyText="No exchange rates entered yet."
+        searchPlaceholder="Search currency..."
+        actionLabel="New Rate"
+        onAction={() => setShowNew(true)}
+      />
+      {showNew && (
+        <Modal title="New Exchange Rate" onClose={() => setShowNew(false)}>
+          <NewExchangeRateForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+    </>
   );
 }
 
@@ -1177,6 +1310,7 @@ export default function Accounting() {
       { key: "bank", label: "Bank Reconciliation", content: <BankReconciliationTab /> },
       { key: "ar", label: "AR Ageing", content: <ArAgeingTab /> },
       { key: "ap", label: "AP Ageing", content: <ApAgeingTab /> },
+      { key: "fx", label: "Exchange Rates", content: <ExchangeRatesTab /> },
       { key: "close", label: "Period Close", content: <PeriodCloseTab /> },
     ],
     [],

@@ -6,6 +6,7 @@ export interface Company {
   company_code: string;
   name_en: string;
   name_ar: string;
+  base_currency: string;
 }
 
 export interface MeResponse {

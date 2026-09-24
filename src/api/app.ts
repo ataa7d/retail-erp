@@ -3,6 +3,8 @@ import cors from "@fastify/cors";
 import { ZodError } from "zod";
 import { registerAuth } from "./plugins/auth.js";
 import { HttpError, pgErrorStatus } from "./errors.js";
+import { MissingExchangeRateError } from "../currency/exchangeRates.js";
+import { exchangeRateRoutes } from "./routes/exchangeRates.js";
 import { healthRoutes } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { meRoutes } from "./routes/me.js";
@@ -47,6 +49,10 @@ export async function buildApp(): Promise<FastifyInstance> {
       reply.status(400).send({ error: "validation failed", details: err.issues });
       return;
     }
+    if (err instanceof MissingExchangeRateError) {
+      reply.status(400).send({ error: err.message });
+      return;
+    }
     const pgCode = (err as { code?: string }).code;
     if (pgCode) {
       const status = pgErrorStatus(pgCode);
@@ -66,6 +72,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(storeRoutes, { prefix: "/api" });
   await app.register(purchasingRoutes, { prefix: "/api" });
   await app.register(accountingRoutes, { prefix: "/api" });
+  await app.register(exchangeRateRoutes, { prefix: "/api" });
   await app.register(itemRoutes, { prefix: "/api" });
   await app.register(unitOfMeasureRoutes, { prefix: "/api" });
   await app.register(masterDataRoutes, { prefix: "/api" });
