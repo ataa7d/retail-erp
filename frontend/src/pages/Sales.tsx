@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Receipt, RotateCcw, Plus, Trash2 } from "lucide-react";
+import { Receipt, RotateCcw, Plus, Trash2, Tag } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -611,12 +611,258 @@ function CreditNotesTab() {
   );
 }
 
+interface PriceListRow {
+  id: string;
+  code: string;
+  name_en: string;
+  name_ar: string;
+  currency: string;
+  price_includes_vat: boolean;
+  is_default: boolean;
+  is_active: boolean;
+}
+
+function NewPriceListForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const [code, setCode] = useState("");
+  const [nameEn, setNameEn] = useState("");
+  const [nameAr, setNameAr] = useState("");
+  const [currency, setCurrency] = useState("SAR");
+  const [priceIncludesVat, setPriceIncludesVat] = useState(true);
+  const [isDefault, setIsDefault] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/price-lists", {
+        method: "POST",
+        token,
+        companyId,
+        body: { code, nameEn, nameAr, currency, priceIncludesVat, isDefault },
+      });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create price list");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Field label="Code" required>
+        <TextInput required value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. WHOLESALE" />
+      </Field>
+      <Field label="Name (English)" required>
+        <TextInput required value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
+      </Field>
+      <Field label="Name (Arabic)" required>
+        <TextInput required dir="rtl" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
+      </Field>
+      <Field label="Currency" required>
+        <TextInput required value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} />
+      </Field>
+      <label className="mb-2 flex items-center gap-2 text-sm text-slate-600">
+        <input type="checkbox" checked={priceIncludesVat} onChange={(e) => setPriceIncludesVat(e.target.checked)} />
+        Prices include VAT
+      </label>
+      <label className="mb-3 flex items-center gap-2 text-sm text-slate-600">
+        <input type="checkbox" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />
+        Make this the default price list
+      </label>
+      <p className="mb-3 text-xs text-slate-400">Only one price list can be default per company — making this one default clears the current default.</p>
+      <FormActions error={error} submitting={submitting} submitLabel="Create Price List" />
+    </form>
+  );
+}
+
+function PriceListDetail({ list, onChanged }: { list: PriceListRow; onChanged: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: prices, reload } = useApiList<PriceListItem>(`/api/price-lists/${list.id}/items`);
+  const variantOptions = useVariantOptions();
+  const [itemVariantId, setItemVariantId] = useState("");
+  const [price, setPrice] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [busyVariantId, setBusyVariantId] = useState<string | null>(null);
+
+  const variantLabel = (id: string) => variantOptions.find((v) => v.id === id)?.label ?? id;
+
+  async function setLinePrice(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest(`/api/price-lists/${list.id}/items`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { itemVariantId, price: Number(price) },
+      });
+      setItemVariantId("");
+      setPrice("");
+      reload();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to set price");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function removeLine(variantId: string) {
+    setBusyVariantId(variantId);
+    try {
+      await apiRequest(`/api/price-lists/${list.id}/items/${variantId}/remove`, { method: "POST", token, companyId });
+      reload();
+      onChanged();
+    } finally {
+      setBusyVariantId(null);
+    }
+  }
+
+  return (
+    <div>
+      <form onSubmit={setLinePrice} className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_120px]">
+          <Field label="Item">
+            <SelectInput required value={itemVariantId} onChange={(e) => setItemVariantId(e.target.value)}>
+              <option value="">Select...</option>
+              {variantOptions.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label}
+                </option>
+              ))}
+            </SelectInput>
+          </Field>
+          <Field label="Price">
+            <TextInput required type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
+          </Field>
+        </div>
+        {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
+        <button
+          type="submit"
+          disabled={submitting}
+          className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+        >
+          {submitting ? "Saving..." : "Set Price"}
+        </button>
+      </form>
+
+      {prices && prices.length === 0 && <p className="text-sm text-slate-400">No prices set on this list yet.</p>}
+      <div className="space-y-1.5">
+        {prices?.map((p) => (
+          <div key={p.item_variant_id} className="flex items-center justify-between rounded-md border border-slate-100 px-3 py-2 text-sm">
+            <span className="text-slate-700">{variantLabel(p.item_variant_id)}</span>
+            <div className="flex items-center gap-3">
+              <span className="font-medium tabular-nums text-slate-900">{Number(p.price).toFixed(2)}</span>
+              <button
+                onClick={() => removeLine(p.item_variant_id)}
+                disabled={busyVariantId === p.item_variant_id}
+                className="text-slate-300 hover:text-red-500 disabled:opacity-50"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PriceListsTab() {
+  const { token, companyId } = useAuth();
+  const { data, error, reload } = useApiList<PriceListRow>("/api/price-lists");
+  const [showNew, setShowNew] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function toggleActive(list: PriceListRow) {
+    setBusyId(list.id);
+    try {
+      await apiRequest(`/api/price-lists/${list.id}/${list.is_active ? "deactivate" : "reactivate"}`, {
+        method: "POST",
+        token,
+        companyId,
+      });
+      reload();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const columns: Column<PriceListRow>[] = [
+    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.code}</span> },
+    { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900">{r.name_en}</span> },
+    { key: "currency", header: "Currency", render: (r) => r.currency },
+    { key: "vat", header: "VAT", render: (r) => (r.price_includes_vat ? "Inclusive" : "Exclusive") },
+    { key: "default", header: "Default", render: (r) => (r.is_default ? <StatusBadge status="active" /> : "—") },
+    {
+      key: "status",
+      header: "Status",
+      render: (r) => (
+        <div className="flex items-center gap-2">
+          <StatusBadge status={r.is_active ? "active" : "inactive"} />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleActive(r);
+            }}
+            disabled={busyId === r.id}
+            className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50"
+          >
+            {r.is_active ? "Deactivate" : "Reactivate"}
+          </button>
+        </div>
+      ),
+    },
+  ];
+
+  const detailList = data?.find((l) => l.id === detailId) ?? null;
+
+  return (
+    <>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => `${r.code} ${r.name_en}`}
+        emptyIcon={Tag}
+        emptyText="No price lists yet."
+        searchPlaceholder="Search price lists..."
+        actionLabel="New Price List"
+        onAction={() => setShowNew(true)}
+        onRowClick={(r) => setDetailId(r.id)}
+      />
+      {showNew && (
+        <Modal title="New Price List" onClose={() => setShowNew(false)}>
+          <NewPriceListForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+      {detailList && (
+        <Modal title={`${detailList.name_en} — Prices`} onClose={() => setDetailId(null)}>
+          <PriceListDetail list={detailList} onChanged={reload} />
+        </Modal>
+      )}
+    </>
+  );
+}
+
 export default function Sales() {
   const { t } = useTranslation();
   const tabs = useMemo(
     () => [
       { key: "invoices", label: "Sales Invoices", content: <SalesInvoicesTab /> },
       { key: "credits", label: "Credit Notes", content: <CreditNotesTab /> },
+      { key: "price-lists", label: "Price Lists", content: <PriceListsTab /> },
     ],
     [],
   );
