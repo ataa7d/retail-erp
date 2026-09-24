@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { BookOpen, ScrollText, Wallet, Banknote, Clock, Plus, Trash2, Link2, CheckCircle2 } from "lucide-react";
+import { BookOpen, ScrollText, Wallet, Banknote, Clock, Plus, Trash2, Link2, CheckCircle2, Lock, Unlock, CalendarCheck } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -22,8 +22,19 @@ interface Account {
 
 interface FiscalPeriod {
   id: string;
+  fiscal_year_id: string;
   period_number: number;
+  start_date: string;
+  end_date: string;
   year_name: string;
+  status: string;
+}
+
+interface FiscalYear {
+  id: string;
+  year_name: string;
+  start_date: string;
+  end_date: string;
   status: string;
 }
 
@@ -970,6 +981,191 @@ function BankReconciliationTab() {
   );
 }
 
+// ---- Period / Fiscal Year Close ----
+
+function ClosePeriodConfirm({
+  period,
+  onClose,
+  onDone,
+}: {
+  period: FiscalPeriod;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const { token, companyId } = useAuth();
+  const closing = period.status === "open";
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleConfirm() {
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest(`/api/fiscal-periods/${period.id}/${closing ? "close" : "reopen"}`, { method: "POST", token, companyId });
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div>
+      <p className="mb-4 text-sm text-slate-600">
+        {closing ? (
+          <>
+            Close <strong>{period.year_name} — Period {period.period_number}</strong> ({new Date(period.start_date).toLocaleDateString()} –{" "}
+            {new Date(period.end_date).toLocaleDateString()})? No further journals can post into it until reopened. Periods must close in
+            order — earlier open periods will block this.
+          </>
+        ) : (
+          <>
+            Reopen <strong>{period.year_name} — Period {period.period_number}</strong>? This allows posting into it again.
+          </>
+        )}
+      </p>
+      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      <button
+        onClick={handleConfirm}
+        disabled={submitting}
+        className="w-full rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+      >
+        {submitting ? "Working..." : closing ? "Close Period" : "Reopen Period"}
+      </button>
+    </div>
+  );
+}
+
+function CloseFiscalYearConfirm({ year, onClose, onDone }: { year: FiscalYear; onClose: () => void; onDone: () => void }) {
+  const { token, companyId } = useAuth();
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleConfirm() {
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest(`/api/fiscal-years/${year.id}/close`, { method: "POST", token, companyId });
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to close fiscal year");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div>
+      <p className="mb-4 text-sm text-slate-600">
+        Close fiscal year <strong>{year.year_name}</strong>? This generates closing entries zeroing every revenue/expense account into
+        Retained Earnings, posts them into the year's last period, then closes that period and the year itself. All earlier periods must
+        already be closed.
+      </p>
+      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      <button
+        onClick={handleConfirm}
+        disabled={submitting}
+        className="w-full rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+      >
+        {submitting ? "Closing..." : "Close Fiscal Year"}
+      </button>
+    </div>
+  );
+}
+
+function PeriodCloseTab() {
+  const { data: years, reload: reloadYears } = useApiList<FiscalYear>("/api/fiscal-years");
+  const { data: periods, reload: reloadPeriods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
+  const [periodAction, setPeriodAction] = useState<FiscalPeriod | null>(null);
+  const [yearAction, setYearAction] = useState<FiscalYear | null>(null);
+
+  function reloadAll() {
+    reloadYears();
+    reloadPeriods();
+  }
+
+  if (!years || !periods) return <p className="text-sm text-slate-400">Loading...</p>;
+
+  return (
+    <div className="space-y-6">
+      {years.map((year) => {
+        const yearPeriods = periods.filter((p) => p.fiscal_year_id === year.id).sort((a, b) => a.period_number - b.period_number);
+        return (
+          <div key={year.id} className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-slate-900">{year.year_name}</span>
+                <StatusBadge status={year.status} />
+              </div>
+              {year.status === "open" && (
+                <button
+                  onClick={() => setYearAction(year)}
+                  className="flex items-center gap-1.5 rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600"
+                >
+                  <CalendarCheck size={13} /> Close Fiscal Year
+                </button>
+              )}
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-400">
+                  <th className="px-4 py-2 text-start">Period</th>
+                  <th className="px-4 py-2 text-start">Dates</th>
+                  <th className="px-4 py-2 text-start">Status</th>
+                  <th className="px-4 py-2 text-start">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {yearPeriods.map((p) => (
+                  <tr key={p.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+                    <td className="px-4 py-2">P{p.period_number}</td>
+                    <td className="px-4 py-2 text-slate-500">
+                      {new Date(p.start_date).toLocaleDateString()} – {new Date(p.end_date).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-2">
+                      <StatusBadge status={p.status} />
+                    </td>
+                    <td className="px-4 py-2">
+                      <button
+                        onClick={() => setPeriodAction(p)}
+                        className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
+                      >
+                        {p.status === "open" ? (
+                          <>
+                            <Lock size={12} /> Close
+                          </>
+                        ) : (
+                          <>
+                            <Unlock size={12} /> Reopen
+                          </>
+                        )}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+
+      {periodAction && (
+        <Modal title={periodAction.status === "open" ? "Close Period" : "Reopen Period"} onClose={() => setPeriodAction(null)}>
+          <ClosePeriodConfirm period={periodAction} onClose={() => setPeriodAction(null)} onDone={reloadAll} />
+        </Modal>
+      )}
+      {yearAction && (
+        <Modal title="Close Fiscal Year" onClose={() => setYearAction(null)}>
+          <CloseFiscalYearConfirm year={yearAction} onClose={() => setYearAction(null)} onDone={reloadAll} />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 export default function Accounting() {
   const { t } = useTranslation();
   const tabs = useMemo(
@@ -981,6 +1177,7 @@ export default function Accounting() {
       { key: "bank", label: "Bank Reconciliation", content: <BankReconciliationTab /> },
       { key: "ar", label: "AR Ageing", content: <ArAgeingTab /> },
       { key: "ap", label: "AP Ageing", content: <ApAgeingTab /> },
+      { key: "close", label: "Period Close", content: <PeriodCloseTab /> },
     ],
     [],
   );

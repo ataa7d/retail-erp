@@ -9,8 +9,11 @@ import {
   createBankStatementLine,
   matchBankStatementLine,
   createAndPostBankReconciliation,
+  closePeriod,
+  reopenPeriod,
+  closeFiscalYear,
 } from "../../accounting/accountingService.js";
-import { NotFoundError } from "../errors.js";
+import { NotFoundError, BusinessRuleError } from "../errors.js";
 
 const journalLineSchema = z.object({
   accountId: z.string().uuid(),
@@ -79,13 +82,78 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/fiscal-periods", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
-      `SELECT fp.id, fp.period_number, fp.start_date, fp.end_date, fp.status, fy.year_name
+      `SELECT fp.id, fp.fiscal_year_id, fp.period_number, fp.start_date, fp.end_date, fp.status, fy.year_name
        FROM fiscal_periods fp JOIN fiscal_years fy ON fy.id = fp.fiscal_year_id
        WHERE fp.company_id = $1 ORDER BY fp.start_date`,
       [request.companyId],
     );
     return result.rows;
   });
+
+  app.post<{ Params: { id: string } }>(
+    "/fiscal-periods/:id/close",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.fiscal_periods.manage")] },
+    async (request) => {
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM fiscal_periods WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("fiscal period not found");
+        await closePeriod(client, request.params.id, request.authUser.id);
+      }, request.authUser.id);
+      return { id: request.params.id, status: "closed" };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/fiscal-periods/:id/reopen",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.fiscal_periods.manage")] },
+    async (request) => {
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM fiscal_periods WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("fiscal period not found");
+        await reopenPeriod(client, request.params.id);
+      }, request.authUser.id);
+      return { id: request.params.id, status: "open" };
+    },
+  );
+
+  app.get("/fiscal-years", { preHandler: app.authenticate }, async (request) => {
+    const result = await pool.query(
+      `SELECT id, year_name, start_date, end_date, status FROM fiscal_years WHERE company_id = $1 ORDER BY start_date`,
+      [request.companyId],
+    );
+    return result.rows;
+  });
+
+  app.post<{ Params: { id: string } }>(
+    "/fiscal-years/:id/close",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.fiscal_periods.manage")] },
+    async (request) => {
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM fiscal_years WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("fiscal year not found");
+        try {
+          await closeFiscalYear(client, request.params.id, request.authUser.id);
+        } catch (err) {
+          // closeFiscalYear throws a plain Error for its own JS-level
+          // validation (periods not yet closed, no periods at all) --
+          // never a server fault, so map it to 400 instead of the
+          // default 500 a bare Error would otherwise get.
+          if (err instanceof Error && !(err instanceof NotFoundError)) throw new BusinessRuleError(err.message);
+          throw err;
+        }
+      }, request.authUser.id);
+      return { id: request.params.id, status: "closed" };
+    },
+  );
 
   app.get("/bank-accounts", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(

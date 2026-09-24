@@ -25,6 +25,24 @@ export class NotFoundError extends HttpError {
   }
 }
 
+/**
+ * Wraps a plain Error thrown by pre-HTTP service-layer code (e.g.
+ * accountingService.closeFiscalYear's "periods X are not yet closed") as a
+ * 400. Those functions predate the API layer and throw plain `Error` for
+ * business-rule rejections rather than an HttpError, so without this they
+ * fall through the error handler's pg-code/ZodError/HttpError checks and
+ * surface as a raw 500 -- confirmed live via the fiscal-year-close route
+ * before this existed. Use only where the message is known to be a
+ * deliberate, client-facing rejection, not a genuine server fault (e.g.
+ * not for "chart of accounts is missing required account X", which really
+ * is a 500 -- a misconfigured company, not the caller's mistake).
+ */
+export class BusinessRuleError extends HttpError {
+  constructor(message: string) {
+    super(400, message);
+  }
+}
+
 /** Postgres SQLSTATE -> HTTP status for errors surfacing from raw queries
  * (a RAISE EXCEPTION from a business-rule trigger, a unique violation, a
  * FK violation) that weren't already wrapped as an HttpError. */
