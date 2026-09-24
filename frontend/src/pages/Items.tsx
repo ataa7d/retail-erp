@@ -1,14 +1,40 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Package, Plus, Barcode as BarcodeIcon } from "lucide-react";
+import { Package, Plus, Barcode as BarcodeIcon, Tag } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
 import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
+import Tabs from "../components/Tabs";
 import { Field, TextInput, SelectInput, FormActions } from "../components/FormField";
 import type { Column } from "../components/DataTable";
+
+interface Brand {
+  id: string;
+  code: string;
+  name_en: string;
+  name_ar: string;
+  is_active: boolean;
+}
+
+interface Category {
+  id: string;
+  code: string;
+  name_en: string;
+  name_ar: string;
+  parent_id: string | null;
+  is_active: boolean;
+}
+
+interface Season {
+  id: string;
+  code: string;
+  name_en: string;
+  name_ar: string;
+  is_active: boolean;
+}
 
 interface UnitOfMeasure {
   id: string;
@@ -37,6 +63,10 @@ interface Item {
   item_code: string;
   name_en: string;
   name_ar: string;
+  brand_id: string | null;
+  category_id: string | null;
+  season_id: string | null;
+  item_year: number | null;
   is_active: boolean;
   variants: ItemVariant[];
 }
@@ -44,10 +74,17 @@ interface Item {
 function NewItemForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: units } = useApiList<UnitOfMeasure>("/api/units-of-measure");
+  const { data: brands } = useApiList<Brand>("/api/brands");
+  const { data: categories } = useApiList<Category>("/api/categories");
+  const { data: seasons } = useApiList<Season>("/api/seasons");
   const [itemCode, setItemCode] = useState("");
   const [nameEn, setNameEn] = useState("");
   const [nameAr, setNameAr] = useState("");
   const [baseUnitOfMeasureId, setBaseUnitOfMeasureId] = useState("");
+  const [brandId, setBrandId] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [seasonId, setSeasonId] = useState("");
+  const [itemYear, setItemYear] = useState("");
   const [variantCode, setVariantCode] = useState("");
   const [color, setColor] = useState("");
   const [size, setSize] = useState("");
@@ -63,7 +100,19 @@ function NewItemForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
         method: "POST",
         token,
         companyId,
-        body: { itemCode, nameEn, nameAr, baseUnitOfMeasureId, variantCode, color: color || null, size: size || null },
+        body: {
+          itemCode,
+          nameEn,
+          nameAr,
+          baseUnitOfMeasureId,
+          brandId: brandId || null,
+          categoryId: categoryId || null,
+          seasonId: seasonId || null,
+          itemYear: itemYear ? Number(itemYear) : null,
+          variantCode,
+          color: color || null,
+          size: size || null,
+        },
       });
       onCreated();
       onClose();
@@ -95,6 +144,41 @@ function NewItemForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
           ))}
         </SelectInput>
       </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Brand">
+          <SelectInput value={brandId} onChange={(e) => setBrandId(e.target.value)}>
+            <option value="">None</option>
+            {brands?.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name_en} ({b.code})
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="Category">
+          <SelectInput value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <option value="">None</option>
+            {categories?.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name_en} ({c.code})
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="Season">
+          <SelectInput value={seasonId} onChange={(e) => setSeasonId(e.target.value)}>
+            <option value="">None</option>
+            {seasons?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name_en} ({s.code})
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="Year">
+          <TextInput type="number" value={itemYear} onChange={(e) => setItemYear(e.target.value)} placeholder="e.g. 2026" />
+        </Field>
+      </div>
       <div className="grid grid-cols-3 gap-3">
         <div className="col-span-3 sm:col-span-1">
           <Field label="Variant / SKU Code" required>
@@ -215,6 +299,85 @@ function AddBarcodeForm({ variantId, onClose, onCreated }: { variantId: string; 
   );
 }
 
+function ClassifyItemForm({ item, onChanged }: { item: Item; onChanged: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: brands } = useApiList<Brand>("/api/brands");
+  const { data: categories } = useApiList<Category>("/api/categories");
+  const { data: seasons } = useApiList<Season>("/api/seasons");
+  const [brandId, setBrandId] = useState(item.brand_id ?? "");
+  const [categoryId, setCategoryId] = useState(item.category_id ?? "");
+  const [seasonId, setSeasonId] = useState(item.season_id ?? "");
+  const [itemYear, setItemYear] = useState(item.item_year != null ? String(item.item_year) : "");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    try {
+      await apiRequest(`/api/items/${item.id}/classify`, {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          brandId: brandId || null,
+          categoryId: categoryId || null,
+          seasonId: seasonId || null,
+          itemYear: itemYear ? Number(itemYear) : null,
+        },
+      });
+      onChanged();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mb-4 grid grid-cols-2 gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-4">
+      <Field label="Brand">
+        <SelectInput value={brandId} onChange={(e) => setBrandId(e.target.value)}>
+          <option value="">None</option>
+          {brands?.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.code}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      <Field label="Category">
+        <SelectInput value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+          <option value="">None</option>
+          {categories?.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.code}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      <Field label="Season">
+        <SelectInput value={seasonId} onChange={(e) => setSeasonId(e.target.value)}>
+          <option value="">None</option>
+          {seasons?.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.code}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      <Field label="Year">
+        <TextInput type="number" value={itemYear} onChange={(e) => setItemYear(e.target.value)} />
+      </Field>
+      <div className="col-span-2 sm:col-span-4">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save Classification"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) {
   const { token, companyId } = useAuth();
   const { data: units } = useApiList<UnitOfMeasure>("/api/units-of-measure");
@@ -240,6 +403,7 @@ function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) 
 
   return (
     <div>
+      <ClassifyItemForm item={item} onChanged={onChanged} />
       <div className="mb-4 flex items-center justify-between">
         <div className="text-sm text-slate-500">
           <span className="font-mono text-xs">{item.item_code}</span> · {item.variants.length} variant{item.variants.length === 1 ? "" : "s"}
@@ -301,7 +465,7 @@ function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) 
   );
 }
 
-export default function Items() {
+function ItemsTab() {
   const { t, i18n } = useTranslation();
   const { data, error, reload } = useApiList<Item>("/api/items");
   const [showNew, setShowNew] = useState(false);
@@ -347,5 +511,199 @@ export default function Items() {
         </Modal>
       )}
     </>
+  );
+}
+
+interface ClassificationEntity {
+  id: string;
+  code: string;
+  name_en: string;
+  name_ar: string;
+  is_active: boolean;
+}
+
+function ClassificationForm({
+  path,
+  showParent,
+  categories,
+  onClose,
+  onCreated,
+}: {
+  path: string;
+  showParent?: boolean;
+  categories?: Category[];
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const { token, companyId } = useAuth();
+  const [code, setCode] = useState("");
+  const [nameEn, setNameEn] = useState("");
+  const [nameAr, setNameAr] = useState("");
+  const [parentId, setParentId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest(path, {
+        method: "POST",
+        token,
+        companyId,
+        body: showParent ? { code, nameEn, nameAr, parentId: parentId || null } : { code, nameEn, nameAr },
+      });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Field label="Code" required>
+        <TextInput required value={code} onChange={(e) => setCode(e.target.value)} />
+      </Field>
+      <Field label="Name (English)" required>
+        <TextInput required value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
+      </Field>
+      <Field label="Name (Arabic)" required>
+        <TextInput required dir="rtl" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
+      </Field>
+      {showParent && (
+        <Field label="Parent Category">
+          <SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)}>
+            <option value="">None (top level)</option>
+            {categories?.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name_en} ({c.code})
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+      )}
+      <FormActions error={error} submitting={submitting} submitLabel="Create" />
+    </form>
+  );
+}
+
+function ClassificationTab({
+  title,
+  basePath,
+  emptyText,
+  showParent,
+}: {
+  title: string;
+  basePath: string;
+  emptyText: string;
+  showParent?: boolean;
+}) {
+  const { token, companyId } = useAuth();
+  const { data, error, reload } = useApiList<ClassificationEntity & { parent_id?: string | null }>(basePath);
+  const [showNew, setShowNew] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const categories = (basePath === "/api/categories" ? data : undefined) as Category[] | undefined;
+
+  async function toggleActive(row: ClassificationEntity) {
+    setBusyId(row.id);
+    try {
+      await apiRequest(`${basePath}/${row.id}/${row.is_active ? "deactivate" : "reactivate"}`, {
+        method: "POST",
+        token,
+        companyId,
+      });
+      reload();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const parentName = (id: string | null | undefined) => data?.find((c) => c.id === id)?.name_en ?? "-";
+
+  const columns: Column<ClassificationEntity & { parent_id?: string | null }>[] = [
+    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.code}</span> },
+    { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900">{r.name_en}</span> },
+    { key: "name_ar", header: "الاسم", render: (r) => <span dir="rtl">{r.name_ar}</span> },
+    ...(showParent
+      ? [{ key: "parent", header: "Parent", render: (r: ClassificationEntity & { parent_id?: string | null }) => parentName(r.parent_id) }]
+      : []),
+    {
+      key: "status",
+      header: "Status",
+      render: (r) => (
+        <div className="flex items-center gap-2">
+          <StatusBadge status={r.is_active ? "active" : "inactive"} />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleActive(r);
+            }}
+            disabled={busyId === r.id}
+            className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50"
+          >
+            {r.is_active ? "Deactivate" : "Reactivate"}
+          </button>
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <ListPage
+        title={title}
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => `${r.code} ${r.name_en} ${r.name_ar}`}
+        emptyIcon={Tag}
+        emptyText={emptyText}
+        searchPlaceholder="Search by code or name..."
+        actionLabel="New"
+        onAction={() => setShowNew(true)}
+      />
+      {showNew && (
+        <Modal title={`New ${title}`} onClose={() => setShowNew(false)}>
+          <ClassificationForm path={basePath} showParent={showParent} categories={categories} onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+    </>
+  );
+}
+
+export default function Items() {
+  const { t } = useTranslation();
+  const tabs = useMemo(
+    () => [
+      { key: "items", label: t("nav.items"), content: <ItemsTab /> },
+      {
+        key: "brands",
+        label: "Brands",
+        content: <ClassificationTab title="Brand" basePath="/api/brands" emptyText="No brands found." />,
+      },
+      {
+        key: "categories",
+        label: "Categories",
+        content: <ClassificationTab title="Category" basePath="/api/categories" emptyText="No categories found." showParent />,
+      },
+      {
+        key: "seasons",
+        label: "Seasons",
+        content: <ClassificationTab title="Season" basePath="/api/seasons" emptyText="No seasons found." />,
+      },
+    ],
+    [t],
+  );
+  return (
+    <div>
+      <h1 className="mb-4 text-xl font-semibold text-slate-900">{t("nav.items")}</h1>
+      <Tabs tabs={tabs} />
+    </div>
   );
 }

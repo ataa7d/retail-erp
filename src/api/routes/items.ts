@@ -12,6 +12,10 @@ const createSchema = z.object({
   nameEn: z.string().min(1),
   nameAr: z.string().min(1),
   baseUnitOfMeasureId: z.string().uuid(),
+  brandId: z.string().uuid().nullable().optional(),
+  categoryId: z.string().uuid().nullable().optional(),
+  seasonId: z.string().uuid().nullable().optional(),
+  itemYear: z.number().int().nullable().optional(),
   // Minimal single-variant creation, not the full color/size matrix a real
   // "new item" wizard would offer -- variantCode is required, color/size
   // optional, matching what item_variants actually requires (UNIQUE on
@@ -20,6 +24,13 @@ const createSchema = z.object({
   variantCode: z.string().min(1),
   color: z.string().nullable().optional(),
   size: z.string().nullable().optional(),
+});
+
+const classifySchema = z.object({
+  brandId: z.string().uuid().nullable().optional(),
+  categoryId: z.string().uuid().nullable().optional(),
+  seasonId: z.string().uuid().nullable().optional(),
+  itemYear: z.number().int().nullable().optional(),
 });
 
 const addVariantSchema = z.object({
@@ -42,8 +53,18 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
       const body = createSchema.parse(request.body);
       const itemId = await withTransaction(async (client) => {
         const item = await client.query<{ id: string }>(
-          `INSERT INTO items (company_id, item_code, name_en, name_ar) VALUES ($1, $2, $3, $4) RETURNING id`,
-          [request.companyId, body.itemCode, body.nameEn, body.nameAr],
+          `INSERT INTO items (company_id, item_code, name_en, name_ar, brand_id, category_id, season_id, item_year)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+          [
+            request.companyId,
+            body.itemCode,
+            body.nameEn,
+            body.nameAr,
+            body.brandId ?? null,
+            body.categoryId ?? null,
+            body.seasonId ?? null,
+            body.itemYear ?? null,
+          ],
         );
         const newItemId = item.rows[0]!.id;
 
@@ -112,6 +133,26 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
       }, request.authUser.id);
       reply.status(201);
       return { id: barcodeId };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/items/:id/classify",
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    async (request) => {
+      const body = classifySchema.parse(request.body);
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM items WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("item not found");
+        await client.query(
+          `UPDATE items SET brand_id = $1, category_id = $2, season_id = $3, item_year = $4 WHERE id = $5`,
+          [body.brandId ?? null, body.categoryId ?? null, body.seasonId ?? null, body.itemYear ?? null, request.params.id],
+        );
+      }, request.authUser.id);
+      return { id: request.params.id };
     },
   );
 
