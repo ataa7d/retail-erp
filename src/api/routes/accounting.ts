@@ -1,7 +1,15 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
-import { createCustomerReceipt, postCustomerReceipt, createSupplierPayment, postSupplierPayment } from "../../accounting/accountingService.js";
+import {
+  createCustomerReceipt,
+  postCustomerReceipt,
+  createSupplierPayment,
+  postSupplierPayment,
+  createBankStatementLine,
+  matchBankStatementLine,
+  createAndPostBankReconciliation,
+} from "../../accounting/accountingService.js";
 import { NotFoundError } from "../errors.js";
 
 const journalLineSchema = z.object({
@@ -38,6 +46,25 @@ const paymentCreateSchema = z.object({
   amount: z.number().positive(),
   reference: z.string().optional(),
   allocations: z.array(z.object({ supplierInvoiceId: z.string().uuid(), allocatedAmount: z.number().positive() })).optional(),
+});
+
+const statementLineCreateSchema = z.object({
+  bankAccountId: z.string().uuid(),
+  statementDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  description: z.string().optional(),
+  amount: z.number().refine((v) => v !== 0, "amount cannot be zero"),
+  reference: z.string().optional(),
+});
+
+const matchSchema = z.object({
+  journalLineId: z.string().uuid(),
+});
+
+const reconciliationCreateSchema = z.object({
+  bankAccountId: z.string().uuid(),
+  statementDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  statementEndingBalance: z.number(),
+  statementLineIds: z.array(z.string().uuid()).min(1),
 });
 
 export async function accountingRoutes(app: FastifyInstance): Promise<void> {
@@ -237,4 +264,122 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
     );
     return result.rows;
   });
+
+  // ---- Bank reconciliation ----
+  // Statement lines are entered manually here (no bank feed/CSV import in
+  // this phase), matched one-to-one against a posted journal_line on the
+  // bank's own GL account, then swept into a posted reconciliation whose
+  // running total must tie to the declared statement ending balance — the
+  // documented simplification from migration 0041 (no outstanding-items
+  // theory, e.g. deposits in transit).
+
+  app.post(
+    "/bank-statement-lines",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.journal.post")] },
+    async (request, reply) => {
+      const body = statementLineCreateSchema.parse(request.body);
+      const id = await withTransaction(
+        (client) =>
+          createBankStatementLine(client, {
+            companyId: request.companyId,
+            bankAccountId: body.bankAccountId,
+            statementDate: body.statementDate,
+            description: body.description ?? null,
+            amount: body.amount,
+            reference: body.reference ?? null,
+            createdBy: request.authUser.id,
+          }),
+        request.authUser.id,
+      );
+      reply.status(201);
+      return { id };
+    },
+  );
+
+  app.get("/bank-statement-lines", { preHandler: app.authenticate }, async (request) => {
+    const query = z.object({ bankAccountId: z.string().uuid() }).parse(request.query);
+    const result = await pool.query(
+      `SELECT bsl.*, jl.description AS matched_description, j.journal_number AS matched_journal_number
+       FROM bank_statement_lines bsl
+       LEFT JOIN journal_lines jl ON jl.id = bsl.matched_journal_line_id
+       LEFT JOIN journals j ON j.id = jl.journal_id
+       WHERE bsl.company_id = $1 AND bsl.bank_account_id = $2
+       ORDER BY bsl.statement_date DESC, bsl.created_at DESC`,
+      [request.companyId, query.bankAccountId],
+    );
+    return result.rows;
+  });
+
+  app.post<{ Params: { id: string } }>(
+    "/bank-statement-lines/:id/match",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.journal.post")] },
+    async (request) => {
+      const body = matchSchema.parse(request.body);
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM bank_statement_lines WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("statement line not found");
+        await matchBankStatementLine(client, request.params.id, body.journalLineId);
+      }, request.authUser.id);
+      return { id: request.params.id, matched: true };
+    },
+  );
+
+  // Candidates for matching: posted journal lines on this bank account's
+  // own GL account that no statement line has claimed yet.
+  app.get("/bank-accounts/:id/unmatched-journal-lines", { preHandler: app.authenticate }, async (request) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const result = await pool.query(
+      `SELECT jl.id, jl.debit_amount, jl.credit_amount, jl.description, j.journal_number, j.journal_date
+       FROM journal_lines jl
+       JOIN journals j ON j.id = jl.journal_id
+       JOIN bank_accounts ba ON ba.gl_account_id = jl.account_id
+       WHERE ba.id = $1 AND j.company_id = $2 AND j.document_status = 'posted'
+         AND NOT EXISTS (SELECT 1 FROM bank_statement_lines bsl WHERE bsl.matched_journal_line_id = jl.id)
+       ORDER BY j.journal_date DESC`,
+      [params.id, request.companyId],
+    );
+    return result.rows;
+  });
+
+  app.get("/bank-reconciliations", { preHandler: app.authenticate }, async (request) => {
+    const query = z.object({ bankAccountId: z.string().uuid() }).parse(request.query);
+    const result = await pool.query(
+      `SELECT id, statement_date, statement_ending_balance, document_status,
+              (SELECT COUNT(*) FROM bank_statement_lines WHERE bank_reconciliation_id = br.id) AS line_count
+       FROM bank_reconciliations br
+       WHERE company_id = $1 AND bank_account_id = $2
+       ORDER BY statement_date DESC`,
+      [request.companyId, query.bankAccountId],
+    );
+    return result.rows;
+  });
+
+  app.post(
+    "/bank-reconciliations",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.journal.post")] },
+    async (request, reply) => {
+      const body = reconciliationCreateSchema.parse(request.body);
+      const id = await withTransaction(
+        (client) =>
+          createAndPostBankReconciliation(
+            client,
+            {
+              companyId: request.companyId,
+              bankAccountId: body.bankAccountId,
+              statementDate: body.statementDate,
+              statementEndingBalance: body.statementEndingBalance,
+              statementLineIds: body.statementLineIds,
+              createdBy: request.authUser.id,
+            },
+            request.authUser.id,
+          ),
+        request.authUser.id,
+      );
+      reply.status(201);
+      return { id };
+    },
+  );
 }

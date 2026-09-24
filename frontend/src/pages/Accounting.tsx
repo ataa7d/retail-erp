@@ -1,6 +1,6 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { BookOpen, ScrollText, Wallet, Banknote, Clock, Plus, Trash2 } from "lucide-react";
+import { BookOpen, ScrollText, Wallet, Banknote, Clock, Plus, Trash2, Link2, CheckCircle2 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -80,6 +80,40 @@ interface AgeingRow {
   ageing_bucket: string;
   customer_name_en?: string;
   supplier_name_en?: string;
+}
+
+interface FullBankAccount {
+  id: string;
+  bank_name: string;
+  account_name: string;
+}
+
+interface StatementLine {
+  id: string;
+  statement_date: string;
+  description: string | null;
+  amount: string;
+  reference: string | null;
+  matched_journal_line_id: string | null;
+  matched_journal_number: string | null;
+  bank_reconciliation_id: string | null;
+}
+
+interface UnmatchedJournalLine {
+  id: string;
+  debit_amount: string;
+  credit_amount: string;
+  description: string | null;
+  journal_number: string;
+  journal_date: string;
+}
+
+interface Reconciliation {
+  id: string;
+  statement_date: string;
+  statement_ending_balance: string;
+  document_status: string;
+  line_count: string;
 }
 
 function useOpenPeriods() {
@@ -597,6 +631,345 @@ function ApAgeingTab() {
   );
 }
 
+// ---- Bank Reconciliation ----
+
+function NewStatementLineForm({ bankAccountId, onClose, onCreated }: { bankAccountId: string; onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const [statementDate, setStatementDate] = useState(new Date().toISOString().slice(0, 10));
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [reference, setReference] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/bank-statement-lines", {
+        method: "POST",
+        token,
+        companyId,
+        body: { bankAccountId, statementDate, description: description || undefined, amount: Number(amount), reference: reference || undefined },
+      });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to add statement line");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Field label="Statement Date" required>
+        <TextInput type="date" required value={statementDate} onChange={(e) => setStatementDate(e.target.value)} />
+      </Field>
+      <Field label="Description">
+        <TextInput value={description} onChange={(e) => setDescription(e.target.value)} />
+      </Field>
+      <Field label="Amount" required>
+        <TextInput type="number" step="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Positive = deposit, negative = withdrawal" />
+      </Field>
+      <Field label="Reference">
+        <TextInput value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Optional" />
+      </Field>
+      <FormActions error={error} submitting={submitting} submitLabel="Add Line" />
+    </form>
+  );
+}
+
+function MatchStatementLineForm({
+  bankAccountId,
+  line,
+  onClose,
+  onMatched,
+}: {
+  bankAccountId: string;
+  line: StatementLine;
+  onClose: () => void;
+  onMatched: () => void;
+}) {
+  const { token, companyId } = useAuth();
+  const { data: candidates } = useApiList<UnmatchedJournalLine>(`/api/bank-accounts/${bankAccountId}/unmatched-journal-lines`);
+  const [journalLineId, setJournalLineId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest(`/api/bank-statement-lines/${line.id}/match`, { method: "POST", token, companyId, body: { journalLineId } });
+      onMatched();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to match");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="mb-3 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700">
+        {line.description || "(no description)"} · {Number(line.amount).toFixed(2)} · {new Date(line.statement_date).toLocaleDateString()}
+      </div>
+      <Field label="Matching Journal Line" required>
+        <SelectInput required value={journalLineId} onChange={(e) => setJournalLineId(e.target.value)}>
+          <option value="">Select...</option>
+          {candidates?.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.journal_number} — {new Date(c.journal_date).toLocaleDateString()} — {c.description ?? (Number(c.debit_amount) > 0 ? "Dr" : "Cr")}{" "}
+              {(Number(c.debit_amount) || Number(c.credit_amount)).toFixed(2)}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      {candidates?.length === 0 && <p className="mb-3 text-xs text-slate-400">No unmatched posted journal lines on this bank's GL account.</p>}
+      <FormActions error={error} submitting={submitting} submitLabel="Match" />
+    </form>
+  );
+}
+
+function NewReconciliationForm({ bankAccountId, onClose, onCreated }: { bankAccountId: string; onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: lines } = useApiList<StatementLine>(`/api/bank-statement-lines?bankAccountId=${bankAccountId}`);
+  const [statementDate, setStatementDate] = useState(new Date().toISOString().slice(0, 10));
+  const [statementEndingBalance, setStatementEndingBalance] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Eligible: matched to a journal line, not already swept into a
+  // reconciliation, dated on or before the chosen statement date.
+  const eligible = (lines ?? []).filter(
+    (l) => l.matched_journal_line_id && !l.bank_reconciliation_id && l.statement_date <= statementDate,
+  );
+
+  useEffect(() => {
+    setSelected(new Set(eligible.map((l) => l.id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statementDate, lines]);
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const runningTotal = eligible.filter((l) => selected.has(l.id)).reduce((s, l) => s + Number(l.amount), 0);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (selected.size === 0) {
+      setError("Select at least one matched line to reconcile.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/bank-reconciliations", {
+        method: "POST",
+        token,
+        companyId,
+        body: { bankAccountId, statementDate, statementEndingBalance: Number(statementEndingBalance), statementLineIds: [...selected] },
+      });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to post reconciliation");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Statement Date" required>
+          <TextInput type="date" required value={statementDate} onChange={(e) => setStatementDate(e.target.value)} />
+        </Field>
+        <Field label="Statement Ending Balance" required>
+          <TextInput type="number" step="0.01" required value={statementEndingBalance} onChange={(e) => setStatementEndingBalance(e.target.value)} />
+        </Field>
+      </div>
+
+      <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Matched lines up to this date ({eligible.length})</div>
+      <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2">
+        {eligible.length === 0 && <p className="p-2 text-xs text-slate-400">No matched, unreconciled lines on or before this date.</p>}
+        {eligible.map((l) => (
+          <label key={l.id} className="flex items-center justify-between gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50">
+            <span className="flex items-center gap-2">
+              <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} />
+              {l.description || "(no description)"}
+            </span>
+            <span className="tabular-nums text-slate-500">{Number(l.amount).toFixed(2)}</span>
+          </label>
+        ))}
+      </div>
+
+      <div
+        className={`mt-3 flex justify-between rounded-md px-3 py-2 text-sm font-medium ${
+          Math.abs(runningTotal - Number(statementEndingBalance || 0)) < 0.005 && statementEndingBalance !== ""
+            ? "bg-green-50 text-green-700"
+            : "bg-amber-50 text-amber-700"
+        }`}
+      >
+        <span>Running Total: {runningTotal.toFixed(2)}</span>
+        <span>Declared Ending Balance: {Number(statementEndingBalance || 0).toFixed(2)}</span>
+      </div>
+
+      <p className="mb-3 mt-2 text-xs text-slate-400">
+        Posting requires the running total of every reconciled line for this account, up to this date, to equal the declared ending balance exactly.
+      </p>
+      <FormActions error={error} submitting={submitting} submitLabel="Post Reconciliation" />
+    </form>
+  );
+}
+
+function BankReconciliationTab() {
+  const { data: bankAccounts } = useApiList<FullBankAccount>("/api/bank-accounts");
+  const [bankAccountId, setBankAccountId] = useState("");
+  useEffect(() => {
+    if (bankAccounts && bankAccounts.length > 0 && !bankAccountId) setBankAccountId(bankAccounts[0]!.id);
+  }, [bankAccounts, bankAccountId]);
+
+  const { data: lines, reload: reloadLines } = useApiList<StatementLine>(
+    bankAccountId ? `/api/bank-statement-lines?bankAccountId=${bankAccountId}` : null,
+  );
+  const { data: reconciliations, reload: reloadReconciliations } = useApiList<Reconciliation>(
+    bankAccountId ? `/api/bank-reconciliations?bankAccountId=${bankAccountId}` : null,
+  );
+
+  const [showAddLine, setShowAddLine] = useState(false);
+  const [matchingLine, setMatchingLine] = useState<StatementLine | null>(null);
+  const [showReconcile, setShowReconcile] = useState(false);
+
+  function reloadAll() {
+    reloadLines();
+    reloadReconciliations();
+  }
+
+  if (!bankAccounts || bankAccounts.length === 0) {
+    return <p className="text-sm text-slate-400">No bank accounts set up yet.</p>;
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <SelectInput value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} className="w-64">
+          {bankAccounts.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.bank_name} — {b.account_name}
+            </option>
+          ))}
+        </SelectInput>
+        <div className="flex gap-2">
+          <button onClick={() => setShowAddLine(true)} className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            <Plus size={15} /> Statement Line
+          </button>
+          <button onClick={() => setShowReconcile(true)} className="flex items-center gap-1.5 rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600">
+            <CheckCircle2 size={15} /> New Reconciliation
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-900">Statement Lines</div>
+        {!lines || lines.length === 0 ? (
+          <p className="p-6 text-sm text-slate-400">No statement lines yet.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-400">
+                <th className="px-4 py-2.5 text-start">Date</th>
+                <th className="px-4 py-2.5 text-start">Description</th>
+                <th className="px-4 py-2.5 text-end">Amount</th>
+                <th className="px-4 py-2.5 text-start">Match</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((l) => (
+                <tr key={l.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+                  <td className="px-4 py-2.5">{new Date(l.statement_date).toLocaleDateString()}</td>
+                  <td className="px-4 py-2.5">{l.description ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-end tabular-nums">{Number(l.amount).toFixed(2)}</td>
+                  <td className="px-4 py-2.5">
+                    {l.bank_reconciliation_id ? (
+                      <StatusBadge status="posted" />
+                    ) : l.matched_journal_line_id ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                        <Link2 size={11} /> {l.matched_journal_number}
+                      </span>
+                    ) : (
+                      <button onClick={() => setMatchingLine(l)} className="text-xs font-medium text-brand-600 hover:text-brand-700">
+                        Match...
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-900">Reconciliations</div>
+        {!reconciliations || reconciliations.length === 0 ? (
+          <p className="p-6 text-sm text-slate-400">No reconciliations yet.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-400">
+                <th className="px-4 py-2.5 text-start">Statement Date</th>
+                <th className="px-4 py-2.5 text-end">Ending Balance</th>
+                <th className="px-4 py-2.5 text-end">Lines</th>
+                <th className="px-4 py-2.5 text-start">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reconciliations.map((r) => (
+                <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-4 py-2.5">{new Date(r.statement_date).toLocaleDateString()}</td>
+                  <td className="px-4 py-2.5 text-end tabular-nums">{Number(r.statement_ending_balance).toFixed(2)}</td>
+                  <td className="px-4 py-2.5 text-end tabular-nums">{r.line_count}</td>
+                  <td className="px-4 py-2.5">
+                    <StatusBadge status={r.document_status} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {showAddLine && (
+        <Modal title="Add Statement Line" onClose={() => setShowAddLine(false)}>
+          <NewStatementLineForm bankAccountId={bankAccountId} onClose={() => setShowAddLine(false)} onCreated={reloadLines} />
+        </Modal>
+      )}
+      {matchingLine && (
+        <Modal title="Match Statement Line" onClose={() => setMatchingLine(null)}>
+          <MatchStatementLineForm bankAccountId={bankAccountId} line={matchingLine} onClose={() => setMatchingLine(null)} onMatched={reloadLines} />
+        </Modal>
+      )}
+      {showReconcile && (
+        <Modal title="New Bank Reconciliation" onClose={() => setShowReconcile(false)}>
+          <NewReconciliationForm bankAccountId={bankAccountId} onClose={() => setShowReconcile(false)} onCreated={reloadAll} />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 export default function Accounting() {
   const { t } = useTranslation();
   const tabs = useMemo(
@@ -605,6 +978,7 @@ export default function Accounting() {
       { key: "journals", label: "Journals", content: <JournalsTab /> },
       { key: "receipts", label: "Customer Receipts", content: <CustomerReceiptsTab /> },
       { key: "payments", label: "Supplier Payments", content: <SupplierPaymentsTab /> },
+      { key: "bank", label: "Bank Reconciliation", content: <BankReconciliationTab /> },
       { key: "ar", label: "AR Ageing", content: <ArAgeingTab /> },
       { key: "ap", label: "AP Ageing", content: <ApAgeingTab /> },
     ],

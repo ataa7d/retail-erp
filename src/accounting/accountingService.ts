@@ -189,6 +189,25 @@ export async function postSupplierPayment(client: Client, paymentId: string, pos
 // Bank reconciliation
 // ---------------------------------------------------------------------------
 
+export interface CreateBankStatementLineParams {
+  companyId: string;
+  bankAccountId: string;
+  statementDate: string;
+  description?: string | null;
+  amount: number; // signed: positive = deposit, negative = withdrawal
+  reference?: string | null;
+  createdBy?: string | null;
+}
+
+export async function createBankStatementLine(client: Client, p: CreateBankStatementLineParams): Promise<string> {
+  const r = await client.query<{ id: string }>(
+    `INSERT INTO bank_statement_lines (company_id, bank_account_id, statement_date, description, amount, reference, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+    [p.companyId, p.bankAccountId, p.statementDate, p.description ?? null, p.amount, p.reference ?? null, p.createdBy ?? null],
+  );
+  return r.rows[0]!.id;
+}
+
 export async function matchBankStatementLine(client: Client, statementLineId: string, journalLineId: string): Promise<void> {
   await client.query(`UPDATE bank_statement_lines SET matched_journal_line_id = $2 WHERE id = $1`, [statementLineId, journalLineId]);
 }
