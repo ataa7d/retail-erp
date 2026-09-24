@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { ShieldCheck, KeyRound, ScrollText, Smartphone, RefreshCw } from "lucide-react";
+import { ShieldCheck, KeyRound, ScrollText, Smartphone, RefreshCw, CheckCircle2, XCircle, Circle } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -604,6 +604,292 @@ function OfflineSyncTab() {
   );
 }
 
+interface ZatcaOnboardingStatus {
+  status: string;
+  environment?: string;
+  egs_common_name?: string | null;
+  egs_serial_number?: string | null;
+  compliance_csid_issued_at?: string | null;
+  compliance_checks_passed_at?: string | null;
+  production_csid_issued_at?: string | null;
+  last_error?: string | null;
+}
+
+interface ZatcaComplianceCheck {
+  id: string;
+  document_type: string;
+  source_invoice_id: string | null;
+  passed: boolean | null;
+  submitted_at: string;
+}
+
+interface SimpleSalesInvoice {
+  id: string;
+  document_number: string;
+  document_status: string;
+  zatca_invoice_category: string;
+}
+
+interface SimpleCreditNote {
+  id: string;
+  document_number: string;
+  document_status: string;
+  zatca_invoice_category: string;
+}
+
+const ONBOARDING_STEPS = [
+  { key: "csr_generated", label: "Generate CSR" },
+  { key: "compliance_csid_issued", label: "Compliance CSID" },
+  { key: "compliance_checks_passed", label: "Compliance Checks" },
+  { key: "production_csid_issued", label: "Production CSID" },
+] as const;
+
+function stepState(status: string, stepKey: string): "done" | "current" | "pending" {
+  const order = ["not_started", "csr_generated", "compliance_csid_issued", "compliance_checks_passed", "production_csid_issued"];
+  const statusIndex = status === "failed" ? -1 : order.indexOf(status);
+  const stepIndex = order.indexOf(stepKey);
+  if (statusIndex === -1) return "pending";
+  if (stepIndex <= statusIndex) return "done";
+  if (stepIndex === statusIndex + 1) return "current";
+  return "pending";
+}
+
+function OnboardingStepper({ status }: { status: string }) {
+  return (
+    <div className="mb-4 flex items-center gap-1">
+      {ONBOARDING_STEPS.map((step, i) => {
+        const state = stepState(status, step.key);
+        return (
+          <div key={step.key} className="flex items-center gap-1">
+            <div
+              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+                state === "done"
+                  ? "bg-green-100 text-green-700"
+                  : state === "current"
+                    ? "bg-brand-50 text-brand-700 ring-1 ring-brand-300"
+                    : "bg-slate-100 text-slate-400"
+              }`}
+            >
+              {state === "done" ? <CheckCircle2 size={13} /> : <Circle size={13} />}
+              {step.label}
+            </div>
+            {i < ONBOARDING_STEPS.length - 1 && <div className="h-px w-4 bg-slate-200" />}
+          </div>
+        );
+      })}
+      {status === "failed" && (
+        <span className="ms-2 flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-600">
+          <XCircle size={13} /> Failed
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ZatcaOnboardingTab() {
+  const { token, companyId } = useAuth();
+  const [status, setStatus] = useState<ZatcaOnboardingStatus | null>(null);
+  const [checks, setChecks] = useState<ZatcaComplianceCheck[]>([]);
+  const { data: invoices } = useApiList<SimpleSalesInvoice>("/api/sales-invoices");
+  const { data: creditNotes } = useApiList<SimpleCreditNote>("/api/credit-notes");
+
+  const [environment, setEnvironment] = useState<"sandbox" | "simulation" | "production">("sandbox");
+  const [organizationalUnitName, setOrganizationalUnitName] = useState("");
+  const [commonName, setCommonName] = useState("");
+  const [egsSerialNumber, setEgsSerialNumber] = useState("");
+  const [location, setLocation] = useState("");
+  const [industryBusinessCategory, setIndustryBusinessCategory] = useState("Retail");
+  const [otp, setOtp] = useState("");
+  const [documentType, setDocumentType] = useState<"standard_invoice" | "simplified_invoice" | "standard_credit_note" | "simplified_credit_note">(
+    "simplified_invoice",
+  );
+  const [sourceInvoiceId, setSourceInvoiceId] = useState("");
+
+  const [busyStep, setBusyStep] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function reload() {
+    const [s, c] = await Promise.all([
+      apiRequest<ZatcaOnboardingStatus>("/api/zatca-onboarding", { token, companyId }),
+      apiRequest<ZatcaComplianceCheck[]>("/api/zatca-onboarding/compliance-checks", { token, companyId }),
+    ]);
+    setStatus(s);
+    setChecks(c);
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function runStep(step: string, fn: () => Promise<unknown>) {
+    setBusyStep(step);
+    setError(null);
+    try {
+      await fn();
+      await reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Request failed");
+    } finally {
+      setBusyStep(null);
+    }
+  }
+
+  const isSimplified = documentType.startsWith("simplified");
+  const isCreditNote = documentType.endsWith("credit_note");
+  const candidateDocuments = isCreditNote
+    ? (creditNotes ?? []).filter((c) => c.document_status === "posted" && (c.zatca_invoice_category === "simplified") === isSimplified)
+    : (invoices ?? []).filter((i) => i.document_status === "posted" && (i.zatca_invoice_category === "simplified") === isSimplified);
+
+  return (
+    <div>
+      <p className="mb-4 max-w-2xl rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        This connects to ZATCA's real e-invoicing sandbox over the network. Each step below needs your own ZATCA
+        Fatoora developer-portal OTP or credentials — this codebase has none of its own, and nothing here is
+        simulated or faked. The CSR's custom extension fields are a best-effort encoding of ZATCA's published
+        format; if a step is rejected, that's the first thing worth re-checking against ZATCA's current
+        documentation.
+      </p>
+
+      {status && <OnboardingStepper status={status.status} />}
+      {status?.last_error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">Last error: {status.last_error}</p>}
+      {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+
+      <div className="space-y-4">
+        <div className="rounded-md border border-slate-200 p-4">
+          <h3 className="mb-1 text-sm font-semibold text-slate-900">1. Generate CSR</h3>
+          <p className="mb-3 text-xs text-slate-500">
+            Creates a fresh secp256k1 keypair for this company's EGS unit and a CSR carrying ZATCA's required fields.
+            The private key is encrypted at rest and never leaves the server.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Environment">
+              <SelectInput value={environment} onChange={(e) => setEnvironment(e.target.value as typeof environment)}>
+                <option value="sandbox">Sandbox (developer portal)</option>
+                <option value="simulation">Simulation</option>
+                <option value="production">Production</option>
+              </SelectInput>
+            </Field>
+            <Field label="Branch / Organizational Unit">
+              <TextInput value={organizationalUnitName} onChange={(e) => setOrganizationalUnitName(e.target.value)} placeholder="Riyadh Flagship Branch" />
+            </Field>
+            <Field label="EGS Common Name">
+              <TextInput value={commonName} onChange={(e) => setCommonName(e.target.value)} placeholder="POS-EGS-01" />
+            </Field>
+            <Field label="EGS Serial Number">
+              <TextInput value={egsSerialNumber} onChange={(e) => setEgsSerialNumber(e.target.value)} placeholder="1-RetailERP|2-POS|3-0001" />
+            </Field>
+            <Field label="Location">
+              <TextInput value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Riyadh" />
+            </Field>
+            <Field label="Industry / Business Category">
+              <TextInput value={industryBusinessCategory} onChange={(e) => setIndustryBusinessCategory(e.target.value)} />
+            </Field>
+          </div>
+          <button
+            onClick={() =>
+              runStep("csr", () =>
+                apiRequest("/api/zatca-onboarding/csr", {
+                  method: "POST",
+                  token,
+                  companyId,
+                  body: { environment, organizationalUnitName, commonName, egsSerialNumber, location, industryBusinessCategory, invoiceType: "1100" },
+                }),
+              )
+            }
+            disabled={busyStep === "csr" || !organizationalUnitName || !commonName || !egsSerialNumber || !location}
+            className="rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {busyStep === "csr" ? "Generating..." : "Generate CSR"}
+          </button>
+        </div>
+
+        <div className="rounded-md border border-slate-200 p-4">
+          <h3 className="mb-1 text-sm font-semibold text-slate-900">2. Request Compliance CSID</h3>
+          <p className="mb-3 text-xs text-slate-500">
+            Exchanges the CSR above for a compliance certificate, using the one-time OTP from your ZATCA Fatoora
+            portal (Onboarding → Generate OTP). The OTP is single-use and never stored.
+          </p>
+          <div className="mb-2 flex gap-2">
+            <TextInput value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="OTP from ZATCA portal" className="max-w-xs" />
+            <button
+              onClick={() => runStep("compliance-csid", () => apiRequest("/api/zatca-onboarding/compliance-csid", { method: "POST", token, companyId, body: { otp } }))}
+              disabled={busyStep === "compliance-csid" || !otp || !status || status.status === "not_started"}
+              className="shrink-0 rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+            >
+              {busyStep === "compliance-csid" ? "Requesting..." : "Request Compliance CSID"}
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-md border border-slate-200 p-4">
+          <h3 className="mb-1 text-sm font-semibold text-slate-900">3. Compliance Checks</h3>
+          <p className="mb-3 text-xs text-slate-500">
+            Submits one of your own posted documents to ZATCA for validation against the compliance certificate.
+            Run this once per document type you'll issue (standard/simplified invoice, standard/simplified credit
+            note) before requesting the production CSID.
+          </p>
+          <div className="mb-2 grid grid-cols-2 gap-2">
+            <SelectInput value={documentType} onChange={(e) => { setDocumentType(e.target.value as typeof documentType); setSourceInvoiceId(""); }}>
+              <option value="simplified_invoice">Simplified Invoice</option>
+              <option value="standard_invoice">Standard Invoice</option>
+              <option value="simplified_credit_note">Simplified Credit Note</option>
+              <option value="standard_credit_note">Standard Credit Note</option>
+            </SelectInput>
+            <SelectInput value={sourceInvoiceId} onChange={(e) => setSourceInvoiceId(e.target.value)}>
+              <option value="">Select a posted document...</option>
+              {candidateDocuments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.document_number}
+                </option>
+              ))}
+            </SelectInput>
+          </div>
+          <button
+            onClick={() =>
+              runStep("compliance-check", () =>
+                apiRequest("/api/zatca-onboarding/compliance-check", { method: "POST", token, companyId, body: { documentType, sourceInvoiceId } }),
+              )
+            }
+            disabled={busyStep === "compliance-check" || !sourceInvoiceId || status?.status === "not_started" || status?.status === "csr_generated"}
+            className="mb-3 rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {busyStep === "compliance-check" ? "Submitting..." : "Submit Compliance Check"}
+          </button>
+
+          {checks.length > 0 && (
+            <div className="space-y-1 border-t border-slate-100 pt-2">
+              {checks.map((c) => (
+                <div key={c.id} className="flex items-center justify-between text-xs">
+                  <span className="text-slate-600">
+                    {c.document_type.replace(/_/g, " ")} · {new Date(c.submitted_at).toLocaleString()}
+                  </span>
+                  <StatusBadge status={c.passed ? "active" : "inactive"} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-md border border-slate-200 p-4">
+          <h3 className="mb-1 text-sm font-semibold text-slate-900">4. Request Production CSID</h3>
+          <p className="mb-3 text-xs text-slate-500">
+            Exchanges the compliance certificate for the real production certificate, once compliance checks have
+            passed. This is the credential real invoice reporting/clearance would use.
+          </p>
+          <button
+            onClick={() => runStep("production-csid", () => apiRequest("/api/zatca-onboarding/production-csid", { method: "POST", token, companyId }))}
+            disabled={busyStep === "production-csid" || status?.status !== "compliance_checks_passed"}
+            className="rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {busyStep === "production-csid" ? "Requesting..." : "Request Production CSID"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Admin() {
   const { t } = useTranslation();
   return (
@@ -615,6 +901,7 @@ export default function Admin() {
           { key: "roles", label: "Roles", content: <RolesTab /> },
           { key: "pos-devices", label: "POS Devices", content: <PosDevicesTab /> },
           { key: "offline-sync", label: "Offline Sync", content: <OfflineSyncTab /> },
+          { key: "zatca", label: "ZATCA Onboarding", content: <ZatcaOnboardingTab /> },
           { key: "audit", label: "Audit Log", content: <AuditLogTab /> },
         ]}
       />

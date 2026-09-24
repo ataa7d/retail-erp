@@ -29,6 +29,7 @@ import { hrRoutes } from "./routes/hr.js";
 import { payrollRoutes } from "./routes/payroll.js";
 import { reportRoutes } from "./routes/reports.js";
 import { adminRoutes } from "./routes/admin.js";
+import { zatcaOnboardingRoutes } from "./routes/zatcaOnboarding.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
@@ -97,6 +98,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(payrollRoutes, { prefix: "/api" });
   await app.register(reportRoutes, { prefix: "/api" });
   await app.register(adminRoutes, { prefix: "/api" });
+  await app.register(zatcaOnboardingRoutes, { prefix: "/api" });
 
   return app;
 }
