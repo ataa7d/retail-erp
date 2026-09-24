@@ -17,6 +17,7 @@ import {
 } from "../../zatca/apiClient.js";
 import { renderSalesInvoiceXml, renderCreditNoteXml } from "../../zatca/invoiceXmlService.js";
 import { computeInvoiceHash } from "../../zatca/invoiceHash.js";
+import { runZatcaReadinessCheck } from "../../zatca/readinessCheck.js";
 
 function environmentFor(name: string): ZatcaEnvironment {
   if (name === "production") return ZATCA_PRODUCTION_ENVIRONMENT;
@@ -78,6 +79,10 @@ export async function zatcaOnboardingRoutes(app: FastifyInstance): Promise<void>
       [onboarding.rows[0]!.id],
     );
     return result.rows;
+  });
+
+  app.get("/zatca-onboarding/readiness", { preHandler: app.authenticate }, async (request) => {
+    return runZatcaReadinessCheck(pool, request.companyId);
   });
 
   // Step 1: generate this company's EGS keypair + CSR. Overwrites any

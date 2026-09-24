@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { ShieldCheck, KeyRound, ScrollText, Smartphone, RefreshCw, CheckCircle2, XCircle, Circle } from "lucide-react";
+import { ShieldCheck, KeyRound, ScrollText, Smartphone, RefreshCw, CheckCircle2, XCircle, Circle, AlertTriangle } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -637,6 +637,90 @@ interface SimpleCreditNote {
   zatca_invoice_category: string;
 }
 
+interface ZatcaReadinessCheckRow {
+  id: string;
+  label: string;
+  status: "pass" | "warn" | "fail";
+  detail: string;
+}
+
+interface ZatcaReadinessReport {
+  ready: boolean;
+  checks: ZatcaReadinessCheckRow[];
+}
+
+function ReadinessStatusIcon({ status }: { status: ZatcaReadinessCheckRow["status"] }) {
+  if (status === "pass") return <CheckCircle2 size={16} className="shrink-0 text-green-600" />;
+  if (status === "warn") return <AlertTriangle size={16} className="shrink-0 text-amber-500" />;
+  return <XCircle size={16} className="shrink-0 text-red-600" />;
+}
+
+function ZatcaReadinessPanel() {
+  const { token, companyId } = useAuth();
+  const [report, setReport] = useState<ZatcaReadinessReport | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function reload() {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await apiRequest<ZatcaReadinessReport>("/api/zatca-onboarding/readiness", { token, companyId });
+      setReport(r);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Request failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="rounded-md border border-slate-200 p-4">
+      <div className="mb-1 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-900">5. Production Go-Live Readiness</h3>
+        <button onClick={reload} disabled={loading} className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50">
+          <RefreshCw size={12} className={loading ? "animate-spin" : ""} /> Refresh
+        </button>
+      </div>
+      <p className="mb-3 text-xs text-slate-500">
+        A live check against this company's own data and onboarding state — not a static checklist. Every item below
+        is computed fresh each time; nothing here can confirm ZATCA's own approval, only what's true on this side.
+      </p>
+
+      {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+
+      {report && (
+        <>
+          <div
+            className={`mb-3 flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${
+              report.ready ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+            }`}
+          >
+            {report.ready ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+            {report.ready ? "Ready for production go-live" : "Not ready for production go-live"}
+          </div>
+          <div className="space-y-2">
+            {report.checks.map((c) => (
+              <div key={c.id} className="flex items-start gap-2 border-t border-slate-100 pt-2 first:border-t-0 first:pt-0">
+                <ReadinessStatusIcon status={c.status} />
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-slate-800">{c.label}</div>
+                  <div className="text-xs text-slate-500">{c.detail}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 const ONBOARDING_STEPS = [
   { key: "csr_generated", label: "Generate CSR" },
   { key: "compliance_csid_issued", label: "Compliance CSID" },
@@ -885,6 +969,8 @@ function ZatcaOnboardingTab() {
             {busyStep === "production-csid" ? "Requesting..." : "Request Production CSID"}
           </button>
         </div>
+
+        <ZatcaReadinessPanel />
       </div>
     </div>
   );
