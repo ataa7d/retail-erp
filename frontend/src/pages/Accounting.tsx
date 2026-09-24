@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { BookOpen, ScrollText, Wallet, Banknote, Clock, Plus, Trash2, Link2, CheckCircle2, Lock, Unlock, CalendarCheck, Coins } from "lucide-react";
+import { BookOpen, ScrollText, Wallet, Banknote, Clock, Plus, Trash2, Link2, CheckCircle2, Lock, Unlock, CalendarCheck, Coins, Percent } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -167,6 +167,152 @@ function ChartOfAccountsTab() {
       emptyText="No accounts found."
       searchPlaceholder="Search accounts..."
     />
+  );
+}
+
+// ---- Tax Codes ----
+
+interface TaxCode {
+  id: string;
+  code: string;
+  name_en: string;
+  name_ar: string;
+  rate: string;
+  tax_type: string;
+  is_active: boolean;
+}
+
+function NewTaxCodeForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const [code, setCode] = useState("");
+  const [nameEn, setNameEn] = useState("");
+  const [nameAr, setNameAr] = useState("");
+  const [rate, setRate] = useState("15");
+  const [taxType, setTaxType] = useState<"standard" | "zero_rated" | "exempt">("standard");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/tax-codes", {
+        method: "POST",
+        token,
+        companyId,
+        body: { code, nameEn, nameAr, rate: Number(rate), taxType },
+      });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create tax code");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Field label="Code" required>
+        <TextInput required value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="VAT15" />
+      </Field>
+      <Field label="Name (English)" required>
+        <TextInput required value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
+      </Field>
+      <Field label="Name (Arabic)" required>
+        <TextInput required dir="rtl" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
+      </Field>
+      <Field label="Type" required>
+        <SelectInput
+          value={taxType}
+          onChange={(e) => {
+            const next = e.target.value as typeof taxType;
+            setTaxType(next);
+            if (next !== "standard") setRate("0");
+          }}
+        >
+          <option value="standard">Standard</option>
+          <option value="zero_rated">Zero-rated (export)</option>
+          <option value="exempt">Exempt</option>
+        </SelectInput>
+      </Field>
+      <Field label="Rate (%)" required>
+        <TextInput type="number" min={0} max={100} step="0.01" required value={rate} disabled={taxType !== "standard"} onChange={(e) => setRate(e.target.value)} />
+      </Field>
+      {taxType !== "standard" && <p className="mb-3 text-xs text-slate-400">Zero-rated and exempt codes are always 0%.</p>}
+      <FormActions error={error} submitting={submitting} submitLabel="Create Tax Code" />
+    </form>
+  );
+}
+
+function TaxCodesTab() {
+  const { token, companyId } = useAuth();
+  const { data, error, reload } = useApiList<TaxCode>("/api/tax-codes");
+  const [showNew, setShowNew] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function toggleActive(taxCode: TaxCode) {
+    setBusyId(taxCode.id);
+    try {
+      await apiRequest(`/api/tax-codes/${taxCode.id}/${taxCode.is_active ? "deactivate" : "reactivate"}`, {
+        method: "POST",
+        token,
+        companyId,
+      });
+      reload();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const columns: Column<TaxCode>[] = [
+    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.code}</span> },
+    { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900">{r.name_en}</span> },
+    { key: "type", header: "Type", render: (r) => <span className="capitalize">{r.tax_type.replace("_", " ")}</span> },
+    { key: "rate", header: "Rate", render: (r) => `${Number(r.rate).toFixed(2)}%`, numeric: true },
+    {
+      key: "status",
+      header: "Status",
+      render: (r) => (
+        <div className="flex items-center gap-2">
+          <StatusBadge status={r.is_active ? "active" : "inactive"} />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleActive(r);
+            }}
+            disabled={busyId === r.id}
+            className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50"
+          >
+            {r.is_active ? "Deactivate" : "Reactivate"}
+          </button>
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => `${r.code} ${r.name_en}`}
+        emptyIcon={Percent}
+        emptyText="No tax codes yet."
+        searchPlaceholder="Search tax codes..."
+        actionLabel="New Tax Code"
+        onAction={() => setShowNew(true)}
+      />
+      {showNew && (
+        <Modal title="New Tax Code" onClose={() => setShowNew(false)}>
+          <NewTaxCodeForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+    </>
   );
 }
 
@@ -1304,6 +1450,7 @@ export default function Accounting() {
   const tabs = useMemo(
     () => [
       { key: "coa", label: "Chart of Accounts", content: <ChartOfAccountsTab /> },
+      { key: "tax-codes", label: "Tax Codes", content: <TaxCodesTab /> },
       { key: "journals", label: "Journals", content: <JournalsTab /> },
       { key: "receipts", label: "Customer Receipts", content: <CustomerReceiptsTab /> },
       { key: "payments", label: "Supplier Payments", content: <SupplierPaymentsTab /> },

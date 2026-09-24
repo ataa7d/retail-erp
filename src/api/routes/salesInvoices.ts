@@ -3,6 +3,7 @@ import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
 import { createSalesInvoice, postSalesInvoice } from "../../sales/salesService.js";
 import { NotFoundError } from "../errors.js";
+import { renderZatcaQrDataUrl } from "../../zatca/qrCode.js";
 
 const lineSchema = z.object({
   itemVariantId: z.string().uuid().nullable(),
@@ -83,10 +84,13 @@ export async function salesInvoiceRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: app.authenticate },
     async (request) => {
       const header = await pool.query(
-        `SELECT * FROM sales_invoices WHERE id = $1 AND company_id = $2`,
+        `SELECT si.*, c.name_en AS company_name_en, c.vat_registration_number AS company_vat_number
+         FROM sales_invoices si JOIN companies c ON c.id = si.company_id
+         WHERE si.id = $1 AND si.company_id = $2`,
         [request.params.id, request.companyId],
       );
       if (header.rows.length === 0) throw new NotFoundError("sales invoice not found");
+      const invoice = header.rows[0];
 
       const lines = await pool.query(
         `SELECT * FROM sales_invoice_lines WHERE invoice_id = $1 ORDER BY line_number`,
@@ -97,7 +101,27 @@ export async function salesInvoiceRoutes(app: FastifyInstance): Promise<void> {
         [request.params.id],
       );
 
-      return { ...header.rows[0], lines: lines.rows, payments: payments.rows };
+      // ZATCA Phase 1: every posted tax invoice carries this QR. A draft has
+      // no posted_at yet (and may still change), so it gets none. A missing
+      // or malformed company VAT number is a setup problem, not a reason to
+      // 500 the whole invoice -- the invoice still loads, just without a QR.
+      let zatcaQr: string | null = null;
+      let zatcaQrError: string | null = null;
+      if (invoice.document_status === "posted") {
+        try {
+          zatcaQr = await renderZatcaQrDataUrl({
+            sellerName: invoice.company_name_en,
+            vatRegistrationNumber: invoice.company_vat_number ?? "",
+            timestamp: new Date(invoice.posted_at).toISOString(),
+            invoiceTotal: Number(invoice.gross_amount),
+            vatTotal: Number(invoice.vat_amount),
+          });
+        } catch (err) {
+          zatcaQrError = err instanceof Error ? err.message : "failed to generate ZATCA QR code";
+        }
+      }
+
+      return { ...invoice, lines: lines.rows, payments: payments.rows, zatcaQr, zatcaQrError };
     },
   );
 

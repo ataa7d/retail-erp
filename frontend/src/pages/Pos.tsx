@@ -206,6 +206,7 @@ export default function Pos() {
     total: number;
     change: number;
     offline: boolean;
+    zatcaQr?: string | null;
   } | null>(null);
   const [queue, setQueue] = useState<QueuedInvoicePayload[]>(() => (deviceId ? loadQueue(deviceId) : []));
   const [syncing, setSyncing] = useState(false);
@@ -379,8 +380,11 @@ export default function Pos() {
             setChargeError(result.error ?? "Sale failed");
             return;
           }
-          const detail = await apiRequest<{ document_number: string }>(`/api/sales-invoices/${result.id}`, { token, companyId });
-          setReceipt({ documentNumber: detail.document_number, lines: cart, total, change, offline: false });
+          const detail = await apiRequest<{ document_number: string; zatcaQr: string | null }>(`/api/sales-invoices/${result.id}`, {
+            token,
+            companyId,
+          });
+          setReceipt({ documentNumber: detail.document_number, lines: cart, total, change, offline: false, zatcaQr: detail.zatcaQr });
           setCart([]);
           setTendered("");
           return;
@@ -643,6 +647,12 @@ export default function Pos() {
               <div className="mb-4 flex justify-between text-sm text-slate-500">
                 <span>Change</span>
                 <span className="tabular-nums">{receipt.change.toFixed(2)}</span>
+              </div>
+            )}
+            {receipt.zatcaQr && (
+              <div className="mb-4 flex flex-col items-center gap-1">
+                <img src={receipt.zatcaQr} alt="ZATCA QR code" width={120} height={120} />
+                <p className="text-center text-xs text-slate-400">ZATCA simplified tax invoice QR</p>
               </div>
             )}
             <button

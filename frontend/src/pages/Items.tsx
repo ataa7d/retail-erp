@@ -42,6 +42,14 @@ interface UnitOfMeasure {
   name_en: string;
 }
 
+interface TaxCode {
+  id: string;
+  code: string;
+  name_en: string;
+  rate: string;
+  is_active: boolean;
+}
+
 interface ItemBarcode {
   id: string;
   barcode: string;
@@ -67,6 +75,7 @@ interface Item {
   category_id: string | null;
   season_id: string | null;
   item_year: number | null;
+  default_tax_code_id: string | null;
   is_active: boolean;
   variants: ItemVariant[];
 }
@@ -77,6 +86,7 @@ function NewItemForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const { data: brands } = useApiList<Brand>("/api/brands");
   const { data: categories } = useApiList<Category>("/api/categories");
   const { data: seasons } = useApiList<Season>("/api/seasons");
+  const { data: taxCodes } = useApiList<TaxCode>("/api/tax-codes");
   const [itemCode, setItemCode] = useState("");
   const [nameEn, setNameEn] = useState("");
   const [nameAr, setNameAr] = useState("");
@@ -85,6 +95,7 @@ function NewItemForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const [categoryId, setCategoryId] = useState("");
   const [seasonId, setSeasonId] = useState("");
   const [itemYear, setItemYear] = useState("");
+  const [defaultTaxCodeId, setDefaultTaxCodeId] = useState("");
   const [variantCode, setVariantCode] = useState("");
   const [color, setColor] = useState("");
   const [size, setSize] = useState("");
@@ -109,6 +120,7 @@ function NewItemForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
           categoryId: categoryId || null,
           seasonId: seasonId || null,
           itemYear: itemYear ? Number(itemYear) : null,
+          defaultTaxCodeId: defaultTaxCodeId || null,
           variantCode,
           color: color || null,
           size: size || null,
@@ -177,6 +189,16 @@ function NewItemForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
         </Field>
         <Field label="Year">
           <TextInput type="number" value={itemYear} onChange={(e) => setItemYear(e.target.value)} placeholder="e.g. 2026" />
+        </Field>
+        <Field label="Tax Code">
+          <SelectInput value={defaultTaxCodeId} onChange={(e) => setDefaultTaxCodeId(e.target.value)}>
+            <option value="">None</option>
+            {taxCodes?.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name_en} ({Number(t.rate).toFixed(0)}%)
+              </option>
+            ))}
+          </SelectInput>
         </Field>
       </div>
       <div className="grid grid-cols-3 gap-3">
@@ -304,10 +326,12 @@ function ClassifyItemForm({ item, onChanged }: { item: Item; onChanged: () => vo
   const { data: brands } = useApiList<Brand>("/api/brands");
   const { data: categories } = useApiList<Category>("/api/categories");
   const { data: seasons } = useApiList<Season>("/api/seasons");
+  const { data: taxCodes } = useApiList<TaxCode>("/api/tax-codes");
   const [brandId, setBrandId] = useState(item.brand_id ?? "");
   const [categoryId, setCategoryId] = useState(item.category_id ?? "");
   const [seasonId, setSeasonId] = useState(item.season_id ?? "");
   const [itemYear, setItemYear] = useState(item.item_year != null ? String(item.item_year) : "");
+  const [defaultTaxCodeId, setDefaultTaxCodeId] = useState(item.default_tax_code_id ?? "");
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -322,6 +346,7 @@ function ClassifyItemForm({ item, onChanged }: { item: Item; onChanged: () => vo
           categoryId: categoryId || null,
           seasonId: seasonId || null,
           itemYear: itemYear ? Number(itemYear) : null,
+          defaultTaxCodeId: defaultTaxCodeId || null,
         },
       });
       onChanged();
@@ -331,7 +356,7 @@ function ClassifyItemForm({ item, onChanged }: { item: Item; onChanged: () => vo
   }
 
   return (
-    <div className="mb-4 grid grid-cols-2 gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-4">
+    <div className="mb-4 grid grid-cols-2 gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-5">
       <Field label="Brand">
         <SelectInput value={brandId} onChange={(e) => setBrandId(e.target.value)}>
           <option value="">None</option>
@@ -365,7 +390,17 @@ function ClassifyItemForm({ item, onChanged }: { item: Item; onChanged: () => vo
       <Field label="Year">
         <TextInput type="number" value={itemYear} onChange={(e) => setItemYear(e.target.value)} />
       </Field>
-      <div className="col-span-2 sm:col-span-4">
+      <Field label="Tax Code">
+        <SelectInput value={defaultTaxCodeId} onChange={(e) => setDefaultTaxCodeId(e.target.value)}>
+          <option value="">None</option>
+          {taxCodes?.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.code}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      <div className="col-span-2 sm:col-span-5">
         <button
           onClick={save}
           disabled={saving}

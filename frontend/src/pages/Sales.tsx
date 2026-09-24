@@ -40,6 +40,165 @@ interface SalesInvoiceDetail {
   lines: SalesInvoiceLine[];
 }
 
+interface FullInvoiceLine {
+  id: string;
+  item_description: string;
+  qty: string;
+  unit_price: string;
+  net_amount: string;
+  vat_amount: string;
+  gross_amount: string;
+}
+
+interface FullSalesInvoice {
+  id: string;
+  document_number: string;
+  invoice_channel: string;
+  zatca_invoice_category: string;
+  invoice_date: string;
+  document_status: string;
+  net_amount: string;
+  vat_amount: string;
+  gross_amount: string;
+  lines: FullInvoiceLine[];
+  zatcaQr: string | null;
+  zatcaQrError: string | null;
+}
+
+interface FullCreditNote {
+  id: string;
+  document_number: string;
+  credit_note_date: string;
+  document_status: string;
+  reason: string;
+  net_amount: string;
+  vat_amount: string;
+  gross_amount: string;
+  lines: FullInvoiceLine[];
+  zatcaQr: string | null;
+  zatcaQrError: string | null;
+}
+
+function ZatcaQrPanel({ status, qr, qrError }: { status: string; qr: string | null; qrError: string | null }) {
+  if (status !== "posted") {
+    return <p className="mt-3 text-xs text-slate-400">The ZATCA QR code is generated once this document is posted.</p>;
+  }
+  if (qrError) {
+    return (
+      <p className="mt-3 rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-700">
+        ZATCA QR code unavailable: {qrError}. Set the company's VAT registration number under Administration.
+      </p>
+    );
+  }
+  if (!qr) return null;
+  return (
+    <div className="mt-3 flex flex-col items-center gap-1 border-t border-dashed border-slate-200 pt-3">
+      <img src={qr} alt="ZATCA QR code" width={140} height={140} />
+      <p className="text-center text-xs text-slate-400">ZATCA Phase 1 QR — scan to verify seller, VAT number, timestamp and totals.</p>
+    </div>
+  );
+}
+
+function SalesInvoiceDetailModal({ invoiceId, onClose }: { invoiceId: string; onClose: () => void }) {
+  const { token, companyId } = useAuth();
+  const [detail, setDetail] = useState<FullSalesInvoice | null>(null);
+
+  useEffect(() => {
+    apiRequest<FullSalesInvoice>(`/api/sales-invoices/${invoiceId}`, { token, companyId }).then(setDetail);
+  }, [invoiceId, token, companyId]);
+
+  return (
+    <Modal title={detail?.document_number ?? "Sales Invoice"} onClose={onClose}>
+      {!detail ? (
+        <p className="text-sm text-slate-400">Loading...</p>
+      ) : (
+        <div>
+          <div className="mb-3 flex items-center justify-between text-sm">
+            <span className="capitalize text-slate-500">
+              {detail.invoice_channel} · {detail.zatca_invoice_category}
+            </span>
+            <StatusBadge status={detail.document_status} />
+          </div>
+          <div className="space-y-1 border-y border-dashed border-slate-200 py-2 text-sm">
+            {detail.lines.map((l) => (
+              <div key={l.id} className="flex justify-between">
+                <span className="text-slate-600">
+                  {l.item_description} × {l.qty}
+                </span>
+                <span className="tabular-nums">{Number(l.gross_amount).toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 space-y-1 text-sm">
+            <div className="flex justify-between text-slate-500">
+              <span>Net</span>
+              <span className="tabular-nums">{Number(detail.net_amount).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-slate-500">
+              <span>VAT</span>
+              <span className="tabular-nums">{Number(detail.vat_amount).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-base font-semibold text-slate-900">
+              <span>Total</span>
+              <span className="tabular-nums">{Number(detail.gross_amount).toFixed(2)}</span>
+            </div>
+          </div>
+          <ZatcaQrPanel status={detail.document_status} qr={detail.zatcaQr} qrError={detail.zatcaQrError} />
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function CreditNoteDetailModal({ creditNoteId, onClose }: { creditNoteId: string; onClose: () => void }) {
+  const { token, companyId } = useAuth();
+  const [detail, setDetail] = useState<FullCreditNote | null>(null);
+
+  useEffect(() => {
+    apiRequest<FullCreditNote>(`/api/credit-notes/${creditNoteId}`, { token, companyId }).then(setDetail);
+  }, [creditNoteId, token, companyId]);
+
+  return (
+    <Modal title={detail?.document_number ?? "Credit Note"} onClose={onClose}>
+      {!detail ? (
+        <p className="text-sm text-slate-400">Loading...</p>
+      ) : (
+        <div>
+          <div className="mb-3 flex items-center justify-between text-sm">
+            <span className="text-slate-500">{detail.reason}</span>
+            <StatusBadge status={detail.document_status} />
+          </div>
+          <div className="space-y-1 border-y border-dashed border-slate-200 py-2 text-sm">
+            {detail.lines.map((l) => (
+              <div key={l.id} className="flex justify-between">
+                <span className="text-slate-600">
+                  {l.item_description} × {l.qty}
+                </span>
+                <span className="tabular-nums">{Number(l.gross_amount).toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 space-y-1 text-sm">
+            <div className="flex justify-between text-slate-500">
+              <span>Net</span>
+              <span className="tabular-nums">{Number(detail.net_amount).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-slate-500">
+              <span>VAT</span>
+              <span className="tabular-nums">{Number(detail.vat_amount).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-base font-semibold text-slate-900">
+              <span>Total</span>
+              <span className="tabular-nums">{Number(detail.gross_amount).toFixed(2)}</span>
+            </div>
+          </div>
+          <ZatcaQrPanel status={detail.document_status} qr={detail.zatcaQr} qrError={detail.zatcaQrError} />
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 interface CreditNote {
   id: string;
   document_number: string;
@@ -551,6 +710,7 @@ function SalesInvoicesTab() {
   const { i18n } = useTranslation();
   const { data, error, reload } = useApiList<SalesInvoice>("/api/sales-invoices");
   const [showNew, setShowNew] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   const columns: Column<SalesInvoice>[] = [
     { key: "number", header: "Invoice #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
@@ -579,12 +739,14 @@ function SalesInvoicesTab() {
         searchPlaceholder="Search sales invoices..."
         actionLabel="New Sales Invoice"
         onAction={() => setShowNew(true)}
+        onRowClick={(r) => setDetailId(r.id)}
       />
       {showNew && (
         <Modal title="New Sales Invoice" onClose={() => setShowNew(false)}>
           <NewSalesInvoiceForm onClose={() => setShowNew(false)} onCreated={reload} />
         </Modal>
       )}
+      {detailId && <SalesInvoiceDetailModal invoiceId={detailId} onClose={() => setDetailId(null)} />}
     </>
   );
 }
@@ -592,6 +754,7 @@ function SalesInvoicesTab() {
 function CreditNotesTab() {
   const { data, error, reload } = useApiList<CreditNote>("/api/credit-notes");
   const [showNew, setShowNew] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   const columns: Column<CreditNote>[] = [
     { key: "number", header: "CN #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
@@ -616,12 +779,14 @@ function CreditNotesTab() {
         searchPlaceholder="Search credit notes..."
         actionLabel="New Credit Note"
         onAction={() => setShowNew(true)}
+        onRowClick={(r) => setDetailId(r.id)}
       />
       {showNew && (
         <Modal title="New Credit Note" onClose={() => setShowNew(false)}>
           <NewCreditNoteForm onClose={() => setShowNew(false)} onCreated={reload} />
         </Modal>
       )}
+      {detailId && <CreditNoteDetailModal creditNoteId={detailId} onClose={() => setDetailId(null)} />}
     </>
   );
 }

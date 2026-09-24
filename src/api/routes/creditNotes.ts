@@ -3,6 +3,7 @@ import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
 import { createCreditNote, postCreditNote } from "../../sales/salesService.js";
 import { NotFoundError } from "../errors.js";
+import { renderZatcaQrDataUrl } from "../../zatca/qrCode.js";
 
 const lineSchema = z.object({
   sourceLineId: z.string().uuid(),
@@ -75,17 +76,39 @@ export async function creditNoteRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: app.authenticate },
     async (request) => {
       const header = await pool.query(
-        `SELECT * FROM credit_notes WHERE id = $1 AND company_id = $2`,
+        `SELECT cn.*, c.name_en AS company_name_en, c.vat_registration_number AS company_vat_number
+         FROM credit_notes cn JOIN companies c ON c.id = cn.company_id
+         WHERE cn.id = $1 AND cn.company_id = $2`,
         [request.params.id, request.companyId],
       );
       if (header.rows.length === 0) throw new NotFoundError("credit note not found");
+      const creditNote = header.rows[0];
 
       const lines = await pool.query(
         `SELECT * FROM credit_note_lines WHERE credit_note_id = $1 ORDER BY line_number`,
         [request.params.id],
       );
 
-      return { ...header.rows[0], lines: lines.rows };
+      // Same ZATCA Phase 1 QR as sales invoices -- see that route for the
+      // reasoning (draft has no posted_at; a bad company VAT number
+      // degrades to no QR rather than a 500).
+      let zatcaQr: string | null = null;
+      let zatcaQrError: string | null = null;
+      if (creditNote.document_status === "posted") {
+        try {
+          zatcaQr = await renderZatcaQrDataUrl({
+            sellerName: creditNote.company_name_en,
+            vatRegistrationNumber: creditNote.company_vat_number ?? "",
+            timestamp: new Date(creditNote.posted_at).toISOString(),
+            invoiceTotal: Number(creditNote.gross_amount),
+            vatTotal: Number(creditNote.vat_amount),
+          });
+        } catch (err) {
+          zatcaQrError = err instanceof Error ? err.message : "failed to generate ZATCA QR code";
+        }
+      }
+
+      return { ...creditNote, lines: lines.rows, zatcaQr, zatcaQrError };
     },
   );
 

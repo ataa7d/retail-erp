@@ -14,6 +14,7 @@ import { purchasingRoutes } from "./routes/purchasing.js";
 import { accountingRoutes } from "./routes/accounting.js";
 import { itemRoutes } from "./routes/items.js";
 import { unitOfMeasureRoutes } from "./routes/unitsOfMeasure.js";
+import { taxCodeRoutes } from "./routes/taxCodes.js";
 import { masterDataRoutes } from "./routes/masterData.js";
 import { customerRoutes } from "./routes/customers.js";
 import { priceListRoutes } from "./routes/priceLists.js";
@@ -75,6 +76,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(exchangeRateRoutes, { prefix: "/api" });
   await app.register(itemRoutes, { prefix: "/api" });
   await app.register(unitOfMeasureRoutes, { prefix: "/api" });
+  await app.register(taxCodeRoutes, { prefix: "/api" });
   await app.register(masterDataRoutes, { prefix: "/api" });
   await app.register(customerRoutes, { prefix: "/api" });
   await app.register(priceListRoutes, { prefix: "/api" });

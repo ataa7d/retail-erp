@@ -16,6 +16,7 @@ const createSchema = z.object({
   categoryId: z.string().uuid().nullable().optional(),
   seasonId: z.string().uuid().nullable().optional(),
   itemYear: z.number().int().nullable().optional(),
+  defaultTaxCodeId: z.string().uuid().nullable().optional(),
   // Minimal single-variant creation, not the full color/size matrix a real
   // "new item" wizard would offer -- variantCode is required, color/size
   // optional, matching what item_variants actually requires (UNIQUE on
@@ -31,6 +32,7 @@ const classifySchema = z.object({
   categoryId: z.string().uuid().nullable().optional(),
   seasonId: z.string().uuid().nullable().optional(),
   itemYear: z.number().int().nullable().optional(),
+  defaultTaxCodeId: z.string().uuid().nullable().optional(),
 });
 
 const addVariantSchema = z.object({
@@ -53,8 +55,8 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
       const body = createSchema.parse(request.body);
       const itemId = await withTransaction(async (client) => {
         const item = await client.query<{ id: string }>(
-          `INSERT INTO items (company_id, item_code, name_en, name_ar, brand_id, category_id, season_id, item_year)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+          `INSERT INTO items (company_id, item_code, name_en, name_ar, brand_id, category_id, season_id, item_year, default_tax_code_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
           [
             request.companyId,
             body.itemCode,
@@ -64,6 +66,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
             body.categoryId ?? null,
             body.seasonId ?? null,
             body.itemYear ?? null,
+            body.defaultTaxCodeId ?? null,
           ],
         );
         const newItemId = item.rows[0]!.id;
@@ -148,8 +151,15 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
         ]);
         if (existing.rows.length === 0) throw new NotFoundError("item not found");
         await client.query(
-          `UPDATE items SET brand_id = $1, category_id = $2, season_id = $3, item_year = $4 WHERE id = $5`,
-          [body.brandId ?? null, body.categoryId ?? null, body.seasonId ?? null, body.itemYear ?? null, request.params.id],
+          `UPDATE items SET brand_id = $1, category_id = $2, season_id = $3, item_year = $4, default_tax_code_id = $5 WHERE id = $6`,
+          [
+            body.brandId ?? null,
+            body.categoryId ?? null,
+            body.seasonId ?? null,
+            body.itemYear ?? null,
+            body.defaultTaxCodeId ?? null,
+            request.params.id,
+          ],
         );
       }, request.authUser.id);
       return { id: request.params.id };
