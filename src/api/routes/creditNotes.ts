@@ -27,6 +27,23 @@ const createSchema = z.object({
 });
 
 export async function creditNoteRoutes(app: FastifyInstance): Promise<void> {
+  app.get("/credit-notes", { preHandler: app.authenticate }, async (request) => {
+    const result = await pool.query(
+      `SELECT cn.id, cn.document_number, cn.credit_note_date, cn.document_status, cn.reason,
+              cn.net_amount, cn.vat_amount, cn.gross_amount, cn.original_invoice_id,
+              si.document_number AS original_invoice_number,
+              c.name_en AS customer_name_en, c.name_ar AS customer_name_ar
+       FROM credit_notes cn
+       JOIN sales_invoices si ON si.id = cn.original_invoice_id
+       LEFT JOIN customers c ON c.id = cn.customer_id
+       WHERE cn.company_id = $1
+       ORDER BY cn.credit_note_date DESC, cn.created_at DESC
+       LIMIT 200`,
+      [request.companyId],
+    );
+    return result.rows;
+  });
+
   app.post(
     "/credit-notes",
     { preHandler: [app.authenticate, app.requirePermission("sales.return.create")] },

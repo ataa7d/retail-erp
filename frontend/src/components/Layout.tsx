@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard,
   Package,
+  Receipt,
   Users,
   Warehouse,
   ShoppingCart,
@@ -24,6 +25,7 @@ import { useAuth } from "../lib/auth";
 const navItems = [
   { to: "/", label: "nav.dashboard", permission: null, icon: LayoutDashboard },
   { to: "/items", label: "nav.items", permission: "inventory.items.manage", icon: Package },
+  { to: "/sales", label: "nav.sales", permission: "sales.pos_invoice.create", icon: Receipt },
   { to: "/customers", label: "nav.customers", permission: null, icon: Users },
   { to: "/inventory", label: "nav.inventory", permission: "inventory.adjustment.post", icon: Warehouse },
   { to: "/purchasing", label: "nav.purchasing", permission: "purchasing.po.create", icon: ShoppingCart },

@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import CompanyPicker from "./pages/CompanyPicker";
 import Dashboard from "./pages/Dashboard";
 import Items from "./pages/Items";
+import Sales from "./pages/Sales";
 import Customers from "./pages/Customers";
 import Inventory from "./pages/Inventory";
 import Purchasing from "./pages/Purchasing";
@@ -59,6 +60,7 @@ export default function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="items" element={<Items />} />
+          <Route path="sales" element={<Sales />} />
           <Route path="customers" element={<Customers />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="purchasing" element={<Purchasing />} />
