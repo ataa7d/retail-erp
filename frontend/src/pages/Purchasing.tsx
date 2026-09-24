@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { ShoppingCart, Truck, Plus, Trash2 } from "lucide-react";
+import { ShoppingCart, Truck, Plus, Trash2, PackageCheck, ReceiptText } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -64,6 +64,63 @@ interface PoLineDraft {
   unitPrice: string;
   vatRate: string;
   priceIncludesVat: boolean;
+}
+
+interface PoLine {
+  id: string;
+  item_variant_id: string;
+  qty: string;
+  received_qty: string;
+  unit_price: string;
+  variant_code: string;
+  item_name_en: string;
+}
+
+interface PoDetail {
+  id: string;
+  store_id: string;
+  supplier_id: string;
+  document_number: string;
+  lines: PoLine[];
+}
+
+interface GoodsReceipt {
+  id: string;
+  document_number: string;
+  receipt_date: string;
+  document_status: string;
+  purchase_order_id: string;
+  po_document_number: string;
+  supplier_name_en: string;
+  supplier_name_ar: string;
+}
+
+interface GrLine {
+  id: string;
+  item_variant_id: string;
+  qty_received: string;
+  unit_cost: string;
+  variant_code: string;
+  item_name_en: string;
+}
+
+interface GrDetail {
+  id: string;
+  supplier_id: string;
+  purchase_order_id: string;
+  document_number: string;
+  lines: GrLine[];
+}
+
+interface SupplierInvoice {
+  id: string;
+  document_number: string;
+  supplier_invoice_number: string;
+  invoice_date: string;
+  document_status: string;
+  gross_amount: string;
+  supplier_name_en: string;
+  supplier_name_ar: string;
 }
 
 function useVariantOptions() {
@@ -242,6 +299,382 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
   );
 }
 
+function NewGoodsReceiptForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: purchaseOrders } = useApiList<PurchaseOrder>("/api/purchase-orders");
+  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
+  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
+  const postedPOs = purchaseOrders?.filter((po) => po.document_status === "posted") ?? [];
+
+  const [purchaseOrderId, setPurchaseOrderId] = useState("");
+  const [poDetail, setPoDetail] = useState<PoDetail | null>(null);
+  const [receiptDate, setReceiptDate] = useState(new Date().toISOString().slice(0, 10));
+  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
+  const [qtyByLine, setQtyByLine] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!purchaseOrderId || !token || !companyId) {
+      setPoDetail(null);
+      return;
+    }
+    apiRequest<PoDetail>(`/api/purchase-orders/${purchaseOrderId}`, { token, companyId }).then((detail) => {
+      setPoDetail(detail);
+      const init: Record<string, string> = {};
+      for (const line of detail.lines) {
+        const remaining = Number(line.qty) - Number(line.received_qty);
+        if (remaining > 0) init[line.id] = String(remaining);
+      }
+      setQtyByLine(init);
+    });
+  }, [purchaseOrderId, token, companyId]);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!poDetail) return;
+    setSubmitting(true);
+    try {
+      const lines = poDetail.lines
+        .filter((l) => Number(qtyByLine[l.id]) > 0)
+        .map((l) => ({ purchaseOrderLineId: l.id, itemVariantId: l.item_variant_id, qtyReceived: Number(qtyByLine[l.id]) }));
+      if (lines.length === 0) throw new Error("Enter a received quantity for at least one line.");
+
+      const created = await apiRequest<{ id: string }>("/api/goods-receipts", {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          storeId: poDetail.store_id,
+          purchaseOrderId: poDetail.id,
+          supplierId: poDetail.supplier_id,
+          receiptDate,
+          fiscalPeriodId,
+          lines,
+        },
+      });
+      await apiRequest(`/api/goods-receipts/${created.id}/post`, { method: "POST", token, companyId });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError || err instanceof Error ? err.message : "Failed to create goods receipt");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Field label="Purchase Order" required>
+        <SelectInput required value={purchaseOrderId} onChange={(e) => setPurchaseOrderId(e.target.value)}>
+          <option value="">Select a posted PO...</option>
+          {postedPOs.map((po) => (
+            <option key={po.id} value={po.id}>
+              {po.document_number} — {po.supplier_name_en}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Receipt Date" required>
+          <TextInput type="date" required value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} />
+        </Field>
+        <Field label="Fiscal Period" required>
+          <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
+            <option value="">Select...</option>
+            {openPeriods.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.year_name} — P{p.period_number}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+      </div>
+
+      {poDetail && (
+        <>
+          <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Lines to receive</div>
+          <div className="space-y-2">
+            {poDetail.lines.map((line) => {
+              const remaining = Number(line.qty) - Number(line.received_qty);
+              return (
+                <div key={line.id} className="flex items-center justify-between gap-2 rounded-md border border-slate-200 p-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm text-slate-900">{line.item_name_en}</div>
+                    <div className="text-xs text-slate-400">
+                      {line.variant_code} · ordered {line.qty}, received {line.received_qty}
+                    </div>
+                  </div>
+                  <div className="w-24 flex-none">
+                    <TextInput
+                      type="number"
+                      min={0}
+                      max={remaining}
+                      step="0.001"
+                      value={qtyByLine[line.id] ?? ""}
+                      onChange={(e) => setQtyByLine((prev) => ({ ...prev, [line.id]: e.target.value }))}
+                      disabled={remaining <= 0}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      <p className="mb-3 mt-3 text-xs text-slate-400">
+        Accrues Dr Inventory / Cr GRNI at the PO's price. Landed cost charges (freight, customs) aren't in this form yet.
+      </p>
+      <FormActions error={error} submitting={submitting} submitLabel="Receive & Post" />
+    </form>
+  );
+}
+
+function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: purchaseOrders } = useApiList<PurchaseOrder>("/api/purchase-orders");
+  const { data: goodsReceipts } = useApiList<GoodsReceipt>("/api/goods-receipts");
+  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
+  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
+  const postedPOs = purchaseOrders?.filter((po) => po.document_status === "posted") ?? [];
+
+  const [purchaseOrderId, setPurchaseOrderId] = useState("");
+  const receiptsForPo = (goodsReceipts ?? []).filter((gr) => gr.purchase_order_id === purchaseOrderId && gr.document_status === "posted");
+  const [goodsReceiptId, setGoodsReceiptId] = useState("");
+  const [grDetail, setGrDetail] = useState<GrDetail | null>(null);
+  const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
+  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
+  const [lineData, setLineData] = useState<Record<string, { qty: string; unitPrice: string; vatRate: string; priceIncludesVat: boolean }>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setGoodsReceiptId("");
+    setGrDetail(null);
+  }, [purchaseOrderId]);
+
+  useEffect(() => {
+    if (!goodsReceiptId || !token || !companyId) {
+      setGrDetail(null);
+      return;
+    }
+    apiRequest<GrDetail>(`/api/goods-receipts/${goodsReceiptId}`, { token, companyId }).then((detail) => {
+      setGrDetail(detail);
+      const init: Record<string, { qty: string; unitPrice: string; vatRate: string; priceIncludesVat: boolean }> = {};
+      for (const line of detail.lines) {
+        init[line.id] = { qty: line.qty_received, unitPrice: line.unit_cost, vatRate: "15", priceIncludesVat: false };
+      }
+      setLineData(init);
+    });
+  }, [goodsReceiptId, token, companyId]);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!grDetail) return;
+    setSubmitting(true);
+    try {
+      const lines = grDetail.lines.map((l) => ({
+        goodsReceiptLineId: l.id,
+        itemVariantId: l.item_variant_id,
+        qty: Number(lineData[l.id]?.qty ?? l.qty_received),
+        unitPrice: Number(lineData[l.id]?.unitPrice ?? l.unit_cost),
+        discountAmount: 0,
+        vatRate: Number(lineData[l.id]?.vatRate ?? 15),
+        priceIncludesVat: lineData[l.id]?.priceIncludesVat ?? false,
+      }));
+
+      const created = await apiRequest<{ id: string }>("/api/supplier-invoices", {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          supplierId: grDetail.supplier_id,
+          purchaseOrderId,
+          supplierInvoiceNumber,
+          invoiceDate,
+          fiscalPeriodId,
+          lines,
+        },
+      });
+      await apiRequest(`/api/supplier-invoices/${created.id}/post`, { method: "POST", token, companyId });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create supplier invoice");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Field label="Purchase Order" required>
+        <SelectInput required value={purchaseOrderId} onChange={(e) => setPurchaseOrderId(e.target.value)}>
+          <option value="">Select a posted PO...</option>
+          {postedPOs.map((po) => (
+            <option key={po.id} value={po.id}>
+              {po.document_number} — {po.supplier_name_en}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      <Field label="Goods Receipt" required>
+        <SelectInput required value={goodsReceiptId} onChange={(e) => setGoodsReceiptId(e.target.value)} disabled={!purchaseOrderId}>
+          <option value="">Select a goods receipt...</option>
+          {receiptsForPo.map((gr) => (
+            <option key={gr.id} value={gr.id}>
+              {gr.document_number} — {new Date(gr.receipt_date).toLocaleDateString()}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Supplier Invoice #" required>
+          <TextInput required value={supplierInvoiceNumber} onChange={(e) => setSupplierInvoiceNumber(e.target.value)} placeholder="Supplier's own reference" />
+        </Field>
+        <Field label="Invoice Date" required>
+          <TextInput type="date" required value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+        </Field>
+      </div>
+      <Field label="Fiscal Period" required>
+        <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
+          <option value="">Select...</option>
+          {openPeriods.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.year_name} — P{p.period_number}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+
+      {grDetail && (
+        <>
+          <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Lines</div>
+          <div className="space-y-2">
+            {grDetail.lines.map((line) => (
+              <div key={line.id} className="rounded-md border border-slate-200 p-2">
+                <div className="mb-1.5 text-sm text-slate-900">{line.item_name_en} <span className="text-xs text-slate-400">({line.variant_code})</span></div>
+                <div className="flex gap-1.5">
+                  <TextInput
+                    type="number"
+                    min={0}
+                    step="0.001"
+                    placeholder="Qty"
+                    value={lineData[line.id]?.qty ?? ""}
+                    onChange={(e) => setLineData((prev) => ({ ...prev, [line.id]: { ...prev[line.id]!, qty: e.target.value } }))}
+                    className="min-w-0 flex-1"
+                  />
+                  <TextInput
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="Unit Price"
+                    value={lineData[line.id]?.unitPrice ?? ""}
+                    onChange={(e) => setLineData((prev) => ({ ...prev, [line.id]: { ...prev[line.id]!, unitPrice: e.target.value } }))}
+                    className="min-w-0 flex-1"
+                  />
+                  <div className="w-20 flex-none">
+                    <TextInput
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="VAT %"
+                      value={lineData[line.id]?.vatRate ?? ""}
+                      onChange={(e) => setLineData((prev) => ({ ...prev, [line.id]: { ...prev[line.id]!, vatRate: e.target.value } }))}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <p className="mb-3 mt-3 text-xs text-slate-400">
+        Clears GRNI, books Purchase Price Variance if the price differs from the receipt, claims input VAT, credits Accounts Payable.
+      </p>
+      <FormActions error={error} submitting={submitting} submitLabel="Post Invoice" />
+    </form>
+  );
+}
+
+function GoodsReceiptsTab() {
+  const { data, error, reload } = useApiList<GoodsReceipt>("/api/goods-receipts");
+  const [showNew, setShowNew] = useState(false);
+
+  const columns: Column<GoodsReceipt>[] = [
+    { key: "number", header: "GR #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "po", header: "PO #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.po_document_number}</span> },
+    { key: "supplier", header: "Supplier", render: (r) => r.supplier_name_en },
+    { key: "date", header: "Receipt Date", render: (r) => new Date(r.receipt_date).toLocaleDateString() },
+    { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
+  ];
+
+  return (
+    <>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => `${r.document_number} ${r.po_document_number} ${r.supplier_name_en}`}
+        emptyIcon={PackageCheck}
+        emptyText="No goods receipts yet."
+        searchPlaceholder="Search goods receipts..."
+        actionLabel="New Goods Receipt"
+        onAction={() => setShowNew(true)}
+      />
+      {showNew && (
+        <Modal title="New Goods Receipt" onClose={() => setShowNew(false)}>
+          <NewGoodsReceiptForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+    </>
+  );
+}
+
+function SupplierInvoicesTab() {
+  const { data, error, reload } = useApiList<SupplierInvoice>("/api/supplier-invoices");
+  const [showNew, setShowNew] = useState(false);
+
+  const columns: Column<SupplierInvoice>[] = [
+    { key: "number", header: "Invoice #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "supplierRef", header: "Supplier Ref", render: (r) => r.supplier_invoice_number },
+    { key: "supplier", header: "Supplier", render: (r) => r.supplier_name_en },
+    { key: "date", header: "Invoice Date", render: (r) => new Date(r.invoice_date).toLocaleDateString() },
+    { key: "amount", header: "Total", render: (r) => Number(r.gross_amount).toFixed(2), numeric: true },
+    { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
+  ];
+
+  return (
+    <>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => `${r.document_number} ${r.supplier_invoice_number} ${r.supplier_name_en}`}
+        emptyIcon={ReceiptText}
+        emptyText="No supplier invoices yet."
+        searchPlaceholder="Search supplier invoices..."
+        actionLabel="New Supplier Invoice"
+        onAction={() => setShowNew(true)}
+      />
+      {showNew && (
+        <Modal title="New Supplier Invoice" onClose={() => setShowNew(false)}>
+          <NewSupplierInvoiceForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+    </>
+  );
+}
+
 function PurchaseOrdersTab() {
   const { i18n } = useTranslation();
   const { data, error, reload } = useApiList<PurchaseOrder>("/api/purchase-orders");
@@ -317,6 +750,8 @@ export default function Purchasing() {
       <Tabs
         tabs={[
           { key: "pos", label: "Purchase Orders", content: <PurchaseOrdersTab /> },
+          { key: "receipts", label: "Goods Receipts", content: <GoodsReceiptsTab /> },
+          { key: "invoices", label: "Supplier Invoices", content: <SupplierInvoicesTab /> },
           { key: "suppliers", label: "Suppliers", content: <SuppliersTab /> },
         ]}
       />
