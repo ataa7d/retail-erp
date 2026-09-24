@@ -19,6 +19,7 @@ import {
   ChevronDown,
   LogOut,
   Building,
+  Monitor,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 
@@ -26,6 +27,7 @@ const navItems = [
   { to: "/", label: "nav.dashboard", permission: null, icon: LayoutDashboard },
   { to: "/items", label: "nav.items", permission: "inventory.items.manage", icon: Package },
   { to: "/sales", label: "nav.sales", permission: "sales.pos_invoice.create", icon: Receipt },
+  { to: "/pos", label: "nav.pos", permission: "sales.pos_invoice.create", icon: Monitor },
   { to: "/customers", label: "nav.customers", permission: null, icon: Users },
   { to: "/inventory", label: "nav.inventory", permission: "inventory.adjustment.post", icon: Warehouse },
   { to: "/purchasing", label: "nav.purchasing", permission: "purchasing.po.create", icon: ShoppingCart },

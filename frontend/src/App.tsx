@@ -15,6 +15,7 @@ import Accounting from "./pages/Accounting";
 import Hr from "./pages/Hr";
 import Assets from "./pages/Assets";
 import Admin from "./pages/Admin";
+import Pos from "./pages/Pos";
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const { token, loading } = useAuth();
@@ -45,6 +46,16 @@ export default function App() {
           element={
             <RequireAuth>
               <CompanyPicker />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/pos"
+          element={
+            <RequireAuth>
+              <RequireCompany>
+                <Pos />
+              </RequireCompany>
             </RequireAuth>
           }
         />

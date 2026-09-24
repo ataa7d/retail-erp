@@ -17,6 +17,7 @@
     "items": "Items",
     "customers": "Customers",
     "sales": "Sales",
+    "pos": "POS Terminal",
     "purchasing": "Purchasing",
     "inventory": "Inventory",
     "accounting": "Accounting",
