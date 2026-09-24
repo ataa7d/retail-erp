@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Receipt, RotateCcw, Plus, Trash2, Tag } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
-import { apiRequest, ApiError } from "../lib/api";
+import { apiRequest, ApiError, downloadFile } from "../lib/api";
 import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
@@ -99,6 +99,39 @@ function ZatcaQrPanel({ status, qr, qrError }: { status: string; qr: string | nu
   );
 }
 
+function XmlDownloadButton({ status, path }: { status: string; path: string }) {
+  const { token, companyId } = useAuth();
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (status !== "posted") return null;
+
+  async function handleDownload() {
+    setError(null);
+    setDownloading(true);
+    try {
+      await downloadFile(path, { token, companyId });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to download XML");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  return (
+    <div className="mt-3">
+      <button
+        onClick={handleDownload}
+        disabled={downloading}
+        className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+      >
+        {downloading ? "Preparing..." : "Download ZATCA XML (Phase 2, unsigned)"}
+      </button>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
 function SalesInvoiceDetailModal({ invoiceId, onClose }: { invoiceId: string; onClose: () => void }) {
   const { token, companyId } = useAuth();
   const [detail, setDetail] = useState<FullSalesInvoice | null>(null);
@@ -144,6 +177,7 @@ function SalesInvoiceDetailModal({ invoiceId, onClose }: { invoiceId: string; on
             </div>
           </div>
           <ZatcaQrPanel status={detail.document_status} qr={detail.zatcaQr} qrError={detail.zatcaQrError} />
+          <XmlDownloadButton status={detail.document_status} path={`/api/sales-invoices/${detail.id}/xml`} />
         </div>
       )}
     </Modal>
@@ -193,6 +227,7 @@ function CreditNoteDetailModal({ creditNoteId, onClose }: { creditNoteId: string
             </div>
           </div>
           <ZatcaQrPanel status={detail.document_status} qr={detail.zatcaQr} qrError={detail.zatcaQrError} />
+          <XmlDownloadButton status={detail.document_status} path={`/api/credit-notes/${detail.id}/xml`} />
         </div>
       )}
     </Modal>

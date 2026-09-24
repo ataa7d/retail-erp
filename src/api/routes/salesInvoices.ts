@@ -4,6 +4,7 @@ import { pool, withTransaction } from "../db.js";
 import { createSalesInvoice, postSalesInvoice } from "../../sales/salesService.js";
 import { NotFoundError } from "../errors.js";
 import { renderZatcaQrDataUrl } from "../../zatca/qrCode.js";
+import { finalizeSalesInvoiceXmlHash, renderSalesInvoiceXml } from "../../zatca/invoiceXmlService.js";
 
 const lineSchema = z.object({
   itemVariantId: z.string().uuid().nullable(),
@@ -137,9 +138,28 @@ export async function salesInvoiceRoutes(app: FastifyInstance): Promise<void> {
         if (existing.rows.length === 0) throw new NotFoundError("sales invoice not found");
 
         await postSalesInvoice(client, request.params.id, request.authUser.id);
+        await finalizeSalesInvoiceXmlHash(client, request.params.id);
       }, request.authUser.id);
 
       return { id: request.params.id, status: "posted" };
     },
   );
+
+  // ZATCA Phase 2 XML export -- see src/zatca/ublXml.ts for the scope
+  // boundary (structurally correct, unsigned; not a certified submission).
+  app.get<{ Params: { id: string } }>("/sales-invoices/:id/xml", { preHandler: app.authenticate }, async (request, reply) => {
+    const existing = await pool.query(`SELECT document_number FROM sales_invoices WHERE id = $1 AND company_id = $2`, [
+      request.params.id,
+      request.companyId,
+    ]);
+    if (existing.rows.length === 0) throw new NotFoundError("sales invoice not found");
+
+    const xml = await renderSalesInvoiceXml(pool, request.params.id, request.companyId);
+    if (!xml) throw new NotFoundError("this invoice has no XML export yet (only posted invoices have one)");
+
+    reply
+      .header("Content-Type", "application/xml; charset=utf-8")
+      .header("Content-Disposition", `attachment; filename="${existing.rows[0]!.document_number}.xml"`);
+    return xml;
+  });
 }

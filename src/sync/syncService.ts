@@ -32,6 +32,7 @@ import {
   type SalesInvoiceLineRequest,
   type CreditNoteLineRequest,
 } from "../sales/salesService.js";
+import { finalizeSalesInvoiceXmlHash, finalizeCreditNoteXmlHash } from "../zatca/invoiceXmlService.js";
 
 export interface SyncResult {
   id: string;
@@ -139,6 +140,7 @@ export async function syncPosInvoice(client: Client, params: SyncPosInvoiceParam
     clientUuid: params.clientUuid,
   });
   await postSalesInvoice(client, invoiceId, params.createdBy);
+  await finalizeSalesInvoiceXmlHash(client, invoiceId);
 
   return { id: invoiceId, alreadySynced: false };
 }
@@ -193,6 +195,7 @@ export async function syncPosCreditNote(client: Client, params: SyncCreditNotePa
     clientUuid: params.clientUuid,
   });
   await postCreditNote(client, creditNoteId, params.createdBy);
+  await finalizeCreditNoteXmlHash(client, creditNoteId);
 
   return { id: creditNoteId, alreadySynced: false };
 }

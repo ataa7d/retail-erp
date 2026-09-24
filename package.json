@@ -11,6 +11,7 @@
     "migrate:down": "tsx scripts/migrate.ts down",
     "migrate:status": "tsx scripts/migrate.ts status",
     "seed": "tsx scripts/seed.ts",
+    "backfill:zatca-xml": "tsx scripts/backfillZatcaXmlHashes.ts",
     "dev": "tsx watch src/api/server.ts",
     "test": "vitest run",
     "test:watch": "vitest"

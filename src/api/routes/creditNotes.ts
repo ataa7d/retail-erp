@@ -4,6 +4,7 @@ import { pool, withTransaction } from "../db.js";
 import { createCreditNote, postCreditNote } from "../../sales/salesService.js";
 import { NotFoundError } from "../errors.js";
 import { renderZatcaQrDataUrl } from "../../zatca/qrCode.js";
+import { finalizeCreditNoteXmlHash, renderCreditNoteXml } from "../../zatca/invoiceXmlService.js";
 
 const lineSchema = z.object({
   sourceLineId: z.string().uuid(),
@@ -124,9 +125,28 @@ export async function creditNoteRoutes(app: FastifyInstance): Promise<void> {
         if (existing.rows.length === 0) throw new NotFoundError("credit note not found");
 
         await postCreditNote(client, request.params.id, request.authUser.id);
+        await finalizeCreditNoteXmlHash(client, request.params.id);
       }, request.authUser.id);
 
       return { id: request.params.id, status: "posted" };
     },
   );
+
+  // ZATCA Phase 2 XML export -- see src/zatca/ublXml.ts for the scope
+  // boundary (structurally correct, unsigned; not a certified submission).
+  app.get<{ Params: { id: string } }>("/credit-notes/:id/xml", { preHandler: app.authenticate }, async (request, reply) => {
+    const existing = await pool.query(`SELECT document_number FROM credit_notes WHERE id = $1 AND company_id = $2`, [
+      request.params.id,
+      request.companyId,
+    ]);
+    if (existing.rows.length === 0) throw new NotFoundError("credit note not found");
+
+    const xml = await renderCreditNoteXml(pool, request.params.id, request.companyId);
+    if (!xml) throw new NotFoundError("this credit note has no XML export yet (only posted credit notes have one)");
+
+    reply
+      .header("Content-Type", "application/xml; charset=utf-8")
+      .header("Content-Disposition", `attachment; filename="${existing.rows[0]!.document_number}.xml"`);
+    return xml;
+  });
 }

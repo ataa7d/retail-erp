@@ -39,6 +39,12 @@ export async function buildApp(): Promise<FastifyInstance> {
   // deployment yet.
   await app.register(cors, {
     origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(",") : true,
+    // Browsers hide every response header from JS by default except a
+    // fixed "safe" set -- Content-Disposition isn't one of them, so
+    // without this the XML/file-download routes' filename is invisible to
+    // frontend/src/lib/api.ts's downloadFile(), which falls back to a
+    // generic name instead of the real document number.
+    exposedHeaders: ["Content-Disposition"],
   });
 
   app.setErrorHandler((err: Error, _request, reply) => {
