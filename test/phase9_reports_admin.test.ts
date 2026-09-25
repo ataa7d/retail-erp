@@ -17,6 +17,7 @@ let itemVariantId: string;
 let userId: string;
 let authToken: string;
 let noPermToken: string;
+const extraUserIds: string[] = []; // users created by the admin-management tests themselves, cleaned up in afterAll
 
 const PASSWORD = "TestPass123!";
 
@@ -129,7 +130,7 @@ beforeAll(async () => {
 
   const role = await client.query(`INSERT INTO roles (company_id, name) VALUES ($1, 'Reports Access') RETURNING id`, [companyId]);
   await client.query(
-    `INSERT INTO role_permissions (role_id, permission_id) SELECT $1, id FROM permissions WHERE code IN ('accounting.reports.view', 'admin.users.manage', 'admin.audit_log.view')`,
+    `INSERT INTO role_permissions (role_id, permission_id) SELECT $1, id FROM permissions WHERE code IN ('accounting.reports.view', 'admin.users.manage', 'admin.audit_log.view', 'admin.roles.manage')`,
     [role.rows[0].id],
   );
   await client.query(`INSERT INTO user_roles (user_id, company_id, role_id) VALUES ($1, $2, $3)`, [userId, companyId, role.rows[0].id]);
@@ -156,6 +157,9 @@ afterAll(async () => {
   await client.query(`DELETE FROM roles WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM user_company_access WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
+  if (extraUserIds.length > 0) {
+    await client.query(`DELETE FROM users WHERE id = ANY($1::uuid[])`, [extraUserIds]);
+  }
   await client.query(`DELETE FROM item_variants WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM items WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM customers WHERE company_id = $1`, [companyId]);
@@ -250,5 +254,172 @@ describe("admin routes", () => {
       headers: { authorization: `Bearer ${noPermToken}`, "x-company-id": companyId },
     });
     expect(res.statusCode).toBe(403);
+  });
+
+  it("invites a brand-new user and grants them company access", async () => {
+    const email = `p9r_invited_${randomUUID()}@test.local`;
+    const res = await app.inject({
+      method: "POST", url: "/api/admin/users",
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+      payload: { email, fullNameEn: "Invited User", fullNameAr: "مستخدم مدعو", password: "TestPass123!" },
+    });
+    expect(res.statusCode).toBe(201);
+    extraUserIds.push(res.json().id);
+
+    const detail = await app.inject({
+      method: "GET", url: `/api/admin/users/${res.json().id}`,
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+    });
+    expect(detail.json().email.toLowerCase()).toBe(email.toLowerCase());
+    expect(detail.json().has_company_access).toBe(true);
+  });
+
+  it("inviting an already-existing email just (re)grants company access instead of erroring", async () => {
+    const email = `p9r_existing_${randomUUID()}@test.local`;
+    const first = await app.inject({
+      method: "POST", url: "/api/admin/users",
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+      payload: { email, fullNameEn: "Existing User", fullNameAr: "مستخدم", password: "TestPass123!" },
+    });
+    extraUserIds.push(first.json().id);
+
+    const second = await app.inject({
+      method: "POST", url: "/api/admin/users",
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+      payload: { email, fullNameEn: "Existing User", fullNameAr: "مستخدم", password: "TestPass123!" },
+    });
+    expect(second.statusCode).toBe(201);
+    expect(second.json().id).toBe(first.json().id); // same underlying user, not a duplicate
+  });
+
+  it("cannot deactivate your own company access", async () => {
+    const res = await app.inject({
+      method: "POST", url: `/api/admin/users/${userId}/deactivate`,
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("deactivates and reactivates a user's company access", async () => {
+    const invited = await app.inject({
+      method: "POST", url: "/api/admin/users",
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+      payload: { email: `p9r_toggle_${randomUUID()}@test.local`, fullNameEn: "Toggle User", fullNameAr: "مستخدم", password: "TestPass123!" },
+    });
+    extraUserIds.push(invited.json().id);
+
+    const deactivated = await app.inject({
+      method: "POST", url: `/api/admin/users/${invited.json().id}/deactivate`,
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+    });
+    expect(deactivated.statusCode).toBe(200);
+    expect(deactivated.json().hasCompanyAccess).toBe(false);
+
+    const reactivated = await app.inject({
+      method: "POST", url: `/api/admin/users/${invited.json().id}/reactivate`,
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+    });
+    expect(reactivated.statusCode).toBe(200);
+    expect(reactivated.json().hasCompanyAccess).toBe(true);
+  });
+
+  it("creates a role, sets its permissions, and lists the full permission catalog", async () => {
+    const catalog = await app.inject({
+      method: "GET", url: "/api/admin/permissions",
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+    });
+    expect(catalog.statusCode).toBe(200);
+    expect(catalog.json().length).toBeGreaterThan(10);
+
+    const created = await app.inject({
+      method: "POST", url: "/api/admin/roles",
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+      payload: { name: `Cashier ${randomUUID().slice(0, 8)}`, description: "POS-only role" },
+    });
+    expect(created.statusCode).toBe(201);
+    const roleId = created.json().id;
+
+    const setPerms = await app.inject({
+      method: "POST", url: `/api/admin/roles/${roleId}/permissions`,
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+      payload: { permissionCodes: ["sales.pos_invoice.create"] },
+    });
+    expect(setPerms.statusCode).toBe(200);
+
+    const roles = await app.inject({
+      method: "GET", url: "/api/admin/roles",
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+    });
+    const role = roles.json().find((r: { id: string }) => r.id === roleId);
+    expect(role.permissions).toEqual(["sales.pos_invoice.create"]);
+
+    // Replacing again drops what isn't listed, doesn't just add to it.
+    await app.inject({
+      method: "POST", url: `/api/admin/roles/${roleId}/permissions`,
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+      payload: { permissionCodes: ["inventory.items.manage"] },
+    });
+    const rolesAfter = await app.inject({
+      method: "GET", url: "/api/admin/roles",
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+    });
+    const roleAfter = rolesAfter.json().find((r: { id: string }) => r.id === roleId);
+    expect(roleAfter.permissions).toEqual(["inventory.items.manage"]);
+
+    const deactivated = await app.inject({
+      method: "POST", url: `/api/admin/roles/${roleId}/deactivate`,
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+    });
+    expect(deactivated.json().isActive).toBe(false);
+    const reactivated = await app.inject({
+      method: "POST", url: `/api/admin/roles/${roleId}/reactivate`,
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+    });
+    expect(reactivated.json().isActive).toBe(true);
+  });
+
+  it("assigns a store-scoped role to a user and can remove the assignment", async () => {
+    const invited = await app.inject({
+      method: "POST", url: "/api/admin/users",
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+      payload: { email: `p9r_scoped_${randomUUID()}@test.local`, fullNameEn: "Scoped User", fullNameAr: "مستخدم", password: "TestPass123!" },
+    });
+    extraUserIds.push(invited.json().id);
+    const targetUserId = invited.json().id;
+
+    const role = await app.inject({
+      method: "POST", url: "/api/admin/roles",
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+      payload: { name: `Store Clerk ${randomUUID().slice(0, 8)}` },
+    });
+    const roleId = role.json().id;
+
+    const assign = await app.inject({
+      method: "POST", url: `/api/admin/users/${targetUserId}/roles`,
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+      payload: { roleId, storeId },
+    });
+    expect(assign.statusCode).toBe(201);
+    const userRoleId = assign.json().id;
+    expect(userRoleId).toBeTruthy();
+
+    const detail = await app.inject({
+      method: "GET", url: `/api/admin/users/${targetUserId}`,
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+    });
+    const assignment = detail.json().roleAssignments.find((a: { id: string }) => a.id === userRoleId);
+    expect(assignment.store_id).toBe(storeId);
+
+    const removed = await app.inject({
+      method: "POST", url: `/api/admin/users/${targetUserId}/roles/${userRoleId}/remove`,
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+    });
+    expect(removed.statusCode).toBe(200);
+
+    const detailAfter = await app.inject({
+      method: "GET", url: `/api/admin/users/${targetUserId}`,
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+    });
+    expect(detailAfter.json().roleAssignments).toEqual([]);
   });
 });

@@ -29,6 +29,37 @@ interface Role {
   permissions: string[];
 }
 
+interface Permission {
+  id: string;
+  module: string;
+  action: string;
+  code: string;
+  description: string;
+}
+
+interface RoleAssignment {
+  id: string;
+  role_id: string;
+  role_name: string;
+  store_id: string | null;
+  store_name_en: string | null;
+}
+
+interface UserDetail {
+  id: string;
+  email: string;
+  full_name_en: string;
+  full_name_ar: string;
+  user_is_active: boolean;
+  has_company_access: boolean;
+  roleAssignments: RoleAssignment[];
+}
+
+interface AdminStore {
+  id: string;
+  name_en: string;
+}
+
 interface AuditLogEntry {
   id: string;
   table_name: string;
@@ -44,8 +75,183 @@ const ACTION_STYLE: Record<AuditLogEntry["action"], string> = {
   DELETE: "bg-red-100 text-red-600",
 };
 
+function InviteUserForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const [email, setEmail] = useState("");
+  const [fullNameEn, setFullNameEn] = useState("");
+  const [fullNameAr, setFullNameAr] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/admin/users", { method: "POST", token, companyId, body: { email, fullNameEn, fullNameAr, password } });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to invite user");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Field label="Email" required>
+        <TextInput type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Name (English)" required>
+          <TextInput required value={fullNameEn} onChange={(e) => setFullNameEn(e.target.value)} />
+        </Field>
+        <Field label="Name (Arabic)" required>
+          <TextInput required dir="rtl" value={fullNameAr} onChange={(e) => setFullNameAr(e.target.value)} />
+        </Field>
+      </div>
+      <Field label="Temporary Password" required>
+        <TextInput type="text" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" />
+      </Field>
+      <p className="mb-3 text-xs text-slate-400">
+        If this email already belongs to a user elsewhere in the group, this just grants them access to this company instead of creating a duplicate.
+      </p>
+      <FormActions error={error} submitting={submitting} submitLabel="Invite User" />
+    </form>
+  );
+}
+
+function UserDetailModal({ userId, onClose, onChanged }: { userId: string; onClose: () => void; onChanged: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: roles } = useApiList<Role>("/api/admin/roles");
+  const { data: stores } = useApiList<AdminStore>("/api/stores");
+  const [detail, setDetail] = useState<UserDetail | null>(null);
+  const [roleId, setRoleId] = useState("");
+  const [storeId, setStoreId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function reload() {
+    const d = await apiRequest<UserDetail>(`/api/admin/users/${userId}`, { token, companyId });
+    setDetail(d);
+  }
+
+  useEffect(() => {
+    if (!token || !companyId) return;
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, token, companyId]);
+
+  async function assignRole(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await apiRequest(`/api/admin/users/${userId}/roles`, { method: "POST", token, companyId, body: { roleId, storeId: storeId || null } });
+      setRoleId("");
+      setStoreId("");
+      await reload();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to assign role");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeAssignment(assignmentId: string) {
+    setBusy(true);
+    try {
+      await apiRequest(`/api/admin/users/${userId}/roles/${assignmentId}/remove`, { method: "POST", token, companyId });
+      await reload();
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleAccess() {
+    setBusy(true);
+    try {
+      await apiRequest(`/api/admin/users/${userId}/${detail!.has_company_access ? "deactivate" : "reactivate"}`, { method: "POST", token, companyId });
+      await reload();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update access");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <div className="font-medium text-slate-900">{detail.email}</div>
+          <div className="text-xs text-slate-500">{detail.full_name_en}</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusBadge status={detail.has_company_access ? "active" : "inactive"} />
+          <button onClick={toggleAccess} disabled={busy} className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50">
+            {detail.has_company_access ? "Deactivate" : "Reactivate"}
+          </button>
+        </div>
+      </div>
+
+      {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+
+      <div className="mb-3 text-sm font-medium text-slate-700">Role assignments</div>
+      <div className="mb-3 space-y-1.5">
+        {detail.roleAssignments.length === 0 && <p className="text-xs text-slate-400">No roles assigned yet.</p>}
+        {detail.roleAssignments.map((a) => (
+          <div key={a.id} className="flex items-center justify-between rounded-md border border-slate-100 px-3 py-2 text-sm">
+            <span className="text-slate-700">
+              {a.role_name}
+              {a.store_name_en && <span className="ms-1 text-xs text-slate-400">· {a.store_name_en} only</span>}
+            </span>
+            <button onClick={() => removeAssignment(a.id)} disabled={busy} className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50">
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <form onSubmit={assignRole} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+        <div className="mb-2 text-xs font-medium text-slate-600">Assign a role</div>
+        <div className="grid grid-cols-2 gap-2">
+          <SelectInput required value={roleId} onChange={(e) => setRoleId(e.target.value)}>
+            <option value="">Select role...</option>
+            {roles?.filter((r) => r.is_active).map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </SelectInput>
+          <SelectInput value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+            <option value="">All stores (company-wide)</option>
+            {stores?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name_en} only
+              </option>
+            ))}
+          </SelectInput>
+        </div>
+        <button type="submit" disabled={busy || !roleId} className="mt-2 rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-50">
+          {busy ? "Working..." : "Assign"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function UsersTab() {
-  const { data, error } = useApiList<AdminUser>("/api/admin/users");
+  const { data, error, reload } = useApiList<AdminUser>("/api/admin/users");
+  const [showNew, setShowNew] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const columns: Column<AdminUser>[] = [
     { key: "email", header: "Email", render: (r) => <span className="font-medium text-slate-900">{r.email}</span> },
@@ -55,23 +261,187 @@ function UsersTab() {
   ];
 
   return (
-    <ListPage
-      title=""
-      data={data}
-      error={error}
-      columns={columns}
-      getRowKey={(r) => r.id}
-      getSearchText={(r) => `${r.email} ${r.full_name_en}`}
-      emptyIcon={ShieldCheck}
-      emptyText="No users yet."
-      searchPlaceholder="Search users..."
-      actionLabel="Invite User"
-    />
+    <>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => `${r.email} ${r.full_name_en}`}
+        emptyIcon={ShieldCheck}
+        emptyText="No users yet."
+        searchPlaceholder="Search users..."
+        actionLabel="Invite User"
+        onAction={() => setShowNew(true)}
+        onRowClick={(r) => setOpenId(r.id)}
+      />
+      {showNew && (
+        <Modal title="Invite User" onClose={() => setShowNew(false)}>
+          <InviteUserForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+      {openId && (
+        <Modal title="User" onClose={() => setOpenId(null)}>
+          <UserDetailModal userId={openId} onClose={() => setOpenId(null)} onChanged={reload} />
+        </Modal>
+      )}
+    </>
+  );
+}
+
+function NewRoleForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/admin/roles", { method: "POST", token, companyId, body: { name, description: description || undefined } });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create role");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Field label="Role Name" required>
+        <TextInput required value={name} onChange={(e) => setName(e.target.value)} />
+      </Field>
+      <Field label="Description">
+        <TextInput value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
+      </Field>
+      <p className="mb-3 text-xs text-slate-400">Permissions are set afterward from the role's detail view.</p>
+      <FormActions error={error} submitting={submitting} submitLabel="Create Role" />
+    </form>
+  );
+}
+
+function RoleDetailModal({ roleId, onClose, onChanged }: { roleId: string; onClose: () => void; onChanged: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: catalog } = useApiList<Permission>("/api/admin/permissions");
+  const [role, setRole] = useState<Role | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function reload() {
+    const roles = await apiRequest<Role[]>("/api/admin/roles", { token, companyId });
+    const found = roles.find((r) => r.id === roleId) ?? null;
+    setRole(found);
+    if (found) setSelected(new Set(found.permissions));
+  }
+
+  useEffect(() => {
+    if (!token || !companyId) return;
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roleId, token, companyId]);
+
+  function toggle(code: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  }
+
+  async function save() {
+    setError(null);
+    setBusy(true);
+    try {
+      await apiRequest(`/api/admin/roles/${roleId}/permissions`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { permissionCodes: [...selected] },
+      });
+      await reload();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save permissions");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleActive() {
+    setBusy(true);
+    try {
+      await apiRequest(`/api/admin/roles/${roleId}/${role!.is_active ? "deactivate" : "reactivate"}`, { method: "POST", token, companyId });
+      await reload();
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!role || !catalog) return <p className="text-sm text-slate-400">Loading...</p>;
+
+  const grouped = new Map<string, Permission[]>();
+  for (const p of catalog) {
+    const list = grouped.get(p.module) ?? [];
+    list.push(p);
+    grouped.set(p.module, list);
+  }
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <div className="font-medium text-slate-900">{role.name}</div>
+          {role.description && <div className="text-xs text-slate-500">{role.description}</div>}
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusBadge status={role.is_active ? "active" : "inactive"} />
+          <button onClick={toggleActive} disabled={busy} className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50">
+            {role.is_active ? "Deactivate" : "Reactivate"}
+          </button>
+        </div>
+      </div>
+
+      {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+
+      <div className="mb-3 max-h-96 space-y-3 overflow-y-auto">
+        {[...grouped.entries()].map(([module, perms]) => (
+          <div key={module}>
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{module}</div>
+            <div className="space-y-1">
+              {perms.map((p) => (
+                <label key={p.code} className="flex items-start gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50">
+                  <input type="checkbox" className="mt-0.5" checked={selected.has(p.code)} onChange={() => toggle(p.code)} />
+                  <span>
+                    <span className="text-slate-800">{p.description}</span>
+                    <span className="ms-1.5 font-mono text-xs text-slate-400">{p.code}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button onClick={save} disabled={busy} className="rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50">
+        {busy ? "Saving..." : "Save Permissions"}
+      </button>
+    </div>
   );
 }
 
 function RolesTab() {
-  const { data, error } = useApiList<Role>("/api/admin/roles");
+  const { data, error, reload } = useApiList<Role>("/api/admin/roles");
+  const [showNew, setShowNew] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const columns: Column<Role>[] = [
     { key: "name", header: "Role", render: (r) => <span className="font-medium text-slate-900">{r.name}</span> },
@@ -81,18 +451,32 @@ function RolesTab() {
   ];
 
   return (
-    <ListPage
-      title=""
-      data={data}
-      error={error}
-      columns={columns}
-      getRowKey={(r) => r.id}
-      getSearchText={(r) => r.name}
-      emptyIcon={KeyRound}
-      emptyText="No roles yet."
-      searchPlaceholder="Search roles..."
-      actionLabel="New Role"
-    />
+    <>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => r.name}
+        emptyIcon={KeyRound}
+        emptyText="No roles yet."
+        searchPlaceholder="Search roles..."
+        actionLabel="New Role"
+        onAction={() => setShowNew(true)}
+        onRowClick={(r) => setOpenId(r.id)}
+      />
+      {showNew && (
+        <Modal title="New Role" onClose={() => setShowNew(false)}>
+          <NewRoleForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+      {openId && (
+        <Modal title="Role Permissions" onClose={() => setOpenId(null)}>
+          <RoleDetailModal roleId={openId} onClose={() => setOpenId(null)} onChanged={reload} />
+        </Modal>
+      )}
+    </>
   );
 }
 
