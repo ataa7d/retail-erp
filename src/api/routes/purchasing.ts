@@ -8,8 +8,13 @@ import {
   postGoodsReceipt,
   createSupplierInvoice,
   postSupplierInvoice,
+  createPurchaseRequisition,
+  submitPurchaseRequisition,
+  approvePurchaseRequisition,
+  rejectPurchaseRequisition,
+  convertPurchaseRequisitionToPo,
 } from "../../purchasing/purchasingService.js";
-import { NotFoundError } from "../errors.js";
+import { NotFoundError, BusinessRuleError } from "../errors.js";
 
 const lineSchema = z.object({
   itemVariantId: z.string().uuid(),
@@ -29,6 +34,45 @@ const createSchema = z.object({
   expectedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   fiscalPeriodId: z.string().uuid(),
   lines: z.array(lineSchema).min(1),
+  currency: currencyCode.optional(),
+  exchangeRate: z.number().positive().nullable().optional(),
+});
+
+const requisitionLineSchema = z.object({
+  itemVariantId: z.string().uuid(),
+  qty: z.number().positive(),
+  notes: z.string().nullable().optional(),
+});
+
+const requisitionCreateSchema = z.object({
+  storeId: z.string().uuid(),
+  requisitionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  neededByDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  notes: z.string().nullable().optional(),
+  lines: z.array(requisitionLineSchema).min(1),
+});
+
+const requisitionRejectSchema = z.object({
+  rejectionReason: z.string().min(1),
+});
+
+const requisitionConvertLineSchema = z.object({
+  requisitionLineId: z.string().uuid(),
+  itemVariantId: z.string().uuid(),
+  qty: z.number().positive(),
+  unitPrice: z.number().nonnegative(),
+  discountAmount: z.number().nonnegative().default(0),
+  vatRate: z.number().nonnegative(),
+  priceIncludesVat: z.boolean(),
+});
+
+const requisitionConvertSchema = z.object({
+  storeId: z.string().uuid(),
+  supplierId: z.string().uuid(),
+  orderDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  expectedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  fiscalPeriodId: z.string().uuid(),
+  lines: z.array(requisitionConvertLineSchema).min(1),
   currency: currencyCode.optional(),
   exchangeRate: z.number().positive().nullable().optional(),
 });
@@ -175,6 +219,158 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
        JOIN items i ON i.id = iv.item_id
        WHERE pol.purchase_order_id = $1
        ORDER BY pol.line_number`,
+      [request.params.id],
+    );
+    return { ...header.rows[0], lines: lines.rows };
+  });
+
+  // ---- Purchase Requisitions (draft -> pending_approval -> approved/rejected
+  // -> converted_to_po; see migration 0060 for the full state machine) ----
+
+  app.post(
+    "/purchase-requisitions",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.requisition.create")] },
+    async (request, reply) => {
+      const body = requisitionCreateSchema.parse(request.body);
+      const id = await withTransaction(
+        (client) =>
+          createPurchaseRequisition(client, {
+            companyId: request.companyId,
+            storeId: body.storeId,
+            requisitionDate: body.requisitionDate,
+            neededByDate: body.neededByDate ?? null,
+            notes: body.notes ?? null,
+            lines: body.lines,
+            createdBy: request.authUser.id,
+          }),
+        request.authUser.id,
+      );
+      reply.status(201);
+      return { id };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/purchase-requisitions/:id/submit",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.requisition.create")] },
+    async (request) => {
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM purchase_requisitions WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("purchase requisition not found");
+        await submitPurchaseRequisition(client, request.params.id);
+      }, request.authUser.id);
+      return { id: request.params.id, status: "pending_approval" };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/purchase-requisitions/:id/approve",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.requisition.approve")] },
+    async (request) => {
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM purchase_requisitions WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("purchase requisition not found");
+        await approvePurchaseRequisition(client, request.params.id, request.authUser.id);
+      }, request.authUser.id);
+      return { id: request.params.id, status: "approved" };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/purchase-requisitions/:id/reject",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.requisition.approve")] },
+    async (request) => {
+      const body = requisitionRejectSchema.parse(request.body);
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM purchase_requisitions WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("purchase requisition not found");
+        await rejectPurchaseRequisition(client, request.params.id, request.authUser.id, body.rejectionReason);
+      }, request.authUser.id);
+      return { id: request.params.id, status: "rejected" };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/purchase-requisitions/:id/convert",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.po.create")] },
+    async (request, reply) => {
+      const body = requisitionConvertSchema.parse(request.body);
+      const existing = await pool.query(`SELECT id, document_status FROM purchase_requisitions WHERE id = $1 AND company_id = $2`, [
+        request.params.id,
+        request.companyId,
+      ]);
+      if (existing.rows.length === 0) throw new NotFoundError("purchase requisition not found");
+      if (existing.rows[0]!.document_status !== "approved") {
+        throw new BusinessRuleError("purchase requisition must be approved before it can be converted to a purchase order");
+      }
+
+      const poId = await withTransaction(
+        (client) =>
+          convertPurchaseRequisitionToPo(client, {
+            requisitionId: request.params.id,
+            companyId: request.companyId,
+            storeId: body.storeId,
+            supplierId: body.supplierId,
+            orderDate: body.orderDate,
+            expectedDate: body.expectedDate ?? null,
+            fiscalPeriodId: body.fiscalPeriodId,
+            createdBy: request.authUser.id,
+            currency: body.currency ?? null,
+            exchangeRate: body.exchangeRate ?? null,
+            lines: body.lines,
+          }),
+        request.authUser.id,
+      );
+      reply.status(201);
+      return { purchaseOrderId: poId };
+    },
+  );
+
+  app.get("/purchase-requisitions", { preHandler: app.authenticate }, async (request) => {
+    const result = await pool.query(
+      `SELECT pr.id, pr.document_number, pr.requisition_date, pr.needed_by_date, pr.document_status,
+              pr.rejection_reason, s.name_en AS store_name_en,
+              u.email AS requested_by_email,
+              (SELECT COUNT(*) FROM purchase_requisition_lines WHERE requisition_id = pr.id) AS line_count
+       FROM purchase_requisitions pr
+       JOIN stores s ON s.id = pr.store_id
+       LEFT JOIN users u ON u.id = pr.created_by
+       WHERE pr.company_id = $1
+       ORDER BY pr.requisition_date DESC, pr.created_at DESC
+       LIMIT 200`,
+      [request.companyId],
+    );
+    return result.rows;
+  });
+
+  app.get<{ Params: { id: string } }>("/purchase-requisitions/:id", { preHandler: app.authenticate }, async (request) => {
+    const header = await pool.query(
+      `SELECT pr.*, s.name_en AS store_name_en, u.email AS requested_by_email, du.email AS decided_by_email
+       FROM purchase_requisitions pr
+       JOIN stores s ON s.id = pr.store_id
+       LEFT JOIN users u ON u.id = pr.created_by
+       LEFT JOIN users du ON du.id = pr.decided_by
+       WHERE pr.id = $1 AND pr.company_id = $2`,
+      [request.params.id, request.companyId],
+    );
+    if (header.rows.length === 0) throw new NotFoundError("purchase requisition not found");
+
+    const lines = await pool.query(
+      `SELECT prl.*, iv.variant_code, i.name_en AS item_name_en, i.name_ar AS item_name_ar
+       FROM purchase_requisition_lines prl
+       JOIN item_variants iv ON iv.id = prl.item_variant_id
+       JOIN items i ON i.id = iv.item_id
+       WHERE prl.requisition_id = $1
+       ORDER BY prl.line_number`,
       [request.params.id],
     );
     return { ...header.rows[0], lines: lines.rows };

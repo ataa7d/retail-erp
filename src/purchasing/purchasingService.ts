@@ -53,6 +53,8 @@ export interface CreatePurchaseOrderParams {
   currency?: string | null;
   /** Indicative rate at order date (a PO posts no GL, so this is informational). */
   exchangeRate?: number | null;
+  /** Set when this PO was created by converting an approved requisition. */
+  purchaseRequisitionId?: string | null;
 }
 
 export async function createPurchaseOrder(client: Client, p: CreatePurchaseOrderParams): Promise<string> {
@@ -63,9 +65,12 @@ export async function createPurchaseOrder(client: Client, p: CreatePurchaseOrder
 
   const header = await client.query<{ id: string }>(
     `INSERT INTO purchase_orders
-       (company_id, store_id, supplier_id, document_number, order_date, expected_date, fiscal_period_id, created_by, currency, exchange_rate)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
-    [p.companyId, p.storeId, p.supplierId, documentNumber, p.orderDate, p.expectedDate ?? null, p.fiscalPeriodId, p.createdBy ?? null, currency, exchangeRate],
+       (company_id, store_id, supplier_id, document_number, order_date, expected_date, fiscal_period_id, created_by, currency, exchange_rate, purchase_requisition_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+    [
+      p.companyId, p.storeId, p.supplierId, documentNumber, p.orderDate, p.expectedDate ?? null, p.fiscalPeriodId,
+      p.createdBy ?? null, currency, exchangeRate, p.purchaseRequisitionId ?? null,
+    ],
   );
   const poId = header.rows[0]!.id;
 
@@ -107,6 +112,112 @@ export async function createPurchaseOrder(client: Client, p: CreatePurchaseOrder
 
 export async function postPurchaseOrder(client: Client, poId: string, postedBy: string): Promise<void> {
   await client.query(`UPDATE purchase_orders SET document_status = 'posted', posted_by = $2 WHERE id = $1`, [poId, postedBy]);
+}
+
+// ---------------------------------------------------------------------------
+// Purchase requisitions
+// ---------------------------------------------------------------------------
+
+export interface CreatePurchaseRequisitionParams {
+  companyId: string;
+  storeId: string;
+  requisitionDate: string;
+  neededByDate?: string | null;
+  notes?: string | null;
+  lines: Array<{ itemVariantId: string; qty: number; notes?: string | null }>;
+  createdBy?: string | null;
+}
+
+export async function createPurchaseRequisition(client: Client, p: CreatePurchaseRequisitionParams): Promise<string> {
+  const fiscalYear = Number(p.requisitionDate.slice(0, 4));
+  const documentNumber = await nextDocumentNumber(client, p.companyId, "purchase_requisition", fiscalYear, "PR-");
+
+  const header = await client.query<{ id: string }>(
+    `INSERT INTO purchase_requisitions (company_id, store_id, document_number, requisition_date, needed_by_date, notes, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+    [p.companyId, p.storeId, documentNumber, p.requisitionDate, p.neededByDate ?? null, p.notes ?? null, p.createdBy ?? null],
+  );
+  const requisitionId = header.rows[0]!.id;
+
+  let lineNumber = 0;
+  for (const line of p.lines) {
+    lineNumber += 1;
+    await client.query(
+      `INSERT INTO purchase_requisition_lines (company_id, requisition_id, line_number, item_variant_id, qty, notes)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [p.companyId, requisitionId, lineNumber, line.itemVariantId, line.qty, line.notes ?? null],
+    );
+  }
+
+  return requisitionId;
+}
+
+export async function submitPurchaseRequisition(client: Client, requisitionId: string): Promise<void> {
+  await client.query(`UPDATE purchase_requisitions SET document_status = 'pending_approval' WHERE id = $1`, [requisitionId]);
+}
+
+export async function approvePurchaseRequisition(client: Client, requisitionId: string, decidedBy: string): Promise<void> {
+  await client.query(`UPDATE purchase_requisitions SET document_status = 'approved', decided_by = $2 WHERE id = $1`, [
+    requisitionId,
+    decidedBy,
+  ]);
+}
+
+export async function rejectPurchaseRequisition(
+  client: Client,
+  requisitionId: string,
+  decidedBy: string,
+  rejectionReason: string,
+): Promise<void> {
+  await client.query(
+    `UPDATE purchase_requisitions SET document_status = 'rejected', decided_by = $2, rejection_reason = $3 WHERE id = $1`,
+    [requisitionId, decidedBy, rejectionReason],
+  );
+}
+
+export interface ConvertRequisitionToPoParams {
+  requisitionId: string;
+  companyId: string;
+  storeId: string;
+  supplierId: string;
+  orderDate: string;
+  expectedDate?: string | null;
+  fiscalPeriodId: string;
+  createdBy?: string | null;
+  currency?: string | null;
+  exchangeRate?: number | null;
+  /** Pricing decided at conversion time -- requisition lines carry no price. */
+  lines: Array<{ requisitionLineId: string; itemVariantId: string; qty: number; unitPrice: number; discountAmount: number; vatRate: number; priceIncludesVat: boolean }>;
+}
+
+export async function convertPurchaseRequisitionToPo(client: Client, p: ConvertRequisitionToPoParams): Promise<string> {
+  const poId = await createPurchaseOrder(client, {
+    companyId: p.companyId,
+    storeId: p.storeId,
+    supplierId: p.supplierId,
+    orderDate: p.orderDate,
+    expectedDate: p.expectedDate,
+    fiscalPeriodId: p.fiscalPeriodId,
+    createdBy: p.createdBy,
+    currency: p.currency,
+    exchangeRate: p.exchangeRate,
+    purchaseRequisitionId: p.requisitionId,
+    lines: p.lines.map((l) => ({
+      itemVariantId: l.itemVariantId,
+      qty: l.qty,
+      unitPrice: l.unitPrice,
+      discountAmount: l.discountAmount,
+      vatRate: l.vatRate,
+      priceIncludesVat: l.priceIncludesVat,
+    })),
+  });
+
+  if (p.createdBy) {
+    await postPurchaseOrder(client, poId, p.createdBy);
+  }
+  await client.query(`UPDATE purchase_requisitions SET document_status = 'converted_to_po' WHERE id = $1`, [p.requisitionId]);
+
+  return poId;
 }
 
 // ---------------------------------------------------------------------------

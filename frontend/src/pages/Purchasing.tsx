@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { ShoppingCart, Truck, Plus, Trash2, PackageCheck, ReceiptText } from "lucide-react";
+import { ShoppingCart, Truck, Plus, Trash2, PackageCheck, ReceiptText, ClipboardList } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -150,6 +150,33 @@ interface SupplierInvoice {
   base_gross_amount: string | null;
   supplier_name_en: string;
   supplier_name_ar: string;
+}
+
+interface PurchaseRequisition {
+  id: string;
+  document_number: string;
+  requisition_date: string;
+  needed_by_date: string | null;
+  document_status: string;
+  rejection_reason: string | null;
+  store_name_en: string;
+  requested_by_email: string | null;
+  line_count: string;
+}
+
+interface RequisitionLine {
+  id: string;
+  item_variant_id: string;
+  qty: string;
+  notes: string | null;
+  variant_code: string;
+  item_name_en: string;
+}
+
+interface RequisitionDetail extends PurchaseRequisition {
+  store_id: string;
+  decided_by_email: string | null;
+  lines: RequisitionLine[];
 }
 
 function useVariantOptions() {
@@ -775,6 +802,433 @@ function SupplierInvoicesTab() {
   );
 }
 
+function NewRequisitionForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: stores } = useApiList<Store>("/api/stores");
+  const variantOptions = useVariantOptions();
+
+  const [storeId, setStoreId] = useState("");
+  const [requisitionDate, setRequisitionDate] = useState(new Date().toISOString().slice(0, 10));
+  const [neededByDate, setNeededByDate] = useState("");
+  const [notes, setNotes] = useState("");
+  const [lines, setLines] = useState<Array<{ itemVariantId: string; qty: string; notes: string }>>([
+    { itemVariantId: "", qty: "1", notes: "" },
+  ]);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  function updateLine(index: number, patch: Partial<{ itemVariantId: string; qty: string; notes: string }>) {
+    setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
+  }
+  function addLine() {
+    setLines((prev) => [...prev, { itemVariantId: "", qty: "1", notes: "" }]);
+  }
+  function removeLine(index: number) {
+    setLines((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const validLines = lines.filter((l) => l.itemVariantId && Number(l.qty) > 0);
+    if (validLines.length === 0) {
+      setError("Add at least one line with an item and quantity.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const created = await apiRequest<{ id: string }>("/api/purchase-requisitions", {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          storeId,
+          requisitionDate,
+          neededByDate: neededByDate || null,
+          notes: notes || undefined,
+          lines: validLines.map((l) => ({ itemVariantId: l.itemVariantId, qty: Number(l.qty), notes: l.notes || undefined })),
+        },
+      });
+      await apiRequest(`/api/purchase-requisitions/${created.id}/submit`, { method: "POST", token, companyId });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create requisition");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Store" required>
+          <SelectInput required value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+            <option value="">Select...</option>
+            {stores?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name_en}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="Requisition Date" required>
+          <TextInput type="date" required value={requisitionDate} onChange={(e) => setRequisitionDate(e.target.value)} />
+        </Field>
+      </div>
+      <Field label="Needed By">
+        <TextInput type="date" value={neededByDate} onChange={(e) => setNeededByDate(e.target.value)} />
+      </Field>
+      <Field label="Notes">
+        <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" />
+      </Field>
+
+      <div className="mb-2 mt-3 text-sm font-medium text-slate-700">Lines</div>
+      <div className="space-y-2">
+        {lines.map((line, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <SelectInput value={line.itemVariantId} onChange={(e) => updateLine(i, { itemVariantId: e.target.value })}>
+                <option value="">Select item...</option>
+                {variantOptions.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.label}
+                  </option>
+                ))}
+              </SelectInput>
+            </div>
+            <div className="w-24 flex-none">
+              <TextInput type="number" min={0.001} step="0.001" value={line.qty} onChange={(e) => updateLine(i, { qty: e.target.value })} />
+            </div>
+            <button
+              type="button"
+              onClick={() => removeLine(i)}
+              disabled={lines.length === 1}
+              className="flex-none rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600 disabled:opacity-30"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={addLine} className="mb-3 mt-2 flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700">
+        <Plus size={13} /> Add line
+      </button>
+
+      <p className="mb-3 text-xs text-slate-400">
+        Submitted immediately for approval — no separate draft step. Someone else (not you) will need to approve it before it can become a purchase order.
+      </p>
+      <FormActions error={error} submitting={submitting} submitLabel="Submit for Approval" />
+    </form>
+  );
+}
+
+function ConvertRequisitionForm({ requisition, onClose, onConverted }: { requisition: RequisitionDetail; onClose: () => void; onConverted: () => void }) {
+  const { token, companyId } = useAuth();
+  const baseCurrency = useBaseCurrency();
+  const { data: suppliers } = useApiList<Supplier>("/api/suppliers");
+  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
+  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
+
+  const [supplierId, setSupplierId] = useState("");
+  const [orderDate, setOrderDate] = useState(new Date().toISOString().slice(0, 10));
+  const [expectedDate, setExpectedDate] = useState("");
+  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
+  const [lineData, setLineData] = useState<Record<string, { unitPrice: string; vatRate: string; priceIncludesVat: boolean }>>(
+    Object.fromEntries(requisition.lines.map((l) => [l.id, { unitPrice: "0", vatRate: "15", priceIncludesVat: false }])),
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest(`/api/purchase-requisitions/${requisition.id}/convert`, {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          storeId: requisition.store_id,
+          supplierId,
+          orderDate,
+          expectedDate: expectedDate || null,
+          fiscalPeriodId,
+          lines: requisition.lines.map((l) => ({
+            requisitionLineId: l.id,
+            itemVariantId: l.item_variant_id,
+            qty: Number(l.qty),
+            unitPrice: Number(lineData[l.id]?.unitPrice ?? 0),
+            discountAmount: 0,
+            vatRate: Number(lineData[l.id]?.vatRate ?? 15),
+            priceIncludesVat: lineData[l.id]?.priceIncludesVat ?? false,
+          })),
+        },
+      });
+      onConverted();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to convert to purchase order");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Supplier" required>
+          <SelectInput required value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+            <option value="">Select...</option>
+            {suppliers?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name_en} ({s.currency})
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="Fiscal Period" required>
+          <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
+            <option value="">Select...</option>
+            {openPeriods.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.year_name} — P{p.period_number}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="Order Date" required>
+          <TextInput type="date" required value={orderDate} onChange={(e) => setOrderDate(e.target.value)} />
+        </Field>
+        <Field label="Expected Date">
+          <TextInput type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} />
+        </Field>
+      </div>
+
+      <div className="mb-2 mt-3 text-sm font-medium text-slate-700">Set pricing per line</div>
+      <div className="space-y-2">
+        {requisition.lines.map((line) => (
+          <div key={line.id} className="rounded-md border border-slate-200 p-2">
+            <div className="mb-1.5 text-sm text-slate-900">
+              {line.item_name_en} <span className="text-xs text-slate-400">({line.variant_code}) · qty {Number(line.qty).toLocaleString()}</span>
+            </div>
+            <div className="flex gap-1.5">
+              <TextInput
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="Unit Price"
+                value={lineData[line.id]?.unitPrice ?? ""}
+                onChange={(e) => setLineData((prev) => ({ ...prev, [line.id]: { ...prev[line.id]!, unitPrice: e.target.value } }))}
+                className="min-w-0 flex-1"
+              />
+              <div className="w-20 flex-none">
+                <TextInput
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="VAT %"
+                  value={lineData[line.id]?.vatRate ?? ""}
+                  onChange={(e) => setLineData((prev) => ({ ...prev, [line.id]: { ...prev[line.id]!, vatRate: e.target.value } }))}
+                />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="mb-3 mt-3 text-xs text-slate-400">Creates and approves (posts) a new purchase order for this supplier, pre-filled from the requisition's items and quantities.</p>
+      <FormActions error={error} submitting={submitting} submitLabel="Create Purchase Order" />
+    </form>
+  );
+}
+
+function RequisitionDetailModal({ requisitionId, onClose, onChanged }: { requisitionId: string; onClose: () => void; onChanged: () => void }) {
+  const { token, companyId, hasPermission, me } = useAuth();
+  const [detail, setDetail] = useState<RequisitionDetail | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [showReject, setShowReject] = useState(false);
+  const [showConvert, setShowConvert] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function reload() {
+    const d = await apiRequest<RequisitionDetail>(`/api/purchase-requisitions/${requisitionId}`, { token, companyId });
+    setDetail(d);
+  }
+
+  useEffect(() => {
+    if (!token || !companyId) return;
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requisitionId, token, companyId]);
+
+  async function approve() {
+    setError(null);
+    setBusy(true);
+    try {
+      await apiRequest(`/api/purchase-requisitions/${requisitionId}/approve`, { method: "POST", token, companyId });
+      await reload();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to approve");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reject(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await apiRequest(`/api/purchase-requisitions/${requisitionId}/reject`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { rejectionReason },
+      });
+      await reload();
+      onChanged();
+      setShowReject(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to reject");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+
+  const isOwnRequisition = me?.user.email === detail.requested_by_email;
+  const canApprove = hasPermission("purchasing.requisition.approve") && !isOwnRequisition;
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <div className="font-mono text-xs text-slate-500">{detail.document_number}</div>
+          <div className="text-sm text-slate-700">
+            {detail.store_name_en} · requested by {detail.requested_by_email ?? "—"}
+          </div>
+        </div>
+        <StatusBadge status={detail.document_status} />
+      </div>
+      {detail.notes && <p className="mb-2 text-xs text-slate-500">{detail.notes}</p>}
+      {detail.document_status === "rejected" && detail.rejection_reason && (
+        <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">Rejected: {detail.rejection_reason}</p>
+      )}
+
+      <div className="mb-3 space-y-1 rounded-md border border-slate-200 p-2">
+        {detail.lines.map((line) => (
+          <div key={line.id} className="flex items-center justify-between text-sm">
+            <span className="text-slate-700">
+              {line.item_name_en} <span className="text-xs text-slate-400">({line.variant_code})</span>
+              {line.notes && <span className="ms-2 text-xs text-slate-400">— {line.notes}</span>}
+            </span>
+            <span className="font-medium text-slate-900">{Number(line.qty).toLocaleString()}</span>
+          </div>
+        ))}
+      </div>
+
+      {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+
+      {detail.document_status === "pending_approval" && canApprove && !showReject && (
+        <div className="flex gap-2">
+          <button onClick={approve} disabled={busy} className="rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
+            {busy ? "Working..." : "Approve"}
+          </button>
+          <button onClick={() => setShowReject(true)} disabled={busy} className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">
+            Reject
+          </button>
+        </div>
+      )}
+      {detail.document_status === "pending_approval" && !canApprove && (
+        <p className="text-xs text-slate-400">
+          {isOwnRequisition ? "You cannot approve your own requisition." : "Awaiting approval from someone with requisition-approval rights."}
+        </p>
+      )}
+      {showReject && (
+        <form onSubmit={reject} className="space-y-2">
+          <Field label="Rejection Reason" required>
+            <TextInput required value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} />
+          </Field>
+          <div className="flex gap-2">
+            <button type="submit" disabled={busy} className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">
+              {busy ? "Working..." : "Confirm Rejection"}
+            </button>
+            <button type="button" onClick={() => setShowReject(false)} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
+      {detail.document_status === "approved" && !showConvert && (
+        <button onClick={() => setShowConvert(true)} className="rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600">
+          Convert to Purchase Order
+        </button>
+      )}
+      {showConvert && (
+        <ConvertRequisitionForm
+          requisition={detail}
+          onClose={() => setShowConvert(false)}
+          onConverted={() => {
+            onChanged();
+            onClose();
+          }}
+        />
+      )}
+      {detail.document_status === "converted_to_po" && <p className="text-xs text-slate-400">Already converted into a purchase order.</p>}
+    </div>
+  );
+}
+
+function RequisitionsTab() {
+  const { data, error, reload } = useApiList<PurchaseRequisition>("/api/purchase-requisitions");
+  const [showNew, setShowNew] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  const columns: Column<PurchaseRequisition>[] = [
+    { key: "number", header: "PR #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "store", header: "Store", render: (r) => r.store_name_en },
+    { key: "date", header: "Date", render: (r) => new Date(r.requisition_date).toLocaleDateString() },
+    { key: "requester", header: "Requested By", render: (r) => r.requested_by_email ?? "—" },
+    { key: "lines", header: "Items", render: (r) => r.line_count, numeric: true },
+    { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
+  ];
+
+  return (
+    <>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => `${r.document_number} ${r.store_name_en} ${r.requested_by_email ?? ""}`}
+        emptyIcon={ClipboardList}
+        emptyText="No purchase requisitions yet."
+        searchPlaceholder="Search requisitions..."
+        actionLabel="New Requisition"
+        onAction={() => setShowNew(true)}
+        onRowClick={(r) => setOpenId(r.id)}
+      />
+      {showNew && (
+        <Modal title="New Purchase Requisition" onClose={() => setShowNew(false)}>
+          <NewRequisitionForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+      {openId && (
+        <Modal title="Purchase Requisition" onClose={() => setOpenId(null)}>
+          <RequisitionDetailModal requisitionId={openId} onClose={() => setOpenId(null)} onChanged={reload} />
+        </Modal>
+      )}
+    </>
+  );
+}
+
 function PurchaseOrdersTab() {
   const { i18n } = useTranslation();
   const { data, error, reload } = useApiList<PurchaseOrder>("/api/purchase-orders");
@@ -1129,6 +1583,7 @@ export default function Purchasing() {
       <h1 className="mb-4 text-xl font-semibold text-slate-900">{t("nav.purchasing")}</h1>
       <Tabs
         tabs={[
+          { key: "requisitions", label: "Requisitions", content: <RequisitionsTab /> },
           { key: "pos", label: "Purchase Orders", content: <PurchaseOrdersTab /> },
           { key: "receipts", label: "Goods Receipts", content: <GoodsReceiptsTab /> },
           { key: "invoices", label: "Supplier Invoices", content: <SupplierInvoicesTab /> },
