@@ -10,6 +10,7 @@ import {
   postSupplierInvoice,
   createPurchaseRequisition,
   submitPurchaseRequisition,
+  withdrawPurchaseRequisition,
   approvePurchaseRequisition,
   rejectPurchaseRequisition,
   convertPurchaseRequisitionToPo,
@@ -263,6 +264,28 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
         await submitPurchaseRequisition(client, request.params.id);
       }, request.authUser.id);
       return { id: request.params.id, status: "pending_approval" };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/purchase-requisitions/:id/withdraw",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.requisition.create")] },
+    async (request) => {
+      await withTransaction(async (client) => {
+        const existing = await client.query(
+          `SELECT id, created_by, document_status FROM purchase_requisitions WHERE id = $1 AND company_id = $2`,
+          [request.params.id, request.companyId],
+        );
+        if (existing.rows.length === 0) throw new NotFoundError("purchase requisition not found");
+        if (existing.rows[0]!.created_by !== request.authUser.id) {
+          throw new BusinessRuleError("only the original requester can withdraw a purchase requisition");
+        }
+        if (existing.rows[0]!.document_status !== "pending_approval") {
+          throw new BusinessRuleError("only a requisition awaiting approval can be withdrawn");
+        }
+        await withdrawPurchaseRequisition(client, request.params.id);
+      }, request.authUser.id);
+      return { id: request.params.id, status: "withdrawn" };
     },
   );
 

@@ -156,6 +156,10 @@ export async function submitPurchaseRequisition(client: Client, requisitionId: s
   await client.query(`UPDATE purchase_requisitions SET document_status = 'pending_approval' WHERE id = $1`, [requisitionId]);
 }
 
+export async function withdrawPurchaseRequisition(client: Client, requisitionId: string): Promise<void> {
+  await client.query(`UPDATE purchase_requisitions SET document_status = 'withdrawn' WHERE id = $1`, [requisitionId]);
+}
+
 export async function approvePurchaseRequisition(client: Client, requisitionId: string, decidedBy: string): Promise<void> {
   await client.query(`UPDATE purchase_requisitions SET document_status = 'approved', decided_by = $2 WHERE id = $1`, [
     requisitionId,

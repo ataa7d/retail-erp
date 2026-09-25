@@ -102,7 +102,13 @@ interface PoDetail {
   store_id: string;
   supplier_id: string;
   document_number: string;
+  order_date: string;
+  document_status: string;
+  gross_amount: string;
   currency: string;
+  purchase_requisition_id: string | null;
+  supplier_name_en: string;
+  supplier_name_ar: string;
   lines: PoLine[];
 }
 
@@ -1078,6 +1084,20 @@ function RequisitionDetailModal({ requisitionId, onClose, onChanged }: { requisi
     }
   }
 
+  async function withdraw() {
+    setError(null);
+    setBusy(true);
+    try {
+      await apiRequest(`/api/purchase-requisitions/${requisitionId}/withdraw`, { method: "POST", token, companyId });
+      await reload();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to withdraw");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function reject(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -1145,9 +1165,14 @@ function RequisitionDetailModal({ requisitionId, onClose, onChanged }: { requisi
         </div>
       )}
       {detail.document_status === "pending_approval" && !canApprove && (
-        <p className="text-xs text-slate-400">
+        <p className="mb-2 text-xs text-slate-400">
           {isOwnRequisition ? "You cannot approve your own requisition." : "Awaiting approval from someone with requisition-approval rights."}
         </p>
+      )}
+      {detail.document_status === "pending_approval" && isOwnRequisition && (
+        <button onClick={withdraw} disabled={busy} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+          {busy ? "Working..." : "Withdraw"}
+        </button>
       )}
       {showReject && (
         <form onSubmit={reject} className="space-y-2">
@@ -1229,10 +1254,78 @@ function RequisitionsTab() {
   );
 }
 
+function PoDetailModal({ poId, onClose }: { poId: string; onClose: () => void }) {
+  const { token, companyId } = useAuth();
+  const [detail, setDetail] = useState<PoDetail | null>(null);
+  const [requisitionNumber, setRequisitionNumber] = useState<string | null>(null);
+  const [openRequisitionId, setOpenRequisitionId] = useState<string | null>(null);
+  const baseCurrency = useBaseCurrency();
+
+  useEffect(() => {
+    if (!token || !companyId) return;
+    apiRequest<PoDetail>(`/api/purchase-orders/${poId}`, { token, companyId }).then((d) => {
+      setDetail(d);
+      if (d.purchase_requisition_id) {
+        apiRequest<RequisitionDetail>(`/api/purchase-requisitions/${d.purchase_requisition_id}`, { token, companyId }).then((r) =>
+          setRequisitionNumber(r.document_number),
+        );
+      }
+    });
+  }, [poId, token, companyId]);
+
+  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <div className="font-mono text-xs text-slate-500">{detail.document_number}</div>
+          <div className="text-sm text-slate-700">
+            {detail.supplier_name_en} · {new Date(detail.order_date).toLocaleDateString()}
+          </div>
+        </div>
+        <StatusBadge status={detail.document_status} />
+      </div>
+      {detail.purchase_requisition_id && (
+        <button
+          onClick={() => setOpenRequisitionId(detail.purchase_requisition_id)}
+          className="mb-3 text-xs font-medium text-brand-600 hover:text-brand-700"
+        >
+          Created from requisition {requisitionNumber ?? "…"}
+        </button>
+      )}
+
+      <div className="mb-3 space-y-1 rounded-md border border-slate-200 p-2">
+        {detail.lines.map((line) => (
+          <div key={line.id} className="flex items-center justify-between text-sm">
+            <span className="text-slate-700">
+              {line.item_name_en} <span className="text-xs text-slate-400">({line.variant_code})</span>
+            </span>
+            <span className="font-medium text-slate-900">
+              {Number(line.qty).toLocaleString()} × {Number(line.unit_price).toFixed(2)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="text-sm font-medium text-slate-700">
+        Total: {formatMoney(detail.gross_amount, detail.currency !== baseCurrency ? detail.currency : undefined)}
+      </div>
+
+      {openRequisitionId && (
+        <Modal title="Purchase Requisition" onClose={() => setOpenRequisitionId(null)}>
+          <RequisitionDetailModal requisitionId={openRequisitionId} onClose={() => setOpenRequisitionId(null)} onChanged={() => {}} />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 function PurchaseOrdersTab() {
   const { i18n } = useTranslation();
   const { data, error, reload } = useApiList<PurchaseOrder>("/api/purchase-orders");
   const [showNew, setShowNew] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
   const baseCurrency = useBaseCurrency();
 
   const columns: Column<PurchaseOrder>[] = [
@@ -1261,10 +1354,16 @@ function PurchaseOrdersTab() {
         searchPlaceholder="Search purchase orders..."
         actionLabel="New Purchase Order"
         onAction={() => setShowNew(true)}
+        onRowClick={(r) => setOpenId(r.id)}
       />
       {showNew && (
         <Modal title="New Purchase Order" onClose={() => setShowNew(false)}>
           <NewPurchaseOrderForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+      {openId && (
+        <Modal title="Purchase Order" onClose={() => setOpenId(null)}>
+          <PoDetailModal poId={openId} onClose={() => setOpenId(null)} />
         </Modal>
       )}
     </>

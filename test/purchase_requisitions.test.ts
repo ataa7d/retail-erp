@@ -5,6 +5,7 @@ import { newClient } from "./helpers.js";
 import {
   createPurchaseRequisition,
   submitPurchaseRequisition,
+  withdrawPurchaseRequisition,
   approvePurchaseRequisition,
   rejectPurchaseRequisition,
   convertPurchaseRequisitionToPo,
@@ -179,6 +180,30 @@ describe("purchase requisition state machine", () => {
     await expect(
       client.query(`UPDATE purchase_requisition_lines SET qty = 99 WHERE id = $1`, [line.rows[0].id]),
     ).rejects.toThrow(/immutable/);
+  });
+
+  it("lets the requester withdraw a pending requisition, and locks it afterward", async () => {
+    const variantId = await newItemVariant();
+    const requisitionId = await createPurchaseRequisition(client, {
+      companyId, storeId, requisitionDate: "2026-03-15",
+      lines: [{ itemVariantId: variantId, qty: 2 }], createdBy: requesterId,
+    });
+    await submitPurchaseRequisition(client, requisitionId);
+
+    await withdrawPurchaseRequisition(client, requisitionId);
+    const row = await client.query(`SELECT document_status FROM purchase_requisitions WHERE id = $1`, [requisitionId]);
+    expect(row.rows[0].document_status).toBe("withdrawn");
+
+    await expect(approvePurchaseRequisition(client, requisitionId, approverId)).rejects.toThrow(/is withdrawn and cannot be modified/);
+  });
+
+  it("cannot withdraw a draft or already-decided requisition (state machine only allows it from pending_approval)", async () => {
+    const variantId = await newItemVariant();
+    const draftId = await createPurchaseRequisition(client, {
+      companyId, storeId, requisitionDate: "2026-03-16",
+      lines: [{ itemVariantId: variantId, qty: 1 }], createdBy: requesterId,
+    });
+    await expect(withdrawPurchaseRequisition(client, draftId)).rejects.toThrow(/illegal purchase requisition status transition/);
   });
 
   it("rejects an illegal status jump, e.g. draft straight to approved", async () => {
