@@ -63,6 +63,7 @@ interface ItemVariant {
   color: string | null;
   size: string | null;
   is_active: boolean;
+  reorder_point: string;
   barcodes: ItemBarcode[] | null;
 }
 
@@ -421,6 +422,8 @@ function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) 
   const [showAddVariant, setShowAddVariant] = useState(false);
   const [barcodeForVariant, setBarcodeForVariant] = useState<string | null>(null);
   const [busyVariantId, setBusyVariantId] = useState<string | null>(null);
+  const [reorderDrafts, setReorderDrafts] = useState<Record<string, string>>({});
+  const [savingReorderId, setSavingReorderId] = useState<string | null>(null);
 
   async function toggleActive(variant: ItemVariant) {
     setBusyVariantId(variant.id);
@@ -433,6 +436,24 @@ function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) 
       onChanged();
     } finally {
       setBusyVariantId(null);
+    }
+  }
+
+  async function saveReorderPoint(variant: ItemVariant) {
+    const raw = reorderDrafts[variant.id] ?? variant.reorder_point;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) return;
+    setSavingReorderId(variant.id);
+    try {
+      await apiRequest(`/api/item-variants/${variant.id}/reorder-point`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { reorderPoint: value },
+      });
+      onChanged();
+    } finally {
+      setSavingReorderId(null);
     }
   }
 
@@ -481,6 +502,25 @@ function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) 
               <button onClick={() => setBarcodeForVariant(v.id)} className="text-xs font-medium text-brand-600 hover:text-brand-700">
                 + Barcode
               </button>
+            </div>
+            <div className="mt-2 flex items-center gap-2 border-t border-slate-100 pt-2">
+              <label className="text-xs text-slate-500">Reorder point</label>
+              <input
+                type="number"
+                min={0}
+                step="0.001"
+                value={reorderDrafts[v.id] ?? v.reorder_point}
+                onChange={(e) => setReorderDrafts((prev) => ({ ...prev, [v.id]: e.target.value }))}
+                className="w-20 rounded border border-slate-200 px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
+              />
+              <button
+                onClick={() => saveReorderPoint(v)}
+                disabled={savingReorderId === v.id || (reorderDrafts[v.id] ?? v.reorder_point) === v.reorder_point}
+                className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-30"
+              >
+                {savingReorderId === v.id ? "Saving..." : "Save"}
+              </button>
+              <span className="text-xs text-slate-400">0 = no low-stock alert</span>
             </div>
           </div>
         ))}

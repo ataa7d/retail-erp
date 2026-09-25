@@ -25,6 +25,7 @@ const createSchema = z.object({
   variantCode: z.string().min(1),
   color: z.string().nullable().optional(),
   size: z.string().nullable().optional(),
+  reorderPoint: z.number().nonnegative().optional(),
 });
 
 const classifySchema = z.object({
@@ -39,12 +40,17 @@ const addVariantSchema = z.object({
   variantCode: z.string().min(1),
   color: z.string().nullable().optional(),
   size: z.string().nullable().optional(),
+  reorderPoint: z.number().nonnegative().optional(),
 });
 
 const addBarcodeSchema = z.object({
   barcode: z.string().min(1),
   unitOfMeasureId: z.string().uuid(),
   isPrimary: z.boolean().default(true),
+});
+
+const reorderPointSchema = z.object({
+  reorderPoint: z.number().nonnegative(),
 });
 
 export async function itemRoutes(app: FastifyInstance): Promise<void> {
@@ -80,9 +86,9 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
         );
 
         await client.query(
-          `INSERT INTO item_variants (company_id, item_id, variant_code, color, size)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [request.companyId, newItemId, body.variantCode, body.color ?? null, body.size ?? null],
+          `INSERT INTO item_variants (company_id, item_id, variant_code, color, size, reorder_point)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [request.companyId, newItemId, body.variantCode, body.color ?? null, body.size ?? null, body.reorderPoint ?? 0],
         );
         return newItemId;
       }, request.authUser.id);
@@ -104,9 +110,9 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
         if (item.rows.length === 0) throw new NotFoundError("item not found");
 
         const variant = await client.query<{ id: string }>(
-          `INSERT INTO item_variants (company_id, item_id, variant_code, color, size)
-           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-          [request.companyId, request.params.id, body.variantCode, body.color ?? null, body.size ?? null],
+          `INSERT INTO item_variants (company_id, item_id, variant_code, color, size, reorder_point)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+          [request.companyId, request.params.id, body.variantCode, body.color ?? null, body.size ?? null, body.reorderPoint ?? 0],
         );
         return variant.rows[0]!.id;
       }, request.authUser.id);
@@ -198,6 +204,23 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  app.post<{ Params: { id: string } }>(
+    "/item-variants/:id/reorder-point",
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    async (request) => {
+      const body = reorderPointSchema.parse(request.body);
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM item_variants WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("item variant not found");
+        await client.query(`UPDATE item_variants SET reorder_point = $1 WHERE id = $2`, [body.reorderPoint, request.params.id]);
+      }, request.authUser.id);
+      return { id: request.params.id, reorderPoint: body.reorderPoint };
+    },
+  );
+
   // Master data syncs one way, down — updatedSince lets a client (POS,
   // admin UI) pull only what changed since its last sync.
   app.get("/items", { preHandler: app.authenticate }, async (request) => {
@@ -213,7 +236,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
     );
 
     const variants = await pool.query(
-      `SELECT iv.id, iv.item_id, iv.variant_code, iv.color, iv.size, iv.is_active,
+      `SELECT iv.id, iv.item_id, iv.variant_code, iv.color, iv.size, iv.is_active, iv.reorder_point,
               json_agg(json_build_object('id', ib.id, 'barcode', ib.barcode, 'unitOfMeasureId', ib.unit_of_measure_id, 'isPrimary', ib.is_primary))
                 FILTER (WHERE ib.id IS NOT NULL) AS barcodes
        FROM item_variants iv
