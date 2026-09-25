@@ -31,6 +31,7 @@ import { reportRoutes } from "./routes/reports.js";
 import { adminRoutes } from "./routes/admin.js";
 import { zatcaOnboardingRoutes } from "./routes/zatcaOnboarding.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
+import { notificationRoutes } from "./routes/notifications.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
@@ -101,6 +102,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(adminRoutes, { prefix: "/api" });
   await app.register(zatcaOnboardingRoutes, { prefix: "/api" });
   await app.register(dashboardRoutes, { prefix: "/api" });
+  await app.register(notificationRoutes, { prefix: "/api" });
 
   return app;
 }

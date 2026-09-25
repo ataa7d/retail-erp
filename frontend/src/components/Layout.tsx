@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -20,8 +20,11 @@ import {
   LogOut,
   Building,
   Monitor,
+  ClipboardList,
+  AlertTriangle,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
+import { apiRequest } from "../lib/api";
 
 const navItems = [
   { to: "/", label: "nav.dashboard", permission: null, icon: LayoutDashboard },
@@ -41,6 +44,81 @@ const navItems = [
 function initials(email: string): string {
   const name = email.split("@")[0] ?? "?";
   return name.slice(0, 2).toUpperCase();
+}
+
+interface NotificationItem {
+  id: string;
+  type: "requisition_pending" | "low_stock";
+  title: string;
+  detail: string;
+  link: string;
+}
+
+function NotificationBell() {
+  const { token, companyId } = useAuth();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<NotificationItem[] | null>(null);
+
+  useEffect(() => {
+    if (!token || !companyId) return;
+    let cancelled = false;
+    apiRequest<{ count: number; items: NotificationItem[] }>("/api/notifications", { token, companyId })
+      .then((r) => {
+        if (!cancelled) setItems(r.items);
+      })
+      .catch(() => {
+        if (!cancelled) setItems([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, companyId]);
+
+  const count = items?.length ?? 0;
+
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen((v) => !v)} className="relative rounded-full p-1.5 text-white/80 hover:bg-white/10">
+        <Bell size={17} />
+        {count > 0 && (
+          <span className="absolute -end-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white">
+            {count}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute end-0 top-10 z-20 w-80 rounded-lg border border-slate-200 bg-white py-1 text-sm text-slate-700 shadow-lg">
+          <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-500">Notifications</div>
+          {items === null && <div className="px-3 py-4 text-center text-xs text-slate-400">Loading...</div>}
+          {items?.length === 0 && <div className="px-3 py-4 text-center text-xs text-slate-400">You're all caught up.</div>}
+          <div className="max-h-80 overflow-y-auto">
+            {items?.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setOpen(false);
+                  navigate(item.link);
+                }}
+                className="flex w-full items-start gap-2 px-3 py-2 text-start hover:bg-slate-50"
+              >
+                {item.type === "requisition_pending" ? (
+                  <ClipboardList size={15} className="mt-0.5 shrink-0 text-blue-500" />
+                ) : (
+                  <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-500" />
+                )}
+                <div className="min-w-0">
+                  <div className="truncate font-medium text-slate-900">{item.title}</div>
+                  <div className="truncate text-xs text-slate-500">{item.detail}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function Layout() {
@@ -79,9 +157,7 @@ export default function Layout() {
           />
         </div>
 
-        <button className="rounded-full p-1.5 text-white/80 hover:bg-white/10">
-          <Bell size={17} />
-        </button>
+        <NotificationBell />
 
         <div className="relative">
           <button
