@@ -1340,16 +1340,26 @@ interface PriceListRow {
   price_includes_vat: boolean;
   is_default: boolean;
   is_active: boolean;
+  default_tax_code_id: string | null;
+}
+
+interface TaxCodeOption {
+  id: string;
+  code: string;
+  name_en: string;
+  rate: string;
 }
 
 function NewPriceListForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
+  const { data: taxCodes } = useApiList<TaxCodeOption>("/api/tax-codes");
   const [code, setCode] = useState("");
   const [nameEn, setNameEn] = useState("");
   const [nameAr, setNameAr] = useState("");
   const [currency, setCurrency] = useState("SAR");
   const [priceIncludesVat, setPriceIncludesVat] = useState(true);
   const [isDefault, setIsDefault] = useState(false);
+  const [defaultTaxCodeId, setDefaultTaxCodeId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -1362,7 +1372,7 @@ function NewPriceListForm({ onClose, onCreated }: { onClose: () => void; onCreat
         method: "POST",
         token,
         companyId,
-        body: { code, nameEn, nameAr, currency, priceIncludesVat, isDefault },
+        body: { code, nameEn, nameAr, currency, priceIncludesVat, isDefault, defaultTaxCodeId: defaultTaxCodeId || null },
       });
       onCreated();
       onClose();
@@ -1384,9 +1394,21 @@ function NewPriceListForm({ onClose, onCreated }: { onClose: () => void; onCreat
       <Field label="Name (Arabic)" required>
         <TextInput required dir="rtl" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
       </Field>
-      <Field label="Currency" required>
-        <TextInput required value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} />
-      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Currency" required>
+          <TextInput required value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} />
+        </Field>
+        <Field label="Default Tax Code">
+          <SelectInput value={defaultTaxCodeId} onChange={(e) => setDefaultTaxCodeId(e.target.value)}>
+            <option value="">None</option>
+            {taxCodes?.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name_en} ({Number(t.rate).toFixed(0)}%)
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+      </div>
       <label className="mb-2 flex items-center gap-2 text-sm text-slate-600">
         <input type="checkbox" checked={priceIncludesVat} onChange={(e) => setPriceIncludesVat(e.target.checked)} />
         Prices include VAT
@@ -1404,14 +1426,32 @@ function NewPriceListForm({ onClose, onCreated }: { onClose: () => void; onCreat
 function PriceListDetail({ list, onChanged }: { list: PriceListRow; onChanged: () => void }) {
   const { token, companyId } = useAuth();
   const { data: prices, reload } = useApiList<PriceListItem>(`/api/price-lists/${list.id}/items`);
+  const { data: taxCodes } = useApiList<TaxCodeOption>("/api/tax-codes");
   const variantOptions = useVariantOptions();
   const [itemVariantId, setItemVariantId] = useState("");
   const [price, setPrice] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [busyVariantId, setBusyVariantId] = useState<string | null>(null);
+  const [taxCodeDraft, setTaxCodeDraft] = useState(list.default_tax_code_id ?? "");
+  const [savingTaxCode, setSavingTaxCode] = useState(false);
 
   const variantLabel = (id: string) => variantOptions.find((v) => v.id === id)?.label ?? id;
+
+  async function saveTaxCode() {
+    setSavingTaxCode(true);
+    try {
+      await apiRequest(`/api/price-lists/${list.id}/tax-code`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { defaultTaxCodeId: taxCodeDraft || null },
+      });
+      onChanged();
+    } finally {
+      setSavingTaxCode(false);
+    }
+  }
 
   async function setLinePrice(e: FormEvent) {
     e.preventDefault();
@@ -1448,6 +1488,27 @@ function PriceListDetail({ list, onChanged }: { list: PriceListRow; onChanged: (
 
   return (
     <div>
+      <div className="mb-4 flex items-end gap-2 rounded-md border border-slate-200 bg-slate-50 p-3">
+        <div className="min-w-0 flex-1">
+          <Field label="Default Tax Code">
+            <SelectInput value={taxCodeDraft} onChange={(e) => setTaxCodeDraft(e.target.value)}>
+              <option value="">None</option>
+              {taxCodes?.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name_en} ({Number(t.rate).toFixed(0)}%)
+                </option>
+              ))}
+            </SelectInput>
+          </Field>
+        </div>
+        <button
+          onClick={saveTaxCode}
+          disabled={savingTaxCode || taxCodeDraft === (list.default_tax_code_id ?? "")}
+          className="mb-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+        >
+          {savingTaxCode ? "Saving..." : "Save"}
+        </button>
+      </div>
       <form onSubmit={setLinePrice} className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_120px]">
           <Field label="Item">
@@ -1499,6 +1560,12 @@ function PriceListDetail({ list, onChanged }: { list: PriceListRow; onChanged: (
 function PriceListsTab() {
   const { token, companyId } = useAuth();
   const { data, error, reload } = useApiList<PriceListRow>("/api/price-lists");
+  const { data: taxCodes } = useApiList<TaxCodeOption>("/api/tax-codes");
+  const taxCodeLabel = (id: string | null) => {
+    if (!id) return "—";
+    const t = taxCodes?.find((tc) => tc.id === id);
+    return t ? `${t.code} (${Number(t.rate).toFixed(0)}%)` : "—";
+  };
   const [showNew, setShowNew] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -1522,6 +1589,7 @@ function PriceListsTab() {
     { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900">{r.name_en}</span> },
     { key: "currency", header: "Currency", render: (r) => r.currency },
     { key: "vat", header: "VAT", render: (r) => (r.price_includes_vat ? "Inclusive" : "Exclusive") },
+    { key: "tax_code", header: "Tax Code", render: (r) => taxCodeLabel(r.default_tax_code_id) },
     { key: "default", header: "Default", render: (r) => (r.is_default ? <StatusBadge status="active" /> : "—") },
     {
       key: "status",

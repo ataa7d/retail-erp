@@ -251,6 +251,29 @@ describe("price lists", () => {
       ),
     ).rejects.toThrow();
   });
+
+  it("stores a default tax code per price level and rejects one from a different company", async () => {
+    const taxCode = await client.query(
+      `INSERT INTO tax_codes (company_id, code, name_en, name_ar, rate, tax_type) VALUES ($1, 'PLVAT', 'x', 'x', 15, 'standard') RETURNING id`,
+      [companyAId],
+    );
+    const list = await client.query(
+      `INSERT INTO price_lists (company_id, code, name_en, name_ar, default_tax_code_id) VALUES ($1, 'TENDER', 'x', 'x', $2) RETURNING default_tax_code_id`,
+      [companyAId, taxCode.rows[0].id],
+    );
+    expect(list.rows[0].default_tax_code_id).toBe(taxCode.rows[0].id);
+
+    const otherCompanyTaxCode = await client.query(
+      `INSERT INTO tax_codes (company_id, code, name_en, name_ar, rate, tax_type) VALUES ($1, 'PLVAT', 'x', 'x', 15, 'standard') RETURNING id`,
+      [companyBId],
+    );
+    await expect(
+      client.query(`INSERT INTO price_lists (company_id, code, name_en, name_ar, default_tax_code_id) VALUES ($1, 'BIGSALE', 'x', 'x', $2)`, [
+        companyAId,
+        otherCompanyTaxCode.rows[0].id,
+      ]),
+    ).rejects.toThrow(/does not belong to company/);
+  });
 });
 
 describe("customers", () => {

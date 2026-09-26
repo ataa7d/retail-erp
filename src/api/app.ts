@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import { ZodError } from "zod";
 import { registerAuth } from "./plugins/auth.js";
 import { HttpError, pgErrorStatus } from "./errors.js";
@@ -49,6 +50,13 @@ export async function buildApp(): Promise<FastifyInstance> {
     // frontend/src/lib/api.ts's downloadFile(), which falls back to a
     // generic name instead of the real document number.
     exposedHeaders: ["Content-Disposition"],
+  });
+
+  // Bulk item import (CSV) is the only multipart upload in the app -- a
+  // generous file size cap since a real supplier sheet can run to a few
+  // thousand rows, but still bounded so a bad request can't exhaust memory.
+  await app.register(multipart, {
+    limits: { fileSize: 20 * 1024 * 1024, files: 1 },
   });
 
   app.setErrorHandler((err: Error, _request, reply) => {

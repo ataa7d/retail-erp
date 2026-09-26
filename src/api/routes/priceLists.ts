@@ -10,6 +10,11 @@ const createSchema = z.object({
   currency: z.string().min(1).default("SAR"),
   priceIncludesVat: z.boolean().default(true),
   isDefault: z.boolean().default(false),
+  defaultTaxCodeId: z.string().uuid().nullable().optional(),
+});
+
+const setTaxCodeSchema = z.object({
+  defaultTaxCodeId: z.string().uuid().nullable(),
 });
 
 const setPriceSchema = z.object({
@@ -20,7 +25,7 @@ const setPriceSchema = z.object({
 export async function priceListRoutes(app: FastifyInstance): Promise<void> {
   app.get("/price-lists", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
-      `SELECT id, code, name_en, name_ar, currency, price_includes_vat, is_default, is_active
+      `SELECT id, code, name_en, name_ar, currency, price_includes_vat, is_default, is_active, default_tax_code_id
        FROM price_lists WHERE company_id = $1 ORDER BY code`,
       [request.companyId],
     );
@@ -42,14 +47,37 @@ export async function priceListRoutes(app: FastifyInstance): Promise<void> {
           ]);
         }
         const result = await client.query<{ id: string }>(
-          `INSERT INTO price_lists (company_id, code, name_en, name_ar, currency, price_includes_vat, is_default)
-           VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-          [request.companyId, body.code, body.nameEn, body.nameAr, body.currency, body.priceIncludesVat, body.isDefault],
+          `INSERT INTO price_lists (company_id, code, name_en, name_ar, currency, price_includes_vat, is_default, default_tax_code_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+          [
+            request.companyId, body.code, body.nameEn, body.nameAr, body.currency, body.priceIncludesVat,
+            body.isDefault, body.defaultTaxCodeId ?? null,
+          ],
         );
         return result.rows[0]!.id;
       }, request.authUser.id);
       reply.status(201);
       return { id: priceListId };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/price-lists/:id/tax-code",
+    { preHandler: [app.authenticate, app.requirePermission("sales.price_list.manage")] },
+    async (request) => {
+      const body = setTaxCodeSchema.parse(request.body);
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM price_lists WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("price list not found");
+        await client.query(`UPDATE price_lists SET default_tax_code_id = $1 WHERE id = $2`, [
+          body.defaultTaxCodeId,
+          request.params.id,
+        ]);
+      }, request.authUser.id);
+      return { id: request.params.id, defaultTaxCodeId: body.defaultTaxCodeId };
     },
   );
 

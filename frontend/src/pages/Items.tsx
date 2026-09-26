@@ -1,9 +1,9 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Package, Plus, Barcode as BarcodeIcon, Tag } from "lucide-react";
+import { Package, Plus, Barcode as BarcodeIcon, Tag, Upload, Download } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
-import { apiRequest, ApiError } from "../lib/api";
+import { apiRequest, ApiError, uploadFile } from "../lib/api";
 import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
@@ -657,10 +657,134 @@ function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) 
   );
 }
 
+const IMPORT_TEMPLATE_HEADER = [
+  "item_code", "name_en", "name_ar", "brand_code", "category_code", "season_code", "item_year",
+  "material", "country_of_origin", "supplier_style_number", "base_unit_code", "default_tax_code",
+  "variant_code", "color", "size", "barcode", "standard_cost", "weight_kg", "reorder_point",
+  "store_code", "opening_qty", "retail_price", "wholesale_price", "tender_price", "bigsale_price", "reference_price",
+];
+
+const IMPORT_TEMPLATE_EXAMPLE = [
+  "IT-1001", "Basic Tee", "تيشيرت أساسي", "GEN", "APPAREL", "SS26", "2026",
+  "100% Cotton", "Bangladesh", "SUP-001", "PC", "VAT15",
+  "IT-1001-BLK-M", "Black", "M", "", "15.00", "0.200", "10",
+  "S1", "50", "35.00", "25.00", "", "", "30.00",
+];
+
+function downloadImportTemplate() {
+  const csv = `${IMPORT_TEMPLATE_HEADER.join(",")}\n${IMPORT_TEMPLATE_EXAMPLE.join(",")}\n`;
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "item_import_template.csv";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+interface ImportRowResult {
+  row: number;
+  itemCode: string;
+  variantCode: string;
+  status: "created" | "error";
+  message?: string;
+  internalBarcode?: string;
+}
+
+interface ImportSummary {
+  totalRows: number;
+  created: number;
+  failed: number;
+  results: ImportRowResult[];
+}
+
+function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
+  const { token, companyId } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [summary, setSummary] = useState<ImportSummary | null>(null);
+
+  async function handleUpload() {
+    const file = fileInputRef.current?.files?.[0];
+    if (!file) {
+      setError("Choose a CSV file first.");
+      return;
+    }
+    setError(null);
+    setUploading(true);
+    setSummary(null);
+    try {
+      const result = await uploadFile<ImportSummary>("/api/items/bulk-import", file, { token, companyId });
+      setSummary(result);
+      onImported();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to import file");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const failedRows = summary?.results.filter((r) => r.status === "error") ?? [];
+
+  return (
+    <div>
+      <p className="mb-3 text-sm text-slate-600">
+        Upload a CSV to create many items/variants at once. Each row creates a new item the first time its item_code is
+        seen (or adds a variant to an existing one), and an internal barcode is generated automatically for every new
+        variant.
+      </p>
+      <button
+        type="button"
+        onClick={downloadImportTemplate}
+        className="mb-4 flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+      >
+        <Download size={14} /> Download CSV template
+      </button>
+      <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="mb-3 block w-full text-sm text-slate-600" />
+      {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+      <button
+        type="button"
+        onClick={handleUpload}
+        disabled={uploading}
+        className="w-full rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+      >
+        {uploading ? "Importing..." : "Import"}
+      </button>
+
+      {summary && (
+        <div className="mt-4 border-t border-slate-200 pt-4">
+          <div className="mb-3 flex gap-4 text-sm">
+            <span className="text-slate-500">Total: {summary.totalRows}</span>
+            <span className="font-medium text-green-700">Created: {summary.created}</span>
+            {summary.failed > 0 && <span className="font-medium text-red-600">Failed: {summary.failed}</span>}
+          </div>
+          {failedRows.length > 0 && (
+            <div className="max-h-64 overflow-y-auto rounded-md border border-red-100">
+              {failedRows.map((r) => (
+                <div key={r.row} className="border-b border-red-50 px-3 py-1.5 text-xs last:border-b-0">
+                  <span className="font-mono text-slate-500">row {r.row}</span>{" "}
+                  <span className="text-slate-700">
+                    {r.itemCode || "?"} / {r.variantCode || "?"}
+                  </span>
+                  <span className="text-red-600"> — {r.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ItemsTab() {
   const { t, i18n } = useTranslation();
   const { data, error, reload } = useApiList<Item>("/api/items");
   const [showNew, setShowNew] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [detailItemId, setDetailItemId] = useState<string | null>(null);
 
   const columns: Column<Item>[] = [
@@ -691,10 +815,23 @@ function ItemsTab() {
         actionLabel="New Item"
         onAction={() => setShowNew(true)}
         onRowClick={(r) => setDetailItemId(r.id)}
+        toolbarExtra={
+          <button
+            onClick={() => setShowImport(true)}
+            className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <Upload size={14} /> Bulk Import
+          </button>
+        }
       />
       {showNew && (
         <Modal title="New Item" onClose={() => setShowNew(false)}>
           <NewItemForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+      {showImport && (
+        <Modal title="Bulk Import Items" onClose={() => setShowImport(false)}>
+          <BulkImportModal onClose={() => setShowImport(false)} onImported={reload} />
         </Modal>
       )}
       {detailItem && (

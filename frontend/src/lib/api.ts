@@ -88,3 +88,33 @@ export async function downloadFile(path: string, options: { token?: string | nul
   link.remove();
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Uploads a single file as multipart/form-data and returns the parsed JSON
+ * response -- for endpoints that take a file (bulk CSV import) rather than
+ * a JSON body, where apiRequest's JSON.stringify(body) doesn't apply. No
+ * Content-Type header is set here: the browser fills in the multipart
+ * boundary itself when FormData is passed as the body.
+ */
+export async function uploadFile<T>(path: string, file: File, options: { token?: string | null; companyId?: string | null } = {}): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (options.token) headers["Authorization"] = `Bearer ${options.token}`;
+  if (options.companyId) headers["X-Company-Id"] = options.companyId;
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_URL}${path}`, { method: "POST", headers, body: formData });
+
+  if (!res.ok) {
+    let payload: { error?: string; details?: unknown } = {};
+    try {
+      payload = await res.json();
+    } catch {
+      // non-JSON error body; fall through with a generic message
+    }
+    throw new ApiError(res.status, payload.error ?? `request failed with status ${res.status}`, payload.details);
+  }
+
+  return (await res.json()) as T;
+}

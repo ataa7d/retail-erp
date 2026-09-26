@@ -303,7 +303,7 @@ async function main() {
 
     const priceList = await client.query(
       `INSERT INTO price_lists (company_id, code, name_en, name_ar, price_includes_vat, is_default)
-       VALUES ($1, 'RETAIL', 'Retail Price List', 'قائمة أسعار التجزئة', true, true)
+       VALUES ($1, 'RETAIL', 'POS Price List', 'قائمة أسعار نقطة البيع', true, true)
        ON CONFLICT (company_id, code) DO UPDATE SET name_en = EXCLUDED.name_en
        RETURNING id`,
       [companyId],
