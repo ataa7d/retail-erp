@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Package, Plus, Barcode as BarcodeIcon, Tag, Upload, Download } from "lucide-react";
 import { useAuth } from "../lib/auth";
@@ -1006,11 +1006,273 @@ function ClassificationTab({
   );
 }
 
+interface VariantRow {
+  id: string;
+  variant_code: string;
+  color: string | null;
+  size: string | null;
+  is_active: boolean;
+  reorder_point: string;
+  standard_cost: string | null;
+  weight_kg: string | null;
+  item_id: string;
+  item_code: string;
+  name_en: string;
+  name_ar: string;
+  brand_name: string | null;
+  category_name: string | null;
+  season_name: string | null;
+  primary_barcode: string | null;
+}
+
+interface VariantSearchResponse {
+  rows: VariantRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+type VariantSortColumn = "variantCode" | "itemCode" | "name" | "color" | "size" | "standardCost" | "reorderPoint" | "status";
+
+interface VariantFilters {
+  search: string;
+  itemCode: string;
+  variantCode: string;
+  name: string;
+  color: string;
+  size: string;
+  barcode: string;
+  brandId: string;
+  categoryId: string;
+  seasonId: string;
+  isActive: string; // "" | "true" | "false"
+}
+
+const EMPTY_VARIANT_FILTERS: VariantFilters = {
+  search: "", itemCode: "", variantCode: "", name: "", color: "", size: "", barcode: "",
+  brandId: "", categoryId: "", seasonId: "", isActive: "",
+};
+
+/**
+ * A flat, one-row-per-variant grid with an Excel-style filter row under the
+ * headers, built to stay usable when the catalog runs into the millions of
+ * variants -- everything (search, filters, sorting, paging) happens on the
+ * server via GET /item-variants, never by loading the whole catalog into
+ * the browser and filtering client-side the way the grouped Items tab does.
+ */
+function AllVariantsTab() {
+  const { data: brands } = useApiList<Brand>("/api/brands");
+  const { data: categories } = useApiList<Category>("/api/categories");
+  const { data: seasons } = useApiList<Season>("/api/seasons");
+
+  const [filters, setFilters] = useState<VariantFilters>(EMPTY_VARIANT_FILTERS);
+  const [debouncedFilters, setDebouncedFilters] = useState<VariantFilters>(EMPTY_VARIANT_FILTERS);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [sortBy, setSortBy] = useState<VariantSortColumn>("itemCode");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [result, setResult] = useState<VariantSearchResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const { token, companyId } = useAuth();
+
+  // Debounce free-typed filter input so every keystroke doesn't hit the
+  // server -- 300ms after the user stops typing, the debounced value (and
+  // therefore the actual fetch below) updates and resets to page 1.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedFilters(filters);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [filters]);
+
+  useEffect(() => {
+    if (!token || !companyId) return;
+    let cancelled = false;
+    setLoading(true);
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("pageSize", String(pageSize));
+    params.set("sortBy", sortBy);
+    params.set("sortDir", sortDir);
+    for (const [key, value] of Object.entries(debouncedFilters)) {
+      if (value) params.set(key, value);
+    }
+    apiRequest<VariantSearchResponse>(`/api/item-variants?${params.toString()}`, { token, companyId })
+      .then((res) => {
+        if (!cancelled) setResult(res);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, companyId, page, pageSize, sortBy, sortDir, debouncedFilters]);
+
+  function updateFilter(key: keyof VariantFilters, value: string) {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function toggleSort(col: VariantSortColumn) {
+    if (sortBy === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(col);
+      setSortDir("asc");
+    }
+  }
+
+  function sortIndicator(col: VariantSortColumn) {
+    if (sortBy !== col) return null;
+    return <span className="ms-1 text-slate-400">{sortDir === "asc" ? "▲" : "▼"}</span>;
+  }
+
+  const totalPages = result ? Math.max(1, Math.ceil(result.total / result.pageSize)) : 1;
+
+  const thClass = "cursor-pointer select-none whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400 hover:text-slate-600";
+  const filterInputClass = "w-full rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-brand-400 focus:outline-none";
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <input
+          value={filters.search}
+          onChange={(e) => updateFilter("search", e.target.value)}
+          placeholder="Search item code, name, or variant code..."
+          className="min-w-64 flex-1 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm focus:border-brand-400 focus:bg-white focus:outline-none"
+        />
+        {(Object.keys(filters) as Array<keyof VariantFilters>).some((k) => filters[k]) && (
+          <button
+            onClick={() => setFilters(EMPTY_VARIANT_FILTERS)}
+            className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Clear filters
+          </button>
+        )}
+        <span className="text-sm text-slate-500">
+          {result ? `${result.total.toLocaleString()} variant${result.total === 1 ? "" : "s"}` : loading ? "Loading..." : ""}
+        </span>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-100">
+              <th className={thClass} onClick={() => toggleSort("variantCode")}>Variant Code{sortIndicator("variantCode")}</th>
+              <th className={thClass} onClick={() => toggleSort("itemCode")}>Item Code{sortIndicator("itemCode")}</th>
+              <th className={thClass} onClick={() => toggleSort("name")}>Name{sortIndicator("name")}</th>
+              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400">Brand</th>
+              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400">Category</th>
+              <th className={thClass} onClick={() => toggleSort("color")}>Color{sortIndicator("color")}</th>
+              <th className={thClass} onClick={() => toggleSort("size")}>Size{sortIndicator("size")}</th>
+              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400">Barcode</th>
+              <th className={`${thClass} text-end`} onClick={() => toggleSort("standardCost")}>Cost{sortIndicator("standardCost")}</th>
+              <th className={thClass} onClick={() => toggleSort("status")}>Status{sortIndicator("status")}</th>
+            </tr>
+            <tr className="border-b border-slate-100 bg-slate-50">
+              <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.variantCode} onChange={(e) => updateFilter("variantCode", e.target.value)} /></th>
+              <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.itemCode} onChange={(e) => updateFilter("itemCode", e.target.value)} /></th>
+              <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.name} onChange={(e) => updateFilter("name", e.target.value)} /></th>
+              <th className="px-2 py-1.5">
+                <select className={filterInputClass} value={filters.brandId} onChange={(e) => updateFilter("brandId", e.target.value)}>
+                  <option value="">All</option>
+                  {brands?.map((b) => <option key={b.id} value={b.id}>{b.code}</option>)}
+                </select>
+              </th>
+              <th className="px-2 py-1.5">
+                <select className={filterInputClass} value={filters.categoryId} onChange={(e) => updateFilter("categoryId", e.target.value)}>
+                  <option value="">All</option>
+                  {categories?.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}
+                </select>
+              </th>
+              <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.color} onChange={(e) => updateFilter("color", e.target.value)} /></th>
+              <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.size} onChange={(e) => updateFilter("size", e.target.value)} /></th>
+              <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.barcode} onChange={(e) => updateFilter("barcode", e.target.value)} /></th>
+              <th className="px-2 py-1.5" />
+              <th className="px-2 py-1.5">
+                <select className={filterInputClass} value={filters.isActive} onChange={(e) => updateFilter("isActive", e.target.value)}>
+                  <option value="">All</option>
+                  <option value="true">Active</option>
+                  <option value="false">Inactive</option>
+                </select>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {result?.rows.length === 0 && (
+              <tr>
+                <td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-400">
+                  No variants match these filters.
+                </td>
+              </tr>
+            )}
+            {result?.rows.map((r) => (
+              <tr key={r.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-700">{r.variant_code}</td>
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-500">{r.item_code}</td>
+                <td className="px-3 py-2 text-slate-900">{r.name_en}</td>
+                <td className="px-3 py-2 text-slate-600">{r.brand_name ?? "—"}</td>
+                <td className="px-3 py-2 text-slate-600">{r.category_name ?? "—"}</td>
+                <td className="px-3 py-2 text-slate-600">{r.color ?? "—"}</td>
+                <td className="px-3 py-2 text-slate-600">{r.size ?? "—"}</td>
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-500">{r.primary_barcode ?? "—"}</td>
+                <td className="px-3 py-2 text-end tabular-nums text-slate-700">{r.standard_cost ? Number(r.standard_cost).toFixed(2) : "—"}</td>
+                <td className="px-3 py-2"><StatusBadge status={r.is_active ? "active" : "inactive"} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {result && result.total > 0 && (
+        <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
+          <div className="flex items-center gap-2">
+            <span>Rows per page</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+              className="rounded border border-slate-200 px-2 py-1 text-xs"
+            >
+              {[25, 50, 100, 200].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-3">
+            <span>
+              Page {result.page} of {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-30"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-30"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Items() {
   const { t } = useTranslation();
   const tabs = useMemo(
     () => [
       { key: "items", label: t("nav.items"), content: <ItemsTab /> },
+      { key: "all-variants", label: "All Variants", content: <AllVariantsTab /> },
       {
         key: "brands",
         label: "Brands",

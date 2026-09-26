@@ -9,6 +9,35 @@ const listQuerySchema = z.object({
   updatedSince: z.string().datetime().optional(),
 });
 
+const VARIANT_SORT_COLUMNS = {
+  variantCode: "iv.variant_code",
+  itemCode: "i.item_code",
+  name: "i.name_en",
+  color: "iv.color",
+  size: "iv.size",
+  standardCost: "iv.standard_cost",
+  reorderPoint: "iv.reorder_point",
+  status: "iv.is_active",
+} as const;
+
+const variantSearchQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(200).default(50),
+  search: z.string().trim().min(1).optional(),
+  itemCode: z.string().trim().min(1).optional(),
+  variantCode: z.string().trim().min(1).optional(),
+  name: z.string().trim().min(1).optional(),
+  color: z.string().trim().min(1).optional(),
+  size: z.string().trim().min(1).optional(),
+  barcode: z.string().trim().min(1).optional(),
+  brandId: z.string().uuid().optional(),
+  categoryId: z.string().uuid().optional(),
+  seasonId: z.string().uuid().optional(),
+  isActive: z.enum(["true", "false"]).optional(),
+  sortBy: z.enum(Object.keys(VARIANT_SORT_COLUMNS) as [keyof typeof VARIANT_SORT_COLUMNS, ...Array<keyof typeof VARIANT_SORT_COLUMNS>]).default("itemCode"),
+  sortDir: z.enum(["asc", "desc"]).default("asc"),
+});
+
 const createSchema = z.object({
   itemCode: z.string().min(1),
   nameEn: z.string().min(1),
@@ -273,6 +302,70 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
       return { id: request.params.id, standardCost: body.standardCost ?? null, weightKg: body.weightKg ?? null };
     },
   );
+
+  // A flat, searchable, filterable, paginated list of every variant across
+  // the whole catalog -- the item-grouped GET /items above loads the whole
+  // catalog into the browser at once, which is fine for hundreds of items
+  // but falls over at the scale this is built for (millions of variants).
+  // Every filter here is either an indexed exact match or backed by a
+  // trigram GIN index (migration 0067), so it stays index-driven instead
+  // of a sequential scan regardless of catalog size.
+  app.get("/item-variants", { preHandler: app.authenticate }, async (request) => {
+    const q = variantSearchQuerySchema.parse(request.query);
+
+    const conditions: string[] = ["iv.company_id = $1"];
+    const params: unknown[] = [request.companyId];
+
+    // Binds `value` once and substitutes every `?` in `sql` with its $n --
+    // an OR-across-columns clause (search, name) needs the same value
+    // multiple times without binding it multiple times.
+    function addFilter(sql: string, value: unknown) {
+      params.push(value);
+      conditions.push(sql.replaceAll("?", `$${params.length}`));
+    }
+
+    if (q.search) {
+      addFilter(
+        "(iv.variant_code ILIKE '%' || ? || '%' OR i.item_code ILIKE '%' || ? || '%' OR i.name_en ILIKE '%' || ? || '%' OR i.name_ar ILIKE '%' || ? || '%')",
+        q.search,
+      );
+    }
+    if (q.itemCode) addFilter("i.item_code ILIKE '%' || ? || '%'", q.itemCode);
+    if (q.variantCode) addFilter("iv.variant_code ILIKE '%' || ? || '%'", q.variantCode);
+    if (q.name) addFilter("(i.name_en ILIKE '%' || ? || '%' OR i.name_ar ILIKE '%' || ? || '%')", q.name);
+    if (q.color) addFilter("iv.color ILIKE '%' || ? || '%'", q.color);
+    if (q.size) addFilter("iv.size ILIKE '%' || ? || '%'", q.size);
+    if (q.barcode) addFilter("EXISTS (SELECT 1 FROM item_barcodes ib WHERE ib.item_variant_id = iv.id AND ib.barcode ILIKE '%' || ? || '%')", q.barcode);
+    if (q.brandId) addFilter("i.brand_id = ?", q.brandId);
+    if (q.categoryId) addFilter("i.category_id = ?", q.categoryId);
+    if (q.seasonId) addFilter("i.season_id = ?", q.seasonId);
+    if (q.isActive) addFilter("iv.is_active = ?", q.isActive === "true");
+
+    const sortColumn = VARIANT_SORT_COLUMNS[q.sortBy];
+    const offset = (q.page - 1) * q.pageSize;
+    params.push(q.pageSize, offset);
+
+    const result = await pool.query(
+      `SELECT iv.id, iv.variant_code, iv.color, iv.size, iv.is_active, iv.reorder_point, iv.standard_cost, iv.weight_kg,
+              i.id AS item_id, i.item_code, i.name_en, i.name_ar,
+              b.name_en AS brand_name, c.name_en AS category_name, s.name_en AS season_name,
+              (SELECT ib.barcode FROM item_barcodes ib WHERE ib.item_variant_id = iv.id AND ib.is_primary = true LIMIT 1) AS primary_barcode,
+              COUNT(*) OVER() AS total_count
+       FROM item_variants iv
+       JOIN items i ON i.id = iv.item_id
+       LEFT JOIN brands b ON b.id = i.brand_id
+       LEFT JOIN categories c ON c.id = i.category_id
+       LEFT JOIN seasons s ON s.id = i.season_id
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY ${sortColumn} ${q.sortDir === "desc" ? "DESC" : "ASC"}, iv.id
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    );
+
+    const total = result.rows.length > 0 ? Number(result.rows[0]!.total_count) : 0;
+    const rows = result.rows.map(({ total_count, ...row }) => row);
+    return { rows, total, page: q.page, pageSize: q.pageSize };
+  });
 
   // Bulk item import: one CSV row per variant, creating the parent item the
   // first time its item_code is seen and just adding a variant on later
