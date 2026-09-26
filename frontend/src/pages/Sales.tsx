@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Receipt, RotateCcw, Plus, Trash2, Tag } from "lucide-react";
+import { Receipt, RotateCcw, Plus, Trash2, Tag, FileText } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError, downloadFile } from "../lib/api";
@@ -826,6 +826,511 @@ function CreditNotesTab() {
   );
 }
 
+interface SalesQuotation {
+  id: string;
+  document_number: string;
+  quotation_date: string;
+  valid_until: string | null;
+  document_status: string;
+  gross_amount: string;
+  rejection_reason: string | null;
+  customer_name_en: string;
+  customer_name_ar: string;
+  created_by_email: string | null;
+}
+
+interface SalesQuotationLine {
+  id: string;
+  item_variant_id: string;
+  variant_code: string;
+  item_description: string;
+  qty: string;
+  unit_price: string;
+  net_amount: string;
+  vat_amount: string;
+  gross_amount: string;
+}
+
+interface SalesQuotationDetail {
+  id: string;
+  document_number: string;
+  store_id: string;
+  customer_id: string;
+  quotation_date: string;
+  valid_until: string | null;
+  notes: string | null;
+  document_status: string;
+  net_amount: string;
+  vat_amount: string;
+  gross_amount: string;
+  rejection_reason: string | null;
+  created_by_email: string | null;
+  sales_invoice_id: string | null;
+  lines: SalesQuotationLine[];
+}
+
+function NewQuotationForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: stores } = useApiList<Store>("/api/stores");
+  const { data: customers } = useApiList<Customer>("/api/customers");
+  const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
+  const variantOptions = useVariantOptions();
+
+  const [storeId, setStoreId] = useState("");
+  const [customerId, setCustomerId] = useState("");
+  const [priceListId, setPriceListId] = useState("");
+  const [priceListItems, setPriceListItems] = useState<PriceListItem[] | null>(null);
+  const [quotationDate, setQuotationDate] = useState(new Date().toISOString().slice(0, 10));
+  const [validUntil, setValidUntil] = useState("");
+  const [notes, setNotes] = useState("");
+  const [lines, setLines] = useState<InvoiceLineDraft[]>([
+    { itemVariantId: "", itemDescription: "", qty: "1", unitPrice: "0", vatRate: "15", priceIncludesVat: false },
+  ]);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!priceListId || !token || !companyId) {
+      setPriceListItems(null);
+      return;
+    }
+    apiRequest<PriceListItem[]>(`/api/price-lists/${priceListId}/items`, { token, companyId }).then(setPriceListItems);
+  }, [priceListId, token, companyId]);
+
+  const totalGross = Math.round(
+    lines.reduce((s, l) => {
+      const net = (Number(l.qty) || 0) * (Number(l.unitPrice) || 0);
+      const vat = Number(l.vatRate) || 0;
+      return s + (l.priceIncludesVat ? net : net * (1 + vat / 100));
+    }, 0) * 100,
+  ) / 100;
+
+  function updateLine(index: number, patch: Partial<InvoiceLineDraft>) {
+    setLines((prev) =>
+      prev.map((l, i) => {
+        if (i !== index) return l;
+        const next = { ...l, ...patch };
+        if (patch.itemVariantId !== undefined) {
+          const variant = variantOptions.find((v) => v.id === patch.itemVariantId);
+          next.itemDescription = variant?.itemName ?? "";
+          const priceEntry = priceListItems?.find((pi) => pi.item_variant_id === patch.itemVariantId);
+          const list = priceLists?.find((pl) => pl.id === priceListId);
+          if (priceEntry) {
+            next.unitPrice = priceEntry.price;
+            next.priceIncludesVat = list?.price_includes_vat ?? next.priceIncludesVat;
+          }
+        }
+        return next;
+      }),
+    );
+  }
+  function addLine() {
+    setLines((prev) => [...prev, { itemVariantId: "", itemDescription: "", qty: "1", unitPrice: "0", vatRate: "15", priceIncludesVat: false }]);
+  }
+  function removeLine(index: number) {
+    setLines((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const created = await apiRequest<{ id: string }>("/api/sales-quotations", {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          storeId,
+          customerId,
+          priceListId: priceListId || null,
+          quotationDate,
+          validUntil: validUntil || null,
+          notes: notes || null,
+          lines: lines
+            .filter((l) => l.itemVariantId)
+            .map((l) => ({
+              itemVariantId: l.itemVariantId,
+              itemDescription: l.itemDescription,
+              qty: Number(l.qty),
+              unitPrice: Number(l.unitPrice),
+              discountAmount: 0,
+              vatRate: Number(l.vatRate),
+              priceIncludesVat: l.priceIncludesVat,
+            })),
+        },
+      });
+      await apiRequest(`/api/sales-quotations/${created.id}/send`, { method: "POST", token, companyId });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create quotation");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Store" required>
+          <SelectInput required value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+            <option value="">Select...</option>
+            {stores?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name_en}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="Customer" required>
+          <SelectInput
+            required
+            value={customerId}
+            onChange={(e) => {
+              const newCustomerId = e.target.value;
+              setCustomerId(newCustomerId);
+              const customer = customers?.find((c) => c.id === newCustomerId);
+              if (customer?.default_price_list_id && !priceListId) {
+                setPriceListId(customer.default_price_list_id);
+              }
+            }}
+          >
+            <option value="">Select...</option>
+            {customers?.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name_en}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Price List">
+          <SelectInput value={priceListId} onChange={(e) => setPriceListId(e.target.value)}>
+            <option value="">None (manual pricing)</option>
+            {priceLists?.map((pl) => (
+              <option key={pl.id} value={pl.id}>
+                {pl.name_en}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="Valid Until">
+          <TextInput type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
+        </Field>
+      </div>
+      <Field label="Quotation Date" required>
+        <TextInput type="date" required value={quotationDate} onChange={(e) => setQuotationDate(e.target.value)} />
+      </Field>
+      <Field label="Notes">
+        <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" />
+      </Field>
+
+      <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Lines</div>
+      <div className="space-y-2">
+        {lines.map((line, i) => (
+          <div key={i} className="rounded-md border border-slate-200 p-2">
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <SelectInput value={line.itemVariantId} onChange={(e) => updateLine(i, { itemVariantId: e.target.value })} className="min-w-0 flex-1">
+                <option value="">Item variant...</option>
+                {variantOptions.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.label}
+                  </option>
+                ))}
+              </SelectInput>
+              <button type="button" onClick={() => removeLine(i)} className="shrink-0 rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500">
+                <Trash2 size={14} />
+              </button>
+            </div>
+            <div className="flex gap-1.5">
+              <TextInput type="number" min={0.001} step="0.001" placeholder="Qty" value={line.qty} onChange={(e) => updateLine(i, { qty: e.target.value })} className="min-w-0 flex-1" />
+              <TextInput type="number" min={0} step="0.01" placeholder="Unit Price" value={line.unitPrice} onChange={(e) => updateLine(i, { unitPrice: e.target.value })} className="min-w-0 flex-1" />
+              <div className="w-20 flex-none">
+                <TextInput type="number" min={0} step="0.01" placeholder="VAT %" value={line.vatRate} onChange={(e) => updateLine(i, { vatRate: e.target.value })} />
+              </div>
+            </div>
+            <label className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
+              <input type="checkbox" checked={line.priceIncludesVat} onChange={(e) => updateLine(i, { priceIncludesVat: e.target.checked })} />
+              Price includes VAT
+            </label>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={addLine} className="mt-2 flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
+        <Plus size={14} /> Add line
+      </button>
+
+      <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">Total: {totalGross.toFixed(2)}</div>
+
+      <FormActions error={error} submitting={submitting} submitLabel="Create & Send Quotation" />
+    </form>
+  );
+}
+
+function ConvertQuotationForm({ quotation, onClose, onConverted }: { quotation: SalesQuotationDetail; onClose: () => void; onConverted: (invoiceId: string) => void }) {
+  const { token, companyId } = useAuth();
+  const openPeriods = useOpenPeriods();
+  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
+  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const result = await apiRequest<{ salesInvoiceId: string }>(`/api/sales-quotations/${quotation.id}/convert`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { invoiceDate, fiscalPeriodId },
+      });
+      onConverted(result.salesInvoiceId);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to convert quotation");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-3 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3">
+      <Field label="Invoice Date" required>
+        <TextInput type="date" required value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+      </Field>
+      <Field label="Fiscal Period" required>
+        <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
+          <option value="">Select...</option>
+          {openPeriods.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.year_name} — P{p.period_number}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      <FormActions error={error} submitting={submitting} submitLabel="Create & Post Invoice" />
+      <button type="button" onClick={onClose} className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+        Cancel
+      </button>
+    </form>
+  );
+}
+
+function useOpenPeriods() {
+  const { data } = useApiList<FiscalPeriod>("/api/fiscal-periods");
+  return data?.filter((p) => p.status === "open") ?? [];
+}
+
+function QuotationDetailModal({ quotationId, onClose, onChanged }: { quotationId: string; onClose: () => void; onChanged: () => void }) {
+  const { token, companyId, hasPermission, me } = useAuth();
+  const [detail, setDetail] = useState<SalesQuotationDetail | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [showReject, setShowReject] = useState(false);
+  const [showConvert, setShowConvert] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function reload() {
+    const d = await apiRequest<SalesQuotationDetail>(`/api/sales-quotations/${quotationId}`, { token, companyId });
+    setDetail(d);
+  }
+
+  useEffect(() => {
+    if (!token || !companyId) return;
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quotationId, token, companyId]);
+
+  async function accept() {
+    setError(null);
+    setBusy(true);
+    try {
+      await apiRequest(`/api/sales-quotations/${quotationId}/accept`, { method: "POST", token, companyId });
+      await reload();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to accept");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function withdraw() {
+    setError(null);
+    setBusy(true);
+    try {
+      await apiRequest(`/api/sales-quotations/${quotationId}/withdraw`, { method: "POST", token, companyId });
+      await reload();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to withdraw");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reject(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await apiRequest(`/api/sales-quotations/${quotationId}/reject`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { rejectionReason },
+      });
+      await reload();
+      onChanged();
+      setShowReject(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to reject");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+
+  const isOwnQuotation = me?.user.email === detail.created_by_email;
+  const canDecide = hasPermission("sales.quotation.decide");
+  const canConvert = hasPermission("sales.wholesale_invoice.create");
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <div className="font-mono text-xs text-slate-500">{detail.document_number}</div>
+          <div className="text-sm text-slate-700">
+            created by {detail.created_by_email ?? "—"}
+            {detail.valid_until && <span className="text-slate-400"> · valid until {new Date(detail.valid_until).toLocaleDateString()}</span>}
+          </div>
+        </div>
+        <StatusBadge status={detail.document_status} />
+      </div>
+      {detail.notes && <p className="mb-2 text-xs text-slate-500">{detail.notes}</p>}
+      {detail.document_status === "rejected" && detail.rejection_reason && (
+        <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">Rejected: {detail.rejection_reason}</p>
+      )}
+
+      <div className="mb-3 space-y-1 border-y border-dashed border-slate-200 py-2 text-sm">
+        {detail.lines.map((l) => (
+          <div key={l.id} className="flex justify-between">
+            <span className="text-slate-600">
+              {l.item_description} × {l.qty}
+            </span>
+            <span className="tabular-nums">{Number(l.gross_amount).toFixed(2)}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mb-3 flex justify-between text-base font-semibold text-slate-900">
+        <span>Total</span>
+        <span className="tabular-nums">{Number(detail.gross_amount).toFixed(2)}</span>
+      </div>
+
+      {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+
+      {detail.document_status === "sent" && !showReject && (
+        <div className="flex flex-wrap gap-2">
+          {canDecide && (
+            <>
+              <button onClick={accept} disabled={busy} className="rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
+                {busy ? "Working..." : "Mark Accepted"}
+              </button>
+              <button onClick={() => setShowReject(true)} disabled={busy} className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">
+                Mark Rejected
+              </button>
+            </>
+          )}
+          {isOwnQuotation && (
+            <button onClick={withdraw} disabled={busy} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+              {busy ? "Working..." : "Withdraw"}
+            </button>
+          )}
+        </div>
+      )}
+      {showReject && (
+        <form onSubmit={reject} className="space-y-2">
+          <Field label="Rejection Reason" required>
+            <TextInput required value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} />
+          </Field>
+          <div className="flex gap-2">
+            <button type="submit" disabled={busy} className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">
+              {busy ? "Working..." : "Confirm Rejection"}
+            </button>
+            <button type="button" onClick={() => setShowReject(false)} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
+      {detail.document_status === "accepted" && canConvert && !showConvert && (
+        <button onClick={() => setShowConvert(true)} className="rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600">
+          Convert to Sales Invoice
+        </button>
+      )}
+      {showConvert && (
+        <ConvertQuotationForm
+          quotation={detail}
+          onClose={() => setShowConvert(false)}
+          onConverted={() => {
+            onChanged();
+            onClose();
+          }}
+        />
+      )}
+      {detail.document_status === "converted_to_invoice" && <p className="text-xs text-slate-400">Already converted into a sales invoice.</p>}
+    </div>
+  );
+}
+
+function QuotationsTab() {
+  const { data, error, reload } = useApiList<SalesQuotation>("/api/sales-quotations");
+  const [showNew, setShowNew] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
+
+  const columns: Column<SalesQuotation>[] = [
+    { key: "number", header: "Quotation #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "customer", header: "Customer", render: (r) => r.customer_name_en },
+    { key: "date", header: "Date", render: (r) => new Date(r.quotation_date).toLocaleDateString() },
+    { key: "amount", header: "Total", render: (r) => Number(r.gross_amount).toFixed(2), numeric: true },
+    { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
+  ];
+
+  return (
+    <>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => `${r.document_number} ${r.customer_name_en}`}
+        emptyIcon={FileText}
+        emptyText="No sales quotations yet."
+        searchPlaceholder="Search quotations..."
+        actionLabel="New Quotation"
+        onAction={() => setShowNew(true)}
+        onRowClick={(r) => setDetailId(r.id)}
+      />
+      {showNew && (
+        <Modal title="New Sales Quotation" onClose={() => setShowNew(false)}>
+          <NewQuotationForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+      {detailId && (
+        <Modal title="Sales Quotation" onClose={() => setDetailId(null)}>
+          <QuotationDetailModal quotationId={detailId} onClose={() => setDetailId(null)} onChanged={reload} />
+        </Modal>
+      )}
+    </>
+  );
+}
+
 interface PriceListRow {
   id: string;
   code: string;
@@ -1075,6 +1580,7 @@ export default function Sales() {
   const { t } = useTranslation();
   const tabs = useMemo(
     () => [
+      { key: "quotations", label: "Quotations", content: <QuotationsTab /> },
       { key: "invoices", label: "Sales Invoices", content: <SalesInvoicesTab /> },
       { key: "credits", label: "Credit Notes", content: <CreditNotesTab /> },
       { key: "price-lists", label: "Price Lists", content: <PriceListsTab /> },

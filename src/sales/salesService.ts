@@ -487,3 +487,152 @@ export async function postCreditNote(client: Client, creditNoteId: string, poste
     [creditNoteId, postedBy, journalId],
   );
 }
+
+// ---------------------------------------------------------------------------
+// Sales quotations: draft -> sent -> accepted/rejected/withdrawn, and an
+// accepted quotation converts into a real (wholesale) sales invoice. See
+// migrations/0063_sales_quotations.sql for the full state machine.
+// ---------------------------------------------------------------------------
+
+export interface SalesQuotationLineRequest extends LineInput {
+  itemVariantId: string;
+  itemDescription: string;
+}
+
+export interface CreateSalesQuotationParams {
+  companyId: string;
+  storeId: string;
+  customerId: string;
+  salespersonId?: string | null;
+  priceListId?: string | null;
+  quotationDate: string;
+  validUntil?: string | null;
+  notes?: string | null;
+  lines: SalesQuotationLineRequest[];
+  createdBy?: string | null;
+}
+
+export async function createSalesQuotation(client: Client, p: CreateSalesQuotationParams): Promise<string> {
+  const fiscalYear = Number(p.quotationDate.slice(0, 4));
+  const documentNumber = await nextDocumentNumber(client, p.companyId, "sales_quotation", fiscalYear, "SQ-");
+
+  const header = await client.query<{ id: string }>(
+    `INSERT INTO sales_quotations
+       (company_id, store_id, customer_id, salesperson_id, price_list_id, document_number,
+        quotation_date, valid_until, notes, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+    [
+      p.companyId, p.storeId, p.customerId, p.salespersonId ?? null, p.priceListId ?? null, documentNumber,
+      p.quotationDate, p.validUntil ?? null, p.notes ?? null, p.createdBy ?? null,
+    ],
+  );
+  const quotationId = header.rows[0]!.id;
+
+  let lineNumber = 0;
+  for (const line of p.lines) {
+    lineNumber += 1;
+    const amounts = calculateLineAmounts(line);
+    await client.query(
+      `INSERT INTO sales_quotation_lines
+         (company_id, quotation_id, line_number, item_variant_id, item_description,
+          qty, unit_price, discount_amount, vat_rate, price_includes_vat,
+          net_amount, vat_amount, gross_amount)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        p.companyId, quotationId, lineNumber, line.itemVariantId, line.itemDescription,
+        line.qty, line.unitPrice, line.discountAmount, line.vatRate, line.priceIncludesVat,
+        amounts.netAmount, amounts.vatAmount, amounts.grossAmount,
+      ],
+    );
+  }
+
+  return quotationId;
+}
+
+export async function sendSalesQuotation(client: Client, quotationId: string): Promise<void> {
+  await client.query(`UPDATE sales_quotations SET document_status = 'sent' WHERE id = $1`, [quotationId]);
+}
+
+export async function withdrawSalesQuotation(client: Client, quotationId: string): Promise<void> {
+  await client.query(`UPDATE sales_quotations SET document_status = 'withdrawn' WHERE id = $1`, [quotationId]);
+}
+
+export async function acceptSalesQuotation(client: Client, quotationId: string, decidedBy: string): Promise<void> {
+  await client.query(`UPDATE sales_quotations SET document_status = 'accepted', decided_by = $2 WHERE id = $1`, [
+    quotationId,
+    decidedBy,
+  ]);
+}
+
+export async function rejectSalesQuotation(
+  client: Client,
+  quotationId: string,
+  decidedBy: string,
+  rejectionReason: string,
+): Promise<void> {
+  await client.query(
+    `UPDATE sales_quotations SET document_status = 'rejected', decided_by = $2, rejection_reason = $3 WHERE id = $1`,
+    [quotationId, decidedBy, rejectionReason],
+  );
+}
+
+export interface ConvertQuotationToInvoiceParams {
+  quotationId: string;
+  companyId: string;
+  storeId: string;
+  customerId: string;
+  invoiceDate: string;
+  fiscalPeriodId: string;
+  salespersonId?: string | null;
+  priceListId?: string | null;
+  createdBy?: string | null;
+}
+
+export async function convertSalesQuotationToInvoice(client: Client, p: ConvertQuotationToInvoiceParams): Promise<string> {
+  const lines = await client.query<{
+    item_variant_id: string;
+    item_description: string;
+    qty: string;
+    unit_price: string;
+    discount_amount: string;
+    vat_rate: string;
+    price_includes_vat: boolean;
+  }>(
+    `SELECT item_variant_id, item_description, qty, unit_price, discount_amount, vat_rate, price_includes_vat
+     FROM sales_quotation_lines WHERE quotation_id = $1 ORDER BY line_number`,
+    [p.quotationId],
+  );
+
+  const invoiceId = await createSalesInvoice(client, {
+    companyId: p.companyId,
+    storeId: p.storeId,
+    invoiceChannel: "wholesale",
+    zatcaInvoiceCategory: "standard",
+    invoiceDate: p.invoiceDate,
+    fiscalPeriodId: p.fiscalPeriodId,
+    customerId: p.customerId,
+    salespersonId: p.salespersonId ?? null,
+    priceListId: p.priceListId ?? null,
+    createdBy: p.createdBy ?? null,
+    lines: lines.rows.map((l) => ({
+      itemVariantId: l.item_variant_id,
+      itemDescription: l.item_description,
+      qty: Number(l.qty),
+      unitPrice: Number(l.unit_price),
+      discountAmount: Number(l.discount_amount),
+      vatRate: Number(l.vat_rate),
+      priceIncludesVat: l.price_includes_vat,
+    })),
+  });
+
+  if (p.createdBy) {
+    await postSalesInvoice(client, invoiceId, p.createdBy);
+  }
+
+  await client.query(
+    `UPDATE sales_quotations SET document_status = 'converted_to_invoice', sales_invoice_id = $2 WHERE id = $1`,
+    [p.quotationId, invoiceId],
+  );
+
+  return invoiceId;
+}

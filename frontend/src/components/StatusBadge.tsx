@@ -11,7 +11,10 @@ const STYLES: Record<string, string> = {
   approved: "bg-green-100 text-green-700",
   rejected: "bg-red-100 text-red-600",
   converted_to_po: "bg-slate-100 text-slate-600",
+  converted_to_invoice: "bg-slate-100 text-slate-600",
   withdrawn: "bg-slate-100 text-slate-500",
+  sent: "bg-blue-100 text-blue-700",
+  accepted: "bg-green-100 text-green-700",
 };
 
 export default function StatusBadge({ status }: { status: string }) {
