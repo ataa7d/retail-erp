@@ -96,6 +96,10 @@ interface ExchangeRate {
 }
 
 interface AgeingRow {
+  sales_invoice_id?: string;
+  supplier_invoice_id?: string;
+  customer_id?: string;
+  supplier_id?: string;
   document_number: string;
   invoice_date: string;
   due_date: string;
@@ -502,12 +506,113 @@ function JournalsTab() {
   );
 }
 
+// ---- Invoice allocation picker (shared by customer receipts and supplier payments) ----
+
+function InvoiceAllocationPicker({
+  invoices,
+  amount,
+  allocations,
+  onChange,
+  invoiceIdKey,
+}: {
+  invoices: AgeingRow[];
+  amount: number;
+  allocations: Record<string, number>;
+  onChange: (next: Record<string, number>) => void;
+  invoiceIdKey: "sales_invoice_id" | "supplier_invoice_id";
+}) {
+  const totalAllocated = Object.values(allocations).reduce((sum, v) => sum + (v || 0), 0);
+  const remaining = round2(amount - totalAllocated);
+
+  function setLine(invoiceId: string, value: number) {
+    const next = { ...allocations };
+    if (value > 0) next[invoiceId] = value;
+    else delete next[invoiceId];
+    onChange(next);
+  }
+
+  function autoAllocateOldestFirst() {
+    let left = amount;
+    const next: Record<string, number> = {};
+    for (const inv of invoices) {
+      const invoiceId = inv[invoiceIdKey];
+      if (!invoiceId || left <= 0) continue;
+      const open = Number(inv.open_amount);
+      const apply = round2(Math.min(open, left));
+      if (apply > 0) {
+        next[invoiceId] = apply;
+        left = round2(left - apply);
+      }
+    }
+    onChange(next);
+  }
+
+  if (invoices.length === 0) {
+    return <p className="mb-3 text-xs text-slate-400">No open invoices for this customer/supplier — will post as unapplied cash.</p>;
+  }
+
+  return (
+    <div className="mb-3 rounded border border-slate-200">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2">
+        <span className="text-xs font-medium text-slate-600">Apply to open invoices (optional)</span>
+        <button type="button" className="text-xs font-medium text-blue-600 hover:underline" onClick={autoAllocateOldestFirst}>
+          Auto-apply oldest first
+        </button>
+      </div>
+      <div className="max-h-56 overflow-y-auto">
+        {invoices.map((inv) => {
+          const invoiceId = inv[invoiceIdKey];
+          if (!invoiceId) return null;
+          const open = Number(inv.open_amount);
+          const value = allocations[invoiceId] ?? 0;
+          return (
+            <div key={invoiceId} className="flex items-center gap-2 border-b border-slate-100 px-3 py-1.5 last:border-b-0">
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-mono text-xs text-slate-700">{inv.document_number}</div>
+                <div className="text-[11px] text-slate-400">
+                  Due {new Date(inv.due_date).toLocaleDateString()} · Open {open.toFixed(2)}
+                </div>
+              </div>
+              <input
+                type="number"
+                min={0}
+                max={open}
+                step="0.01"
+                value={value || ""}
+                placeholder="0.00"
+                className="w-24 rounded border border-slate-300 px-2 py-1 text-right text-xs"
+                onChange={(e) => setLine(invoiceId, Math.min(open, Number(e.target.value) || 0))}
+              />
+              <button
+                type="button"
+                className="text-[11px] font-medium text-blue-600 hover:underline"
+                onClick={() => setLine(invoiceId, round2(Math.min(open, remaining + value)))}
+              >
+                Full
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <div className={`flex justify-between border-t border-slate-200 px-3 py-1.5 text-xs ${remaining < 0 ? "text-red-600" : "text-slate-500"}`}>
+        <span>Applied: {totalAllocated.toFixed(2)}</span>
+        <span>Unapplied: {remaining.toFixed(2)}</span>
+      </div>
+    </div>
+  );
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 // ---- Customer Receipts ----
 
 function NewReceiptForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: customers } = useApiList<Customer>("/api/customers");
   const { data: bankAccounts } = useApiList<BankAccount>("/api/bank-accounts");
+  const { data: arAgeing } = useApiList<AgeingRow>("/api/ar-ageing");
   const openPeriods = useOpenPeriods();
 
   const [customerId, setCustomerId] = useState("");
@@ -516,19 +621,38 @@ function NewReceiptForm({ onClose, onCreated }: { onClose: () => void; onCreated
   const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [amount, setAmount] = useState(0);
+  const [allocations, setAllocations] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const openInvoices = useMemo(() => (arAgeing ?? []).filter((r) => r.customer_id === customerId), [arAgeing, customerId]);
+
+  function selectCustomer(id: string) {
+    setCustomerId(id);
+    setAllocations({});
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
+      const allocationList = Object.entries(allocations)
+        .filter(([, v]) => v > 0)
+        .map(([salesInvoiceId, allocatedAmount]) => ({ salesInvoiceId, allocatedAmount }));
       await apiRequest("/api/customer-receipts", {
         method: "POST",
         token,
         companyId,
-        body: { customerId, bankAccountId: bankAccountId || null, receiptDate, fiscalPeriodId, paymentMethod, amount },
+        body: {
+          customerId,
+          bankAccountId: bankAccountId || null,
+          receiptDate,
+          fiscalPeriodId,
+          paymentMethod,
+          amount,
+          allocations: allocationList.length > 0 ? allocationList : undefined,
+        },
       });
       onCreated();
       onClose();
@@ -542,7 +666,7 @@ function NewReceiptForm({ onClose, onCreated }: { onClose: () => void; onCreated
   return (
     <form onSubmit={handleSubmit}>
       <Field label="Customer" required>
-        <SelectInput required value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+        <SelectInput required value={customerId} onChange={(e) => selectCustomer(e.target.value)}>
           <option value="">Select...</option>
           {customers?.map((c) => (
             <option key={c.id} value={c.id}>
@@ -572,6 +696,15 @@ function NewReceiptForm({ onClose, onCreated }: { onClose: () => void; onCreated
       <Field label="Amount" required>
         <TextInput type="number" min={0.01} step="0.01" required value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
       </Field>
+      {customerId && (
+        <InvoiceAllocationPicker
+          invoices={openInvoices}
+          amount={amount}
+          allocations={allocations}
+          onChange={setAllocations}
+          invoiceIdKey="sales_invoice_id"
+        />
+      )}
       <Field label="Receipt Date" required>
         <TextInput type="date" required value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} />
       </Field>
@@ -585,7 +718,6 @@ function NewReceiptForm({ onClose, onCreated }: { onClose: () => void; onCreated
           ))}
         </SelectInput>
       </Field>
-      <p className="mb-3 text-xs text-slate-400">Posted as unapplied cash — allocating to a specific invoice isn't in this form yet.</p>
       <FormActions error={error} submitting={submitting} submitLabel="Post Receipt" />
     </form>
   );
@@ -634,6 +766,7 @@ function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; onCreated
   const baseCurrency = useBaseCurrency();
   const { data: suppliers } = useApiList<Supplier>("/api/suppliers");
   const { data: bankAccounts } = useApiList<BankAccount>("/api/bank-accounts");
+  const { data: apAgeing } = useApiList<AgeingRow>("/api/ap-ageing");
   const openPeriods = useOpenPeriods();
 
   const [supplierId, setSupplierId] = useState("");
@@ -644,13 +777,17 @@ function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; onCreated
   const [amount, setAmount] = useState(0);
   const [currency, setCurrency] = useState(baseCurrency);
   const [exchangeRate, setExchangeRate] = useState("1");
+  const [allocations, setAllocations] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const openInvoices = useMemo(() => (apAgeing ?? []).filter((r) => r.supplier_id === supplierId), [apAgeing, supplierId]);
 
   function selectSupplier(id: string) {
     setSupplierId(id);
     const supplier = suppliers?.find((s) => s.id === id);
     if (supplier) setCurrency(supplier.currency);
+    setAllocations({});
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -658,6 +795,9 @@ function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; onCreated
     setError(null);
     setSubmitting(true);
     try {
+      const allocationList = Object.entries(allocations)
+        .filter(([, v]) => v > 0)
+        .map(([supplierInvoiceId, allocatedAmount]) => ({ supplierInvoiceId, allocatedAmount }));
       await apiRequest("/api/supplier-payments", {
         method: "POST",
         token,
@@ -671,6 +811,7 @@ function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; onCreated
           amount,
           currency,
           exchangeRate: currency === baseCurrency ? null : Number(exchangeRate),
+          allocations: allocationList.length > 0 ? allocationList : undefined,
         },
       });
       onCreated();
@@ -721,6 +862,15 @@ function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; onCreated
         </Field>
       </div>
       <ExchangeRateField currency={currency} date={paymentDate} value={exchangeRate} onChange={setExchangeRate} label={`Exchange Rate (${baseCurrency} per 1 ${currency}, today's bank rate)`} />
+      {supplierId && (
+        <InvoiceAllocationPicker
+          invoices={openInvoices}
+          amount={amount}
+          allocations={allocations}
+          onChange={setAllocations}
+          invoiceIdKey="supplier_invoice_id"
+        />
+      )}
       <Field label="Payment Date" required>
         <TextInput type="date" required value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
       </Field>
@@ -734,7 +884,6 @@ function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; onCreated
           ))}
         </SelectInput>
       </Field>
-      <p className="mb-3 text-xs text-slate-400">Posted as unapplied cash — allocating to a specific invoice isn't in this form yet.</p>
       <FormActions error={error} submitting={submitting} submitLabel="Post Payment" />
     </form>
   );
