@@ -64,6 +64,8 @@ interface ItemVariant {
   size: string | null;
   is_active: boolean;
   reorder_point: string;
+  standard_cost: string | null;
+  weight_kg: string | null;
   barcodes: ItemBarcode[] | null;
 }
 
@@ -77,6 +79,9 @@ interface Item {
   season_id: string | null;
   item_year: number | null;
   default_tax_code_id: string | null;
+  material: string | null;
+  country_of_origin: string | null;
+  supplier_style_number: string | null;
   is_active: boolean;
   variants: ItemVariant[];
 }
@@ -97,9 +102,14 @@ function NewItemForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const [seasonId, setSeasonId] = useState("");
   const [itemYear, setItemYear] = useState("");
   const [defaultTaxCodeId, setDefaultTaxCodeId] = useState("");
+  const [material, setMaterial] = useState("");
+  const [countryOfOrigin, setCountryOfOrigin] = useState("");
+  const [supplierStyleNumber, setSupplierStyleNumber] = useState("");
   const [variantCode, setVariantCode] = useState("");
   const [color, setColor] = useState("");
   const [size, setSize] = useState("");
+  const [standardCost, setStandardCost] = useState("");
+  const [weightKg, setWeightKg] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -122,9 +132,14 @@ function NewItemForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
           seasonId: seasonId || null,
           itemYear: itemYear ? Number(itemYear) : null,
           defaultTaxCodeId: defaultTaxCodeId || null,
+          material: material || null,
+          countryOfOrigin: countryOfOrigin || null,
+          supplierStyleNumber: supplierStyleNumber || null,
           variantCode,
           color: color || null,
           size: size || null,
+          standardCost: standardCost ? Number(standardCost) : null,
+          weightKg: weightKg ? Number(weightKg) : null,
         },
       });
       onCreated();
@@ -203,6 +218,17 @@ function NewItemForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
         </Field>
       </div>
       <div className="grid grid-cols-3 gap-3">
+        <Field label="Material">
+          <TextInput value={material} onChange={(e) => setMaterial(e.target.value)} placeholder="e.g. 100% Cotton" />
+        </Field>
+        <Field label="Country of Origin">
+          <TextInput value={countryOfOrigin} onChange={(e) => setCountryOfOrigin(e.target.value)} placeholder="e.g. Bangladesh" />
+        </Field>
+        <Field label="Supplier Style #">
+          <TextInput value={supplierStyleNumber} onChange={(e) => setSupplierStyleNumber(e.target.value)} placeholder="Supplier's own code" />
+        </Field>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
         <div className="col-span-3 sm:col-span-1">
           <Field label="Variant / SKU Code" required>
             <TextInput required value={variantCode} onChange={(e) => setVariantCode(e.target.value)} placeholder="e.g. TS-001-BLK-M" />
@@ -213,6 +239,14 @@ function NewItemForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
         </Field>
         <Field label="Size">
           <TextInput value={size} onChange={(e) => setSize(e.target.value)} />
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Standard Cost">
+          <TextInput type="number" min={0} step="0.01" value={standardCost} onChange={(e) => setStandardCost(e.target.value)} placeholder="Budget/planning cost" />
+        </Field>
+        <Field label="Weight (kg)">
+          <TextInput type="number" min={0} step="0.001" value={weightKg} onChange={(e) => setWeightKg(e.target.value)} />
         </Field>
       </div>
       <p className="mb-3 text-xs text-slate-400">
@@ -228,6 +262,8 @@ function AddVariantForm({ itemId, onClose, onCreated }: { itemId: string; onClos
   const [variantCode, setVariantCode] = useState("");
   const [color, setColor] = useState("");
   const [size, setSize] = useState("");
+  const [standardCost, setStandardCost] = useState("");
+  const [weightKg, setWeightKg] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -240,7 +276,13 @@ function AddVariantForm({ itemId, onClose, onCreated }: { itemId: string; onClos
         method: "POST",
         token,
         companyId,
-        body: { variantCode, color: color || null, size: size || null },
+        body: {
+          variantCode,
+          color: color || null,
+          size: size || null,
+          standardCost: standardCost ? Number(standardCost) : null,
+          weightKg: weightKg ? Number(weightKg) : null,
+        },
       });
       onCreated();
       onClose();
@@ -262,6 +304,14 @@ function AddVariantForm({ itemId, onClose, onCreated }: { itemId: string; onClos
         </Field>
         <Field label="Size">
           <TextInput value={size} onChange={(e) => setSize(e.target.value)} />
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Standard Cost">
+          <TextInput type="number" min={0} step="0.01" value={standardCost} onChange={(e) => setStandardCost(e.target.value)} />
+        </Field>
+        <Field label="Weight (kg)">
+          <TextInput type="number" min={0} step="0.001" value={weightKg} onChange={(e) => setWeightKg(e.target.value)} />
         </Field>
       </div>
       <FormActions error={error} submitting={submitting} submitLabel="Add Variant" />
@@ -333,6 +383,9 @@ function ClassifyItemForm({ item, onChanged }: { item: Item; onChanged: () => vo
   const [seasonId, setSeasonId] = useState(item.season_id ?? "");
   const [itemYear, setItemYear] = useState(item.item_year != null ? String(item.item_year) : "");
   const [defaultTaxCodeId, setDefaultTaxCodeId] = useState(item.default_tax_code_id ?? "");
+  const [material, setMaterial] = useState(item.material ?? "");
+  const [countryOfOrigin, setCountryOfOrigin] = useState(item.country_of_origin ?? "");
+  const [supplierStyleNumber, setSupplierStyleNumber] = useState(item.supplier_style_number ?? "");
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -348,6 +401,9 @@ function ClassifyItemForm({ item, onChanged }: { item: Item; onChanged: () => vo
           seasonId: seasonId || null,
           itemYear: itemYear ? Number(itemYear) : null,
           defaultTaxCodeId: defaultTaxCodeId || null,
+          material: material || null,
+          countryOfOrigin: countryOfOrigin || null,
+          supplierStyleNumber: supplierStyleNumber || null,
         },
       });
       onChanged();
@@ -401,6 +457,15 @@ function ClassifyItemForm({ item, onChanged }: { item: Item; onChanged: () => vo
           ))}
         </SelectInput>
       </Field>
+      <Field label="Material">
+        <TextInput value={material} onChange={(e) => setMaterial(e.target.value)} placeholder="e.g. 100% Cotton" />
+      </Field>
+      <Field label="Country of Origin">
+        <TextInput value={countryOfOrigin} onChange={(e) => setCountryOfOrigin(e.target.value)} placeholder="e.g. Bangladesh" />
+      </Field>
+      <Field label="Supplier Style #">
+        <TextInput value={supplierStyleNumber} onChange={(e) => setSupplierStyleNumber(e.target.value)} placeholder="Supplier's own code" />
+      </Field>
       <div className="col-span-2 sm:col-span-5">
         <button
           onClick={save}
@@ -424,6 +489,8 @@ function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) 
   const [busyVariantId, setBusyVariantId] = useState<string | null>(null);
   const [reorderDrafts, setReorderDrafts] = useState<Record<string, string>>({});
   const [savingReorderId, setSavingReorderId] = useState<string | null>(null);
+  const [costDrafts, setCostDrafts] = useState<Record<string, { standardCost: string; weightKg: string }>>({});
+  const [savingAttributesId, setSavingAttributesId] = useState<string | null>(null);
 
   async function toggleActive(variant: ItemVariant) {
     setBusyVariantId(variant.id);
@@ -454,6 +521,29 @@ function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) 
       onChanged();
     } finally {
       setSavingReorderId(null);
+    }
+  }
+
+  function costDraft(variant: ItemVariant) {
+    return costDrafts[variant.id] ?? { standardCost: variant.standard_cost ?? "", weightKg: variant.weight_kg ?? "" };
+  }
+
+  async function saveAttributes(variant: ItemVariant) {
+    const draft = costDraft(variant);
+    setSavingAttributesId(variant.id);
+    try {
+      await apiRequest(`/api/item-variants/${variant.id}/attributes`, {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          standardCost: draft.standardCost ? Number(draft.standardCost) : null,
+          weightKg: draft.weightKg ? Number(draft.weightKg) : null,
+        },
+      });
+      onChanged();
+    } finally {
+      setSavingAttributesId(null);
     }
   }
 
@@ -521,6 +611,33 @@ function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) 
                 {savingReorderId === v.id ? "Saving..." : "Save"}
               </button>
               <span className="text-xs text-slate-400">0 = no low-stock alert</span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
+              <label className="text-xs text-slate-500">Standard cost</label>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={costDraft(v).standardCost}
+                onChange={(e) => setCostDrafts((prev) => ({ ...prev, [v.id]: { ...costDraft(v), standardCost: e.target.value } }))}
+                className="w-20 rounded border border-slate-200 px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
+              />
+              <label className="text-xs text-slate-500">Weight (kg)</label>
+              <input
+                type="number"
+                min={0}
+                step="0.001"
+                value={costDraft(v).weightKg}
+                onChange={(e) => setCostDrafts((prev) => ({ ...prev, [v.id]: { ...costDraft(v), weightKg: e.target.value } }))}
+                className="w-20 rounded border border-slate-200 px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
+              />
+              <button
+                onClick={() => saveAttributes(v)}
+                disabled={savingAttributesId === v.id}
+                className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-30"
+              >
+                {savingAttributesId === v.id ? "Saving..." : "Save"}
+              </button>
             </div>
           </div>
         ))}

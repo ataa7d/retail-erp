@@ -17,6 +17,9 @@ const createSchema = z.object({
   seasonId: z.string().uuid().nullable().optional(),
   itemYear: z.number().int().nullable().optional(),
   defaultTaxCodeId: z.string().uuid().nullable().optional(),
+  material: z.string().nullable().optional(),
+  countryOfOrigin: z.string().nullable().optional(),
+  supplierStyleNumber: z.string().nullable().optional(),
   // Minimal single-variant creation, not the full color/size matrix a real
   // "new item" wizard would offer -- variantCode is required, color/size
   // optional, matching what item_variants actually requires (UNIQUE on
@@ -26,6 +29,8 @@ const createSchema = z.object({
   color: z.string().nullable().optional(),
   size: z.string().nullable().optional(),
   reorderPoint: z.number().nonnegative().optional(),
+  standardCost: z.number().nonnegative().nullable().optional(),
+  weightKg: z.number().nonnegative().nullable().optional(),
 });
 
 const classifySchema = z.object({
@@ -34,6 +39,9 @@ const classifySchema = z.object({
   seasonId: z.string().uuid().nullable().optional(),
   itemYear: z.number().int().nullable().optional(),
   defaultTaxCodeId: z.string().uuid().nullable().optional(),
+  material: z.string().nullable().optional(),
+  countryOfOrigin: z.string().nullable().optional(),
+  supplierStyleNumber: z.string().nullable().optional(),
 });
 
 const addVariantSchema = z.object({
@@ -41,6 +49,8 @@ const addVariantSchema = z.object({
   color: z.string().nullable().optional(),
   size: z.string().nullable().optional(),
   reorderPoint: z.number().nonnegative().optional(),
+  standardCost: z.number().nonnegative().nullable().optional(),
+  weightKg: z.number().nonnegative().nullable().optional(),
 });
 
 const addBarcodeSchema = z.object({
@@ -53,6 +63,11 @@ const reorderPointSchema = z.object({
   reorderPoint: z.number().nonnegative(),
 });
 
+const variantAttributesSchema = z.object({
+  standardCost: z.number().nonnegative().nullable().optional(),
+  weightKg: z.number().nonnegative().nullable().optional(),
+});
+
 export async function itemRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/items",
@@ -61,8 +76,9 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
       const body = createSchema.parse(request.body);
       const itemId = await withTransaction(async (client) => {
         const item = await client.query<{ id: string }>(
-          `INSERT INTO items (company_id, item_code, name_en, name_ar, brand_id, category_id, season_id, item_year, default_tax_code_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+          `INSERT INTO items (company_id, item_code, name_en, name_ar, brand_id, category_id, season_id, item_year,
+                              default_tax_code_id, material, country_of_origin, supplier_style_number)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
           [
             request.companyId,
             body.itemCode,
@@ -73,6 +89,9 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
             body.seasonId ?? null,
             body.itemYear ?? null,
             body.defaultTaxCodeId ?? null,
+            body.material ?? null,
+            body.countryOfOrigin ?? null,
+            body.supplierStyleNumber ?? null,
           ],
         );
         const newItemId = item.rows[0]!.id;
@@ -86,9 +105,12 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
         );
 
         await client.query(
-          `INSERT INTO item_variants (company_id, item_id, variant_code, color, size, reorder_point)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [request.companyId, newItemId, body.variantCode, body.color ?? null, body.size ?? null, body.reorderPoint ?? 0],
+          `INSERT INTO item_variants (company_id, item_id, variant_code, color, size, reorder_point, standard_cost, weight_kg)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            request.companyId, newItemId, body.variantCode, body.color ?? null, body.size ?? null,
+            body.reorderPoint ?? 0, body.standardCost ?? null, body.weightKg ?? null,
+          ],
         );
         return newItemId;
       }, request.authUser.id);
@@ -110,9 +132,12 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
         if (item.rows.length === 0) throw new NotFoundError("item not found");
 
         const variant = await client.query<{ id: string }>(
-          `INSERT INTO item_variants (company_id, item_id, variant_code, color, size, reorder_point)
-           VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-          [request.companyId, request.params.id, body.variantCode, body.color ?? null, body.size ?? null, body.reorderPoint ?? 0],
+          `INSERT INTO item_variants (company_id, item_id, variant_code, color, size, reorder_point, standard_cost, weight_kg)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+          [
+            request.companyId, request.params.id, body.variantCode, body.color ?? null, body.size ?? null,
+            body.reorderPoint ?? 0, body.standardCost ?? null, body.weightKg ?? null,
+          ],
         );
         return variant.rows[0]!.id;
       }, request.authUser.id);
@@ -157,13 +182,18 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
         ]);
         if (existing.rows.length === 0) throw new NotFoundError("item not found");
         await client.query(
-          `UPDATE items SET brand_id = $1, category_id = $2, season_id = $3, item_year = $4, default_tax_code_id = $5 WHERE id = $6`,
+          `UPDATE items SET brand_id = $1, category_id = $2, season_id = $3, item_year = $4, default_tax_code_id = $5,
+                            material = $6, country_of_origin = $7, supplier_style_number = $8
+           WHERE id = $9`,
           [
             body.brandId ?? null,
             body.categoryId ?? null,
             body.seasonId ?? null,
             body.itemYear ?? null,
             body.defaultTaxCodeId ?? null,
+            body.material ?? null,
+            body.countryOfOrigin ?? null,
+            body.supplierStyleNumber ?? null,
             request.params.id,
           ],
         );
@@ -221,6 +251,27 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  app.post<{ Params: { id: string } }>(
+    "/item-variants/:id/attributes",
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    async (request) => {
+      const body = variantAttributesSchema.parse(request.body);
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM item_variants WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("item variant not found");
+        await client.query(`UPDATE item_variants SET standard_cost = $1, weight_kg = $2 WHERE id = $3`, [
+          body.standardCost ?? null,
+          body.weightKg ?? null,
+          request.params.id,
+        ]);
+      }, request.authUser.id);
+      return { id: request.params.id, standardCost: body.standardCost ?? null, weightKg: body.weightKg ?? null };
+    },
+  );
+
   // Master data syncs one way, down — updatedSince lets a client (POS,
   // admin UI) pull only what changed since its last sync.
   app.get("/items", { preHandler: app.authenticate }, async (request) => {
@@ -228,7 +279,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
 
     const items = await pool.query(
       `SELECT id, item_code, name_en, name_ar, brand_id, category_id, season_id, item_year,
-              default_tax_code_id, is_active, updated_at
+              default_tax_code_id, material, country_of_origin, supplier_style_number, is_active, updated_at
        FROM items
        WHERE company_id = $1 AND ($2::timestamptz IS NULL OR updated_at > $2)
        ORDER BY updated_at`,
@@ -237,6 +288,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
 
     const variants = await pool.query(
       `SELECT iv.id, iv.item_id, iv.variant_code, iv.color, iv.size, iv.is_active, iv.reorder_point,
+              iv.standard_cost, iv.weight_kg,
               json_agg(json_build_object('id', ib.id, 'barcode', ib.barcode, 'unitOfMeasureId', ib.unit_of_measure_id, 'isPrimary', ib.is_primary))
                 FILTER (WHERE ib.id IS NOT NULL) AS barcodes
        FROM item_variants iv

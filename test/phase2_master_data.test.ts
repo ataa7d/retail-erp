@@ -157,6 +157,47 @@ describe("items and variants", () => {
       ),
     ).rejects.toThrow(/does not belong to company/);
   });
+
+  it("stores apparel attributes (material, country of origin, supplier style number) on the item and cost/weight per variant", async () => {
+    const item = await client.query(
+      `INSERT INTO items (company_id, item_code, name_en, name_ar, material, country_of_origin, supplier_style_number)
+       VALUES ($1, $2, 'Test Item', 'صنف اختبار', '100% Cotton', 'Bangladesh', 'SUP-STYLE-42') RETURNING id`,
+      [companyAId, `IT-${randomUUID().slice(0, 8)}`],
+    );
+    const itemId = item.rows[0].id;
+
+    const variant = await client.query(
+      `INSERT INTO item_variants (company_id, item_id, variant_code, standard_cost, weight_kg)
+       VALUES ($1, $2, $3, 12.50, 0.350) RETURNING standard_cost, weight_kg`,
+      [companyAId, itemId, `SKU-${randomUUID().slice(0, 8)}`],
+    );
+
+    const row = await client.query(
+      `SELECT material, country_of_origin, supplier_style_number FROM items WHERE id = $1`,
+      [itemId],
+    );
+    expect(row.rows[0].material).toBe("100% Cotton");
+    expect(row.rows[0].country_of_origin).toBe("Bangladesh");
+    expect(row.rows[0].supplier_style_number).toBe("SUP-STYLE-42");
+    expect(Number(variant.rows[0].standard_cost)).toBe(12.5);
+    expect(Number(variant.rows[0].weight_kg)).toBe(0.35);
+  });
+
+  it("rejects a negative standard cost or weight on a variant", async () => {
+    const itemId = await createItem(companyAId, `IT-${randomUUID().slice(0, 8)}`);
+    await expect(
+      client.query(
+        `INSERT INTO item_variants (company_id, item_id, variant_code, standard_cost) VALUES ($1, $2, $3, -5)`,
+        [companyAId, itemId, `SKU-${randomUUID().slice(0, 8)}`],
+      ),
+    ).rejects.toThrow();
+    await expect(
+      client.query(
+        `INSERT INTO item_variants (company_id, item_id, variant_code, weight_kg) VALUES ($1, $2, $3, -0.1)`,
+        [companyAId, itemId, `SKU-${randomUUID().slice(0, 8)}`],
+      ),
+    ).rejects.toThrow();
+  });
 });
 
 describe("price lists", () => {
