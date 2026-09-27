@@ -14,6 +14,8 @@ import {
   approvePurchaseRequisition,
   rejectPurchaseRequisition,
   convertPurchaseRequisitionToPo,
+  createSupplierCreditNote,
+  postSupplierCreditNote,
 } from "../../purchasing/purchasingService.js";
 import { NotFoundError, BusinessRuleError } from "../errors.js";
 
@@ -144,6 +146,26 @@ const setSupplierPriceSchema = z.object({
   currency: z.string().min(1).default("SAR"),
   leadTimeDays: z.number().int().nonnegative().nullable().optional(),
   moq: z.number().positive().nullable().optional(),
+});
+
+const creditNoteLineSchema = z.object({
+  sourceLineId: z.string().uuid(),
+  itemVariantId: z.string().uuid(),
+  qty: z.number().positive(),
+  unitPrice: z.number().nonnegative(),
+  discountAmount: z.number().nonnegative().default(0),
+  vatRate: z.number().nonnegative(),
+  priceIncludesVat: z.boolean(),
+});
+
+const creditNoteCreateSchema = z.object({
+  storeId: z.string().uuid(),
+  supplierId: z.string().uuid(),
+  originalInvoiceId: z.string().uuid(),
+  creditNoteDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  fiscalPeriodId: z.string().uuid(),
+  reason: z.string().min(1),
+  lines: z.array(creditNoteLineSchema).min(1),
 });
 
 export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
@@ -664,7 +686,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/supplier-invoices", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
-      `SELECT si.id, si.document_number, si.supplier_invoice_number, si.invoice_date, si.document_status,
+      `SELECT si.id, si.supplier_id, si.document_number, si.supplier_invoice_number, si.invoice_date, si.document_status,
               si.gross_amount, si.currency, si.exchange_rate, si.base_gross_amount,
               s.name_en AS supplier_name_en, s.name_ar AS supplier_name_ar
        FROM supplier_invoices si
@@ -693,6 +715,130 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
        JOIN items i ON i.id = iv.item_id
        WHERE sil.supplier_invoice_id = $1
        ORDER BY sil.line_number`,
+      [request.params.id],
+    );
+    return { ...header.rows[0], lines: lines.rows };
+  });
+
+  // Which lines (and how much of each) can still be returned against a
+  // posted supplier invoice -- invoiced qty minus whatever's already been
+  // returned via a posted credit note. Drives the "new return" form so the
+  // user can't over-return past what was actually invoiced.
+  app.get<{ Params: { id: string } }>(
+    "/supplier-invoices/:id/returnable-lines",
+    { preHandler: app.authenticate },
+    async (request) => {
+      const invoice = await pool.query(
+        `SELECT id, document_status, purchase_order_id FROM supplier_invoices WHERE id = $1 AND company_id = $2`,
+        [request.params.id, request.companyId],
+      );
+      if (invoice.rows.length === 0) throw new NotFoundError("supplier invoice not found");
+      if (invoice.rows[0]!.document_status !== "posted") {
+        throw new BusinessRuleError("only a posted supplier invoice can be returned against");
+      }
+      const po = await pool.query(`SELECT store_id FROM purchase_orders WHERE id = $1`, [invoice.rows[0]!.purchase_order_id]);
+
+      const result = await pool.query(
+        `SELECT sil.id AS source_line_id, sil.item_variant_id, iv.variant_code,
+                i.name_en AS item_name_en, i.name_ar AS item_name_ar,
+                sil.qty AS invoiced_qty, sil.unit_price, sil.discount_amount, sil.vat_rate, sil.price_includes_vat,
+                sil.qty - COALESCE((
+                  SELECT SUM(scnl.qty) FROM supplier_credit_note_lines scnl
+                  JOIN supplier_credit_notes scn ON scn.id = scnl.supplier_credit_note_id
+                  WHERE scnl.source_line_id = sil.id AND scn.document_status = 'posted'
+                ), 0) AS returnable_qty
+         FROM supplier_invoice_lines sil
+         JOIN item_variants iv ON iv.id = sil.item_variant_id
+         JOIN items i ON i.id = iv.item_id
+         WHERE sil.supplier_invoice_id = $1
+         ORDER BY sil.line_number`,
+        [request.params.id],
+      );
+      return { storeId: po.rows[0]?.store_id ?? null, lines: result.rows };
+    },
+  );
+
+  // ---- Supplier credit notes (purchase returns) ----
+  // Modeled as post-invoice: a return raised against an already-posted
+  // supplier invoice, reversing AP/inventory/VAT (see purchasingService for
+  // the posting logic). See migration 0032.
+
+  app.post(
+    "/supplier-credit-notes",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.goods_receipt.post")] },
+    async (request, reply) => {
+      const body = creditNoteCreateSchema.parse(request.body);
+      const id = await withTransaction(
+        (client) =>
+          createSupplierCreditNote(client, {
+            companyId: request.companyId,
+            storeId: body.storeId,
+            supplierId: body.supplierId,
+            originalInvoiceId: body.originalInvoiceId,
+            creditNoteDate: body.creditNoteDate,
+            fiscalPeriodId: body.fiscalPeriodId,
+            reason: body.reason,
+            createdBy: request.authUser.id,
+            lines: body.lines,
+          }),
+        request.authUser.id,
+      );
+      reply.status(201);
+      return { id };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/supplier-credit-notes/:id/post",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.goods_receipt.post")] },
+    async (request) => {
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM supplier_credit_notes WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("supplier credit note not found");
+        await postSupplierCreditNote(client, request.params.id, request.authUser.id);
+      }, request.authUser.id);
+      return { id: request.params.id, status: "posted" };
+    },
+  );
+
+  app.get("/supplier-credit-notes", { preHandler: app.authenticate }, async (request) => {
+    const result = await pool.query(
+      `SELECT cn.id, cn.document_number, cn.credit_note_date, cn.document_status, cn.reason,
+              cn.net_amount, cn.vat_amount, cn.gross_amount,
+              si.document_number AS invoice_document_number,
+              s.name_en AS supplier_name_en, s.name_ar AS supplier_name_ar
+       FROM supplier_credit_notes cn
+       JOIN suppliers s ON s.id = cn.supplier_id
+       JOIN supplier_invoices si ON si.id = cn.original_invoice_id
+       WHERE cn.company_id = $1
+       ORDER BY cn.credit_note_date DESC`,
+      [request.companyId],
+    );
+    return result.rows;
+  });
+
+  app.get<{ Params: { id: string } }>("/supplier-credit-notes/:id", { preHandler: app.authenticate }, async (request) => {
+    const header = await pool.query(
+      `SELECT cn.*, s.name_en AS supplier_name_en, s.name_ar AS supplier_name_ar,
+              si.document_number AS invoice_document_number
+       FROM supplier_credit_notes cn
+       JOIN suppliers s ON s.id = cn.supplier_id
+       JOIN supplier_invoices si ON si.id = cn.original_invoice_id
+       WHERE cn.id = $1 AND cn.company_id = $2`,
+      [request.params.id, request.companyId],
+    );
+    if (header.rows.length === 0) throw new NotFoundError("supplier credit note not found");
+
+    const lines = await pool.query(
+      `SELECT scnl.*, iv.variant_code, i.name_en AS item_name_en, i.name_ar AS item_name_ar
+       FROM supplier_credit_note_lines scnl
+       JOIN item_variants iv ON iv.id = scnl.item_variant_id
+       JOIN items i ON i.id = iv.item_id
+       WHERE scnl.supplier_credit_note_id = $1
+       ORDER BY scnl.line_number`,
       [request.params.id],
     );
     return { ...header.rows[0], lines: lines.rows };

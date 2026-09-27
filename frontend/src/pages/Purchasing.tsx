@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { ShoppingCart, Truck, Plus, Trash2, PackageCheck, ReceiptText, ClipboardList } from "lucide-react";
+import { ShoppingCart, Truck, Plus, Trash2, PackageCheck, ReceiptText, ClipboardList, Undo2 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -146,6 +146,7 @@ interface GrDetail {
 
 interface SupplierInvoice {
   id: string;
+  supplier_id: string;
   document_number: string;
   supplier_invoice_number: string;
   invoice_date: string;
@@ -156,6 +157,47 @@ interface SupplierInvoice {
   base_gross_amount: string | null;
   supplier_name_en: string;
   supplier_name_ar: string;
+}
+
+interface SupplierCreditNote {
+  id: string;
+  document_number: string;
+  credit_note_date: string;
+  document_status: string;
+  reason: string;
+  gross_amount: string;
+  invoice_document_number: string;
+  supplier_name_en: string;
+  supplier_name_ar: string;
+}
+
+interface SupplierCreditNoteLine {
+  id: string;
+  item_variant_id: string;
+  qty: string;
+  unit_price: string;
+  gross_amount: string;
+  variant_code: string;
+  item_name_en: string;
+}
+
+interface SupplierCreditNoteDetail extends SupplierCreditNote {
+  net_amount: string;
+  vat_amount: string;
+  lines: SupplierCreditNoteLine[];
+}
+
+interface ReturnableLine {
+  source_line_id: string;
+  item_variant_id: string;
+  variant_code: string;
+  item_name_en: string;
+  invoiced_qty: string;
+  unit_price: string;
+  discount_amount: string;
+  vat_rate: string;
+  price_includes_vat: boolean;
+  returnable_qty: string;
 }
 
 interface PurchaseRequisition {
@@ -802,6 +844,247 @@ function SupplierInvoicesTab() {
       {showNew && (
         <Modal title="New Supplier Invoice" onClose={() => setShowNew(false)}>
           <NewSupplierInvoiceForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+    </>
+  );
+}
+
+function NewSupplierCreditNoteForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: supplierInvoices } = useApiList<SupplierInvoice>("/api/supplier-invoices");
+  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
+  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
+  const postedInvoices = supplierInvoices?.filter((si) => si.document_status === "posted") ?? [];
+
+  const [originalInvoiceId, setOriginalInvoiceId] = useState("");
+  const [storeId, setStoreId] = useState<string | null>(null);
+  const [returnableLines, setReturnableLines] = useState<ReturnableLine[] | null>(null);
+  const [creditNoteDate, setCreditNoteDate] = useState(new Date().toISOString().slice(0, 10));
+  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
+  const [reason, setReason] = useState("");
+  const [qtyByLine, setQtyByLine] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const selectedInvoice = postedInvoices.find((si) => si.id === originalInvoiceId) ?? null;
+
+  useEffect(() => {
+    if (!originalInvoiceId || !token || !companyId) {
+      setReturnableLines(null);
+      setStoreId(null);
+      return;
+    }
+    apiRequest<{ storeId: string | null; lines: ReturnableLine[] }>(`/api/supplier-invoices/${originalInvoiceId}/returnable-lines`, {
+      token,
+      companyId,
+    }).then((res) => {
+      setReturnableLines(res.lines);
+      setStoreId(res.storeId);
+      const init: Record<string, string> = {};
+      for (const line of res.lines) {
+        if (Number(line.returnable_qty) > 0) init[line.source_line_id] = String(line.returnable_qty);
+      }
+      setQtyByLine(init);
+    });
+  }, [originalInvoiceId, token, companyId]);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!returnableLines || !storeId || !selectedInvoice) return;
+    setSubmitting(true);
+    try {
+      const lines = returnableLines
+        .filter((l) => Number(qtyByLine[l.source_line_id]) > 0)
+        .map((l) => ({
+          sourceLineId: l.source_line_id,
+          itemVariantId: l.item_variant_id,
+          qty: Number(qtyByLine[l.source_line_id]),
+          unitPrice: Number(l.unit_price),
+          discountAmount: Number(l.discount_amount),
+          vatRate: Number(l.vat_rate),
+          priceIncludesVat: l.price_includes_vat,
+        }));
+      if (lines.length === 0) throw new Error("Enter a return quantity for at least one line.");
+
+      const created = await apiRequest<{ id: string }>("/api/supplier-credit-notes", {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          storeId,
+          supplierId: selectedInvoice.supplier_id,
+          originalInvoiceId,
+          creditNoteDate,
+          fiscalPeriodId,
+          reason,
+          lines,
+        },
+      });
+      await apiRequest(`/api/supplier-credit-notes/${created.id}/post`, { method: "POST", token, companyId });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError || err instanceof Error ? err.message : "Failed to create supplier credit note");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Field label="Supplier Invoice" required>
+        <SelectInput required value={originalInvoiceId} onChange={(e) => setOriginalInvoiceId(e.target.value)}>
+          <option value="">Select a posted invoice...</option>
+          {postedInvoices.map((si) => (
+            <option key={si.id} value={si.id}>
+              {si.document_number} — {si.supplier_name_en} ({si.supplier_invoice_number})
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Credit Note Date" required>
+          <TextInput type="date" required value={creditNoteDate} onChange={(e) => setCreditNoteDate(e.target.value)} />
+        </Field>
+        <Field label="Fiscal Period" required>
+          <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
+            <option value="">Select...</option>
+            {openPeriods.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.year_name} — P{p.period_number}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+      </div>
+      <Field label="Reason" required>
+        <TextInput required value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. damaged on arrival, wrong item shipped" />
+      </Field>
+
+      {returnableLines && (
+        <>
+          <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Lines to return</div>
+          <div className="space-y-2">
+            {returnableLines.map((line) => {
+              const returnable = Number(line.returnable_qty);
+              return (
+                <div key={line.source_line_id} className="flex items-center justify-between gap-2 rounded-md border border-slate-200 p-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm text-slate-900">{line.item_name_en}</div>
+                    <div className="text-xs text-slate-400">
+                      {line.variant_code} · invoiced {Number(line.invoiced_qty).toLocaleString()}, returnable {returnable.toLocaleString()} @ {Number(line.unit_price).toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="w-24 flex-none">
+                    <TextInput
+                      type="number"
+                      min={0}
+                      max={returnable}
+                      step="0.001"
+                      value={qtyByLine[line.source_line_id] ?? ""}
+                      onChange={(e) => setQtyByLine((prev) => ({ ...prev, [line.source_line_id]: e.target.value }))}
+                      disabled={returnable <= 0}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      <p className="mb-3 mt-3 text-xs text-slate-400">
+        Reduces Accounts Payable and reverses input VAT; ships the returned stock back out of inventory at its current average cost (any gap from
+        the invoiced price posts as a purchase price variance).
+      </p>
+      <FormActions error={error} submitting={submitting} submitLabel="Create & Post Return" />
+    </form>
+  );
+}
+
+function CreditNoteDetailModal({ creditNoteId, onClose }: { creditNoteId: string; onClose: () => void }) {
+  const { token, companyId } = useAuth();
+  const [detail, setDetail] = useState<SupplierCreditNoteDetail | null>(null);
+  const baseCurrency = useBaseCurrency();
+
+  useEffect(() => {
+    if (!token || !companyId) return;
+    apiRequest<SupplierCreditNoteDetail>(`/api/supplier-credit-notes/${creditNoteId}`, { token, companyId }).then(setDetail);
+  }, [creditNoteId, token, companyId]);
+
+  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <div className="font-mono text-xs text-slate-500">{detail.document_number}</div>
+          <div className="text-sm text-slate-700">
+            {detail.supplier_name_en} · against invoice {detail.invoice_document_number} · {new Date(detail.credit_note_date).toLocaleDateString()}
+          </div>
+        </div>
+        <StatusBadge status={detail.document_status} />
+      </div>
+      <p className="mb-3 text-xs text-slate-500">{detail.reason}</p>
+
+      <div className="mb-3 space-y-1 rounded-md border border-slate-200 p-2">
+        {detail.lines.map((line) => (
+          <div key={line.id} className="flex items-center justify-between text-sm">
+            <span className="text-slate-700">
+              {line.item_name_en} <span className="text-xs text-slate-400">({line.variant_code})</span>
+            </span>
+            <span className="font-medium text-slate-900">
+              {Number(line.qty).toLocaleString()} × {Number(line.unit_price).toFixed(2)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="text-sm font-medium text-slate-700">Total: {formatMoney(detail.gross_amount, baseCurrency)}</div>
+    </div>
+  );
+}
+
+function PurchaseReturnsTab() {
+  const { data, error, reload } = useApiList<SupplierCreditNote>("/api/supplier-credit-notes");
+  const [showNew, setShowNew] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  const columns: Column<SupplierCreditNote>[] = [
+    { key: "number", header: "SCN #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "invoice", header: "Against Invoice", render: (r) => <span className="font-mono text-xs text-slate-500">{r.invoice_document_number}</span> },
+    { key: "supplier", header: "Supplier", render: (r) => r.supplier_name_en },
+    { key: "date", header: "Date", render: (r) => new Date(r.credit_note_date).toLocaleDateString() },
+    { key: "reason", header: "Reason", render: (r) => <span className="truncate">{r.reason}</span> },
+    { key: "amount", header: "Total", render: (r) => formatMoney(r.gross_amount), numeric: true },
+    { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
+  ];
+
+  return (
+    <>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => `${r.document_number} ${r.invoice_document_number} ${r.supplier_name_en} ${r.reason}`}
+        emptyIcon={Undo2}
+        emptyText="No purchase returns yet."
+        searchPlaceholder="Search purchase returns..."
+        actionLabel="New Purchase Return"
+        onAction={() => setShowNew(true)}
+        onRowClick={(r) => setOpenId(r.id)}
+      />
+      {showNew && (
+        <Modal title="New Purchase Return" onClose={() => setShowNew(false)}>
+          <NewSupplierCreditNoteForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+      {openId && (
+        <Modal title="Purchase Return" onClose={() => setOpenId(null)}>
+          <CreditNoteDetailModal creditNoteId={openId} onClose={() => setOpenId(null)} />
         </Modal>
       )}
     </>
@@ -1686,6 +1969,7 @@ export default function Purchasing() {
           { key: "pos", label: "Purchase Orders", content: <PurchaseOrdersTab /> },
           { key: "receipts", label: "Goods Receipts", content: <GoodsReceiptsTab /> },
           { key: "invoices", label: "Supplier Invoices", content: <SupplierInvoicesTab /> },
+          { key: "returns", label: "Purchase Returns", content: <PurchaseReturnsTab /> },
           { key: "suppliers", label: "Suppliers", content: <SuppliersTab /> },
         ]}
       />
