@@ -147,6 +147,7 @@ async function main() {
       ["5300", "Salaries Expense", "مصروف الرواتب", "expense", "debit", "5000"],
       ["5310", "GOSI Expense (Employer)", "مصروف التأمينات الاجتماعية (صاحب العمل)", "expense", "debit", "5000"],
       ["5400", "Foreign Exchange Gain/Loss", "أرباح وخسائر فروق العملة", "expense", "debit", "5000"],
+      ["2150", "Gift Card Liability", "التزام بطاقات الهدايا", "liability", "credit", "2000"],
     ];
     const leafAccountIds: Record<string, string> = {};
     for (const [code, nameEn, nameAr, type, balance, parentCode] of leafAccounts) {

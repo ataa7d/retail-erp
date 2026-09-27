@@ -16,6 +16,7 @@
 import type { Client } from "pg";
 import { calculateLineAmounts, type LineInput } from "../money.js";
 import { recordStockMovement } from "../inventory/inventoryService.js";
+import { redeemGiftCard } from "./giftCardService.js";
 
 export interface SalesInvoiceLineRequest extends LineInput {
   itemVariantId: string | null;
@@ -45,7 +46,7 @@ export interface CreateSalesInvoiceParams {
   clientUuid?: string | null;
 }
 
-async function nextDocumentNumber(
+export async function nextDocumentNumber(
   client: Client,
   companyId: string,
   documentType: string,
@@ -59,7 +60,7 @@ async function nextDocumentNumber(
   return r.rows[0]!.fn_next_document_number;
 }
 
-async function getAccountId(client: Client, companyId: string, code: string): Promise<string> {
+export async function getAccountId(client: Client, companyId: string, code: string): Promise<string> {
   const r = await client.query<{ id: string }>(
     `SELECT id FROM chart_of_accounts WHERE company_id = $1 AND account_code = $2`,
     [companyId, code],
@@ -167,12 +168,44 @@ export async function postSalesInvoice(client: Client, invoiceId: string, posted
         `invoice ${invoiceId} payments (${paidTotal}) do not cover the total (${invoice.gross_amount})`,
       );
     }
+
+    // Redeem every gift-card payment now, inside this same transaction —
+    // not at invoice creation, so an abandoned draft never touches a
+    // card's balance. A missing/invalid card or insufficient balance
+    // fails the whole post, leaving the invoice a draft (same as an
+    // underpaid POS invoice above).
+    const giftCardPayments = await client.query<{ amount: string; reference: string | null }>(
+      `SELECT amount, reference FROM sales_invoice_payments WHERE invoice_id = $1 AND payment_method = 'gift_card'`,
+      [invoiceId],
+    );
+    for (const gcp of giftCardPayments.rows) {
+      if (!gcp.reference) throw new Error(`gift card payment on invoice ${invoiceId} is missing a card number`);
+      await redeemGiftCard(client, {
+        companyId: invoice.company_id,
+        cardNumber: gcp.reference,
+        amount: Number(gcp.amount),
+        salesInvoiceId: invoiceId,
+        redeemedBy: postedBy,
+      });
+    }
   }
 
   const cashAccountId = await getAccountId(client, invoice.company_id, "1110");
   const arAccountId = await getAccountId(client, invoice.company_id, "1120");
   const vatAccountId = await getAccountId(client, invoice.company_id, "2110");
   const revenueAccountId = await getAccountId(client, invoice.company_id, "4110");
+  const paymentMethodsUsed =
+    invoice.invoice_channel === "pos"
+      ? (
+          await client.query<{ payment_method: string }>(
+            `SELECT DISTINCT payment_method FROM sales_invoice_payments WHERE invoice_id = $1`,
+            [invoiceId],
+          )
+        ).rows.map((r) => r.payment_method)
+      : [];
+  const giftCardAccountId = paymentMethodsUsed.includes("gift_card")
+    ? await getAccountId(client, invoice.company_id, "2150")
+    : null;
 
   const fiscalYear = Number(invoice.invoice_date.toISOString().slice(0, 4));
   // All journals share one numbering series ('journal') regardless of
@@ -196,7 +229,8 @@ export async function postSalesInvoice(client: Client, invoiceId: string, posted
     );
     for (const p of payments.rows) {
       lineNumber += 1;
-      const accountId = p.payment_method === "credit" ? arAccountId : cashAccountId;
+      const accountId =
+        p.payment_method === "credit" ? arAccountId : p.payment_method === "gift_card" ? giftCardAccountId! : cashAccountId;
       await client.query(
         `INSERT INTO journal_lines (company_id, journal_id, line_number, account_id, debit_amount, description)
          VALUES ($1, $2, $3, $4, $5, $6)`,

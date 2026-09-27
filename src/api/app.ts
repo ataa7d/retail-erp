@@ -26,6 +26,7 @@ import { salesQuotationRoutes } from "./routes/salesQuotations.js";
 import { creditNoteRoutes } from "./routes/creditNotes.js";
 import { posDeviceRoutes } from "./routes/posDevices.js";
 import { cashShiftRoutes } from "./routes/cashShifts.js";
+import { giftCardRoutes } from "./routes/giftCards.js";
 import { syncRoutes } from "./routes/sync.js";
 import { fixedAssetRoutes } from "./routes/fixedAssets.js";
 import { hrRoutes } from "./routes/hr.js";
@@ -106,6 +107,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(creditNoteRoutes, { prefix: "/api" });
   await app.register(posDeviceRoutes, { prefix: "/api" });
   await app.register(cashShiftRoutes, { prefix: "/api" });
+  await app.register(giftCardRoutes, { prefix: "/api" });
   await app.register(syncRoutes, { prefix: "/api" });
   await app.register(fixedAssetRoutes, { prefix: "/api" });
   await app.register(hrRoutes, { prefix: "/api" });

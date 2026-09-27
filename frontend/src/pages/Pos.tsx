@@ -88,7 +88,13 @@ interface QueuedInvoicePayload {
     vatRate: number;
     priceIncludesVat: boolean;
   }>;
-  payments: Array<{ paymentMethod: "cash" | "card"; amount: number }>;
+  payments: Array<{ paymentMethod: "cash" | "card" | "gift_card"; amount: number; reference?: string }>;
+}
+
+interface GiftCardLookup {
+  card_number: string;
+  balance: string;
+  status: string;
 }
 
 interface SyncResult {
@@ -384,8 +390,12 @@ export default function Pos() {
   const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">("cash");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "gift_card">("cash");
   const [tendered, setTendered] = useState("");
+  const [giftCardNumber, setGiftCardNumber] = useState("");
+  const [giftCard, setGiftCard] = useState<GiftCardLookup | null>(null);
+  const [giftCardError, setGiftCardError] = useState<string | null>(null);
+  const [checkingGiftCard, setCheckingGiftCard] = useState(false);
   const [charging, setCharging] = useState(false);
   const [chargeError, setChargeError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<{
@@ -507,6 +517,25 @@ export default function Pos() {
   const net = total / (1 + VAT_RATE / 100);
   const vat = total - net;
   const change = paymentMethod === "cash" ? Math.max(0, Number(tendered || 0) - total) : 0;
+  const giftCardReady = giftCard !== null && giftCard.card_number === giftCardNumber.trim().toUpperCase() && giftCard.status === "active" && Number(giftCard.balance) >= total;
+
+  async function checkGiftCard() {
+    const number = giftCardNumber.trim().toUpperCase();
+    if (!number) return;
+    setGiftCardError(null);
+    setGiftCard(null);
+    setCheckingGiftCard(true);
+    try {
+      const card = await apiRequest<GiftCardLookup>(`/api/gift-cards/lookup?cardNumber=${encodeURIComponent(number)}`, { token, companyId });
+      setGiftCard(card);
+      if (card.status !== "active") setGiftCardError(`This card is ${card.status}.`);
+      else if (Number(card.balance) < total) setGiftCardError(`Card balance (${Number(card.balance).toFixed(2)}) is less than the total.`);
+    } catch {
+      setGiftCardError("No gift card found with that number.");
+    } finally {
+      setCheckingGiftCard(false);
+    }
+  }
 
   async function flushQueue(currentQueue?: QueuedInvoicePayload[]) {
     if (!device) return;
@@ -540,6 +569,7 @@ export default function Pos() {
 
   async function charge() {
     if (!device || cart.length === 0 || !openPeriodId || !shiftId) return;
+    if (paymentMethod === "gift_card" && (!online || !giftCardReady)) return;
     setCharging(true);
     setChargeError(null);
     try {
@@ -561,7 +591,11 @@ export default function Pos() {
           vatRate: VAT_RATE,
           priceIncludesVat: true,
         })),
-        payments: [{ paymentMethod, amount: paymentMethod === "cash" ? total : total }],
+        payments: [
+          paymentMethod === "gift_card"
+            ? { paymentMethod, amount: total, reference: giftCardNumber.trim().toUpperCase() }
+            : { paymentMethod, amount: total },
+        ],
       };
       saveSeq(device.id, nextSeq + 1);
 
@@ -585,9 +619,18 @@ export default function Pos() {
           setReceipt({ documentNumber: detail.document_number, lines: cart, total, change, offline: false, zatcaQr: detail.zatcaQr });
           setCart([]);
           setTendered("");
+          setGiftCardNumber("");
+          setGiftCard(null);
           return;
         } catch {
-          // fall through to offline queue on network failure
+          // fall through to offline queue on network failure -- except for
+          // gift cards, which must be validated live: queuing one on a
+          // stale looked-up balance risks it failing (or double-spending
+          // against another sale) once sync finally reaches the server.
+          if (paymentMethod === "gift_card") {
+            setChargeError("Could not reach the server to redeem this gift card. Try again once back online.");
+            return;
+          }
         }
       }
 
@@ -791,7 +834,7 @@ export default function Pos() {
               </div>
             </div>
 
-            <div className="mb-2 grid grid-cols-2 gap-1.5">
+            <div className="mb-2 grid grid-cols-3 gap-1.5">
               <button
                 onClick={() => setPaymentMethod("cash")}
                 className={`rounded-md border px-2 py-1.5 text-sm font-medium ${
@@ -807,6 +850,16 @@ export default function Pos() {
                 }`}
               >
                 Card
+              </button>
+              <button
+                onClick={() => setPaymentMethod("gift_card")}
+                disabled={!online}
+                title={online ? undefined : "Gift cards need a live connection to redeem"}
+                className={`rounded-md border px-2 py-1.5 text-sm font-medium disabled:opacity-40 ${
+                  paymentMethod === "gift_card" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600"
+                }`}
+              >
+                Gift Card
               </button>
             </div>
 
@@ -825,11 +878,46 @@ export default function Pos() {
               </div>
             )}
 
+            {paymentMethod === "gift_card" && (
+              <div className="mb-2">
+                <div className="flex gap-1.5">
+                  <input
+                    value={giftCardNumber}
+                    onChange={(e) => {
+                      setGiftCardNumber(e.target.value);
+                      setGiftCard(null);
+                      setGiftCardError(null);
+                    }}
+                    placeholder="Gift card number"
+                    className="min-w-0 flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+                  />
+                  <button
+                    onClick={checkGiftCard}
+                    disabled={!giftCardNumber.trim() || checkingGiftCard}
+                    className="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {checkingGiftCard ? "..." : "Check"}
+                  </button>
+                </div>
+                {giftCard && !giftCardError && (
+                  <p className="mt-1 text-xs text-green-700">Balance {Number(giftCard.balance).toFixed(2)} — covers the sale.</p>
+                )}
+                {giftCardError && <p className="mt-1 text-xs text-red-600">{giftCardError}</p>}
+              </div>
+            )}
+
             {chargeError && <p className="mb-2 text-xs text-red-600">{chargeError}</p>}
 
             <button
               onClick={charge}
-              disabled={cart.length === 0 || charging || !openPeriodId || !shiftId || (paymentMethod === "cash" && Number(tendered || 0) < total)}
+              disabled={
+                cart.length === 0 ||
+                charging ||
+                !openPeriodId ||
+                !shiftId ||
+                (paymentMethod === "cash" && Number(tendered || 0) < total) ||
+                (paymentMethod === "gift_card" && !giftCardReady)
+              }
               className="w-full rounded-md bg-brand-500 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-40"
             >
               {charging ? "Charging..." : `Charge ${total.toFixed(2)}`}

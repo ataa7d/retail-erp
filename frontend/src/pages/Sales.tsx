@@ -1739,6 +1739,230 @@ function PriceListsTab() {
   );
 }
 
+interface GiftCard {
+  id: string;
+  card_number: string;
+  initial_value: string;
+  balance: string;
+  status: string;
+  issued_at: string;
+  expires_at: string | null;
+  store_name_en: string;
+  customer_name_en: string | null;
+  customer_name_ar: string | null;
+}
+
+interface GiftCardTransaction {
+  id: string;
+  transaction_type: string;
+  amount: string;
+  balance_after: string;
+  sales_invoice_number: string | null;
+  created_at: string;
+}
+
+interface GiftCardDetail extends GiftCard {
+  transactions: GiftCardTransaction[];
+}
+
+function IssueGiftCardForm({ onClose, onIssued }: { onClose: () => void; onIssued: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: stores } = useApiList<Store>("/api/stores");
+  const { data: customers } = useApiList<Customer>("/api/customers");
+  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
+  const openPeriodId = periods?.find((p) => p.status === "open")?.id ?? "";
+
+  const [storeId, setStoreId] = useState("");
+  const [cardNumber, setCardNumber] = useState(() => `GC-${Math.random().toString(36).slice(2, 10).toUpperCase()}`);
+  const [initialValue, setInitialValue] = useState("100");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">("cash");
+  const [customerId, setCustomerId] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10));
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/gift-cards", {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          storeId,
+          cardNumber,
+          initialValue: Number(initialValue),
+          paymentMethod,
+          customerId: customerId || null,
+          expiresAt: expiresAt || null,
+          fiscalPeriodId: openPeriodId,
+          issueDate,
+        },
+      });
+      onIssued();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to issue gift card");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Card Number" required>
+          <TextInput required value={cardNumber} onChange={(e) => setCardNumber(e.target.value.toUpperCase())} />
+        </Field>
+        <Field label="Store" required>
+          <SelectInput required value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+            <option value="">Select...</option>
+            {stores?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name_en}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Value" required>
+          <TextInput required type="number" min={0.01} step="0.01" value={initialValue} onChange={(e) => setInitialValue(e.target.value)} />
+        </Field>
+        <Field label="Tendered As" required>
+          <SelectInput required value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as "cash" | "card")}>
+            <option value="cash">Cash</option>
+            <option value="card">Card</option>
+          </SelectInput>
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Issue Date" required>
+          <TextInput required type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+        </Field>
+        <Field label="Expires">
+          <TextInput type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+        </Field>
+      </div>
+      <Field label="Customer (optional)">
+        <SelectInput value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+          <option value="">Not tied to a customer</option>
+          {customers?.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name_en}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      {!openPeriodId && <p className="mb-2 text-xs text-red-600">No open fiscal period — cannot issue right now.</p>}
+      <p className="mb-3 mt-2 text-xs text-slate-400">
+        Books Dr {paymentMethod} / Cr Gift Card Liability — a gift card sale is not revenue until the card is redeemed against a real sale.
+      </p>
+      <FormActions error={error} submitting={submitting || !openPeriodId} submitLabel="Issue Gift Card" />
+    </form>
+  );
+}
+
+function GiftCardDetailModal({ cardId, onClose }: { cardId: string; onClose: () => void }) {
+  const { token, companyId } = useAuth();
+  const [detail, setDetail] = useState<GiftCardDetail | null>(null);
+
+  useEffect(() => {
+    apiRequest<GiftCardDetail>(`/api/gift-cards/${cardId}`, { token, companyId }).then(setDetail);
+  }, [cardId, token, companyId]);
+
+  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <div className="font-mono text-sm text-slate-900">{detail.card_number}</div>
+          <div className="text-xs text-slate-500">
+            {detail.store_name_en}
+            {detail.customer_name_en && ` · ${detail.customer_name_en}`}
+          </div>
+        </div>
+        <StatusBadge status={detail.status} />
+      </div>
+      <div className="mb-3 grid grid-cols-2 gap-2 rounded-md border border-slate-200 p-2 text-sm">
+        <div>
+          <div className="text-xs text-slate-400">Initial Value</div>
+          <div className="font-medium text-slate-900">{Number(detail.initial_value).toFixed(2)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-slate-400">Current Balance</div>
+          <div className="font-medium text-slate-900">{Number(detail.balance).toFixed(2)}</div>
+        </div>
+      </div>
+      <div className="mb-1 text-sm font-medium text-slate-700">Transaction History</div>
+      <div className="space-y-1">
+        {detail.transactions.map((t) => (
+          <div key={t.id} className="flex items-center justify-between rounded border border-slate-100 px-2 py-1.5 text-sm">
+            <div>
+              <span className="capitalize text-slate-700">{t.transaction_type}</span>
+              {t.sales_invoice_number && <span className="ms-1.5 text-xs text-slate-400">({t.sales_invoice_number})</span>}
+            </div>
+            <span className={`tabular-nums font-medium ${Number(t.amount) < 0 ? "text-red-600" : "text-green-600"}`}>
+              {Number(t.amount) > 0 ? "+" : ""}
+              {Number(t.amount).toFixed(2)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GiftCardsTab() {
+  const { hasPermission } = useAuth();
+  const { data, error, reload } = useApiList<GiftCard>("/api/gift-cards");
+  const [showNew, setShowNew] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
+
+  const columns: Column<GiftCard>[] = [
+    { key: "number", header: "Card #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.card_number}</span> },
+    { key: "store", header: "Store", render: (r) => r.store_name_en },
+    { key: "customer", header: "Customer", render: (r) => r.customer_name_en ?? "—" },
+    { key: "initial", header: "Initial Value", render: (r) => Number(r.initial_value).toFixed(2), numeric: true },
+    { key: "balance", header: "Balance", render: (r) => Number(r.balance).toFixed(2), numeric: true },
+    { key: "issued", header: "Issued", render: (r) => new Date(r.issued_at).toLocaleDateString() },
+    { key: "status", header: "Status", render: (r) => <StatusBadge status={r.status} /> },
+  ];
+
+  return (
+    <>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => `${r.card_number} ${r.customer_name_en ?? ""}`}
+        emptyIcon={Tag}
+        emptyText="No gift cards issued yet."
+        searchPlaceholder="Search gift cards..."
+        actionLabel={hasPermission("sales.gift_card.issue") ? "Issue Gift Card" : undefined}
+        onAction={hasPermission("sales.gift_card.issue") ? () => setShowNew(true) : undefined}
+        onRowClick={(r) => setDetailId(r.id)}
+      />
+      {showNew && (
+        <Modal title="Issue Gift Card" onClose={() => setShowNew(false)}>
+          <IssueGiftCardForm onClose={() => setShowNew(false)} onIssued={reload} />
+        </Modal>
+      )}
+      {detailId && (
+        <Modal title="Gift Card" onClose={() => setDetailId(null)}>
+          <GiftCardDetailModal cardId={detailId} onClose={() => setDetailId(null)} />
+        </Modal>
+      )}
+    </>
+  );
+}
+
 export default function Sales() {
   const { t } = useTranslation();
   const tabs = useMemo(
@@ -1746,6 +1970,7 @@ export default function Sales() {
       { key: "quotations", label: "Quotations", content: <QuotationsTab /> },
       { key: "invoices", label: "Sales Invoices", content: <SalesInvoicesTab /> },
       { key: "credits", label: "Credit Notes", content: <CreditNotesTab /> },
+      { key: "gift-cards", label: "Gift Cards", content: <GiftCardsTab /> },
       { key: "price-lists", label: "Price Lists", content: <PriceListsTab /> },
     ],
     [],
