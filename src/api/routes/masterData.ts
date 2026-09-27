@@ -22,6 +22,12 @@ const seasonSchema = z.object({
   nameAr: z.string().min(1),
 });
 
+const groupSchema = z.object({
+  code: z.string().min(1),
+  nameEn: z.string().min(1),
+  nameAr: z.string().min(1),
+});
+
 export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
   // Brands
   app.get("/brands", { preHandler: app.authenticate }, async (request) => {
@@ -172,6 +178,60 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
       ]);
       if (existing.rows.length === 0) throw new NotFoundError("season not found");
       await pool.query(`UPDATE seasons SET is_active = true WHERE id = $1`, [request.params.id]);
+      return { id: request.params.id, status: "active" };
+    },
+  );
+
+  // Item groups -- a company-defined grouping distinct from brand/category/
+  // season (e.g. which store/division/concept an item belongs to), not a
+  // product attribute. Admins can add more beyond the three seeded ones the
+  // same way they add brands/categories/seasons.
+  app.get("/item-groups", { preHandler: app.authenticate }, async (request) => {
+    const result = await pool.query(
+      `SELECT id, code, name_en, name_ar, is_active FROM item_groups WHERE company_id = $1 ORDER BY code`,
+      [request.companyId],
+    );
+    return result.rows;
+  });
+
+  app.post(
+    "/item-groups",
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    async (request, reply) => {
+      const body = groupSchema.parse(request.body);
+      const result = await pool.query<{ id: string }>(
+        `INSERT INTO item_groups (company_id, code, name_en, name_ar) VALUES ($1, $2, $3, $4) RETURNING id`,
+        [request.companyId, body.code, body.nameEn, body.nameAr],
+      );
+      reply.status(201);
+      return { id: result.rows[0]!.id };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/item-groups/:id/deactivate",
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    async (request) => {
+      const existing = await pool.query(`SELECT id FROM item_groups WHERE id = $1 AND company_id = $2`, [
+        request.params.id,
+        request.companyId,
+      ]);
+      if (existing.rows.length === 0) throw new NotFoundError("group not found");
+      await pool.query(`UPDATE item_groups SET is_active = false WHERE id = $1`, [request.params.id]);
+      return { id: request.params.id, status: "inactive" };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/item-groups/:id/reactivate",
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    async (request) => {
+      const existing = await pool.query(`SELECT id FROM item_groups WHERE id = $1 AND company_id = $2`, [
+        request.params.id,
+        request.companyId,
+      ]);
+      if (existing.rows.length === 0) throw new NotFoundError("group not found");
+      await pool.query(`UPDATE item_groups SET is_active = true WHERE id = $1`, [request.params.id]);
       return { id: request.params.id, status: "active" };
     },
   );

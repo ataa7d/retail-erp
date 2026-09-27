@@ -11,6 +11,7 @@ let app: FastifyInstance;
 let client: Client;
 let companyId: string;
 let brandId: string;
+let groupId: string;
 let authToken: string;
 
 const PASSWORD = "TestPass123!";
@@ -34,11 +35,17 @@ beforeAll(async () => {
   brandId = brand.rows[0].id;
   await client.query(`INSERT INTO brands (company_id, code, name_en, name_ar) VALUES ($1, 'GEN', 'Generic', 'عام')`, [companyId]);
 
+  const group = await client.query(
+    `INSERT INTO item_groups (company_id, code, name_en, name_ar) VALUES ($1, 'PODIUM', 'Podium', 'بوديوم') RETURNING id`,
+    [companyId],
+  );
+  groupId = group.rows[0].id;
+
   // 25 variants across 5 items, so pagination (pageSize 10) and filters have something real to work against.
   for (let i = 1; i <= 5; i++) {
     const item = await client.query(
-      `INSERT INTO items (company_id, item_code, name_en, name_ar, brand_id) VALUES ($1, $2, $3, 'صنف', $4) RETURNING id`,
-      [companyId, `SEARCH-${i}`, `Search Item ${i}`, i <= 2 ? brandId : null],
+      `INSERT INTO items (company_id, item_code, name_en, name_ar, brand_id, group_id) VALUES ($1, $2, $3, 'صنف', $4, $5) RETURNING id`,
+      [companyId, `SEARCH-${i}`, `Search Item ${i}`, i <= 2 ? brandId : null, i === 1 ? groupId : null],
     );
     for (let v = 1; v <= 5; v++) {
       await client.query(
@@ -68,6 +75,7 @@ afterAll(async () => {
   await client.query(`DELETE FROM user_company_access WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM users WHERE email LIKE 'varsearch_%'`);
   await client.query(`DELETE FROM brands WHERE company_id = $1`, [companyId]);
+  await client.query(`DELETE FROM item_groups WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM companies WHERE id = $1`, [companyId]);
   await client.end();
 });
@@ -111,6 +119,13 @@ describe("GET /item-variants", () => {
     const body = res.json();
     // brand only set on items 1-2, and only variant V1 of each has color Red.
     expect(body.total).toBe(2);
+  });
+
+  it("filters by item group", async () => {
+    const res = await get(`groupId=${groupId}`);
+    const body = res.json();
+    expect(body.total).toBe(5); // all 5 variants of item SEARCH-1, the only item in the group
+    expect(body.rows.every((r: { item_code: string }) => r.item_code === "SEARCH-1")).toBe(true);
   });
 
   it("filters by active status", async () => {

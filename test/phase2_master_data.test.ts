@@ -46,6 +46,7 @@ afterAll(async () => {
   await client.query(`DELETE FROM item_variants WHERE company_id IN ($1, $2)`, [companyAId, companyBId]);
   await client.query(`DELETE FROM item_units WHERE item_id IN (SELECT id FROM items WHERE company_id IN ($1, $2))`, [companyAId, companyBId]);
   await client.query(`DELETE FROM items WHERE company_id IN ($1, $2)`, [companyAId, companyBId]);
+  await client.query(`DELETE FROM item_groups WHERE company_id IN ($1, $2)`, [companyAId, companyBId]);
   await client.query(`DELETE FROM customers WHERE company_id IN ($1, $2)`, [companyAId, companyBId]);
   await client.query(`DELETE FROM suppliers WHERE company_id IN ($1, $2)`, [companyAId, companyBId]);
   await client.query(`DELETE FROM tax_codes WHERE company_id IN ($1, $2)`, [companyAId, companyBId]);
@@ -155,6 +156,30 @@ describe("items and variants", () => {
         `INSERT INTO item_variants (company_id, item_id, variant_code) VALUES ($1, $2, $3)`,
         [companyBId, itemId, `SKU-${randomUUID().slice(0, 8)}`],
       ),
+    ).rejects.toThrow(/does not belong to company/);
+  });
+
+  it("stores an item group and rejects one from a different company", async () => {
+    const group = await client.query(
+      `INSERT INTO item_groups (company_id, code, name_en, name_ar) VALUES ($1, 'PODIUM', 'Podium', 'بوديوم') RETURNING id`,
+      [companyAId],
+    );
+    const item = await client.query(
+      `INSERT INTO items (company_id, item_code, name_en, name_ar, group_id) VALUES ($1, $2, 'x', 'x', $3) RETURNING group_id`,
+      [companyAId, `IT-${randomUUID().slice(0, 8)}`, group.rows[0].id],
+    );
+    expect(item.rows[0].group_id).toBe(group.rows[0].id);
+
+    const otherGroup = await client.query(
+      `INSERT INTO item_groups (company_id, code, name_en, name_ar) VALUES ($1, 'PODIUM', 'Podium', 'بوديوم') RETURNING id`,
+      [companyBId],
+    );
+    await expect(
+      client.query(`INSERT INTO items (company_id, item_code, name_en, name_ar, group_id) VALUES ($1, $2, 'x', 'x', $3)`, [
+        companyAId,
+        `IT-${randomUUID().slice(0, 8)}`,
+        otherGroup.rows[0].id,
+      ]),
     ).rejects.toThrow(/does not belong to company/);
   });
 

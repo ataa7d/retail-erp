@@ -33,6 +33,7 @@ const variantSearchQuerySchema = z.object({
   brandId: z.string().uuid().optional(),
   categoryId: z.string().uuid().optional(),
   seasonId: z.string().uuid().optional(),
+  groupId: z.string().uuid().optional(),
   isActive: z.enum(["true", "false"]).optional(),
   sortBy: z.enum(Object.keys(VARIANT_SORT_COLUMNS) as [keyof typeof VARIANT_SORT_COLUMNS, ...Array<keyof typeof VARIANT_SORT_COLUMNS>]).default("itemCode"),
   sortDir: z.enum(["asc", "desc"]).default("asc"),
@@ -46,6 +47,7 @@ const createSchema = z.object({
   brandId: z.string().uuid().nullable().optional(),
   categoryId: z.string().uuid().nullable().optional(),
   seasonId: z.string().uuid().nullable().optional(),
+  groupId: z.string().uuid().nullable().optional(),
   itemYear: z.number().int().nullable().optional(),
   defaultTaxCodeId: z.string().uuid().nullable().optional(),
   material: z.string().nullable().optional(),
@@ -68,6 +70,7 @@ const classifySchema = z.object({
   brandId: z.string().uuid().nullable().optional(),
   categoryId: z.string().uuid().nullable().optional(),
   seasonId: z.string().uuid().nullable().optional(),
+  groupId: z.string().uuid().nullable().optional(),
   itemYear: z.number().int().nullable().optional(),
   defaultTaxCodeId: z.string().uuid().nullable().optional(),
   material: z.string().nullable().optional(),
@@ -107,9 +110,9 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
       const body = createSchema.parse(request.body);
       const itemId = await withTransaction(async (client) => {
         const item = await client.query<{ id: string }>(
-          `INSERT INTO items (company_id, item_code, name_en, name_ar, brand_id, category_id, season_id, item_year,
+          `INSERT INTO items (company_id, item_code, name_en, name_ar, brand_id, category_id, season_id, group_id, item_year,
                               default_tax_code_id, material, country_of_origin, supplier_style_number)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
           [
             request.companyId,
             body.itemCode,
@@ -118,6 +121,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
             body.brandId ?? null,
             body.categoryId ?? null,
             body.seasonId ?? null,
+            body.groupId ?? null,
             body.itemYear ?? null,
             body.defaultTaxCodeId ?? null,
             body.material ?? null,
@@ -213,13 +217,14 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
         ]);
         if (existing.rows.length === 0) throw new NotFoundError("item not found");
         await client.query(
-          `UPDATE items SET brand_id = $1, category_id = $2, season_id = $3, item_year = $4, default_tax_code_id = $5,
-                            material = $6, country_of_origin = $7, supplier_style_number = $8
-           WHERE id = $9`,
+          `UPDATE items SET brand_id = $1, category_id = $2, season_id = $3, group_id = $4, item_year = $5, default_tax_code_id = $6,
+                            material = $7, country_of_origin = $8, supplier_style_number = $9
+           WHERE id = $10`,
           [
             body.brandId ?? null,
             body.categoryId ?? null,
             body.seasonId ?? null,
+            body.groupId ?? null,
             body.itemYear ?? null,
             body.defaultTaxCodeId ?? null,
             body.material ?? null,
@@ -339,6 +344,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
     if (q.brandId) addFilter("i.brand_id = ?", q.brandId);
     if (q.categoryId) addFilter("i.category_id = ?", q.categoryId);
     if (q.seasonId) addFilter("i.season_id = ?", q.seasonId);
+    if (q.groupId) addFilter("i.group_id = ?", q.groupId);
     if (q.isActive) addFilter("iv.is_active = ?", q.isActive === "true");
 
     const sortColumn = VARIANT_SORT_COLUMNS[q.sortBy];
@@ -348,7 +354,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
     const result = await pool.query(
       `SELECT iv.id, iv.variant_code, iv.color, iv.size, iv.is_active, iv.reorder_point, iv.standard_cost, iv.weight_kg,
               i.id AS item_id, i.item_code, i.name_en, i.name_ar,
-              b.name_en AS brand_name, c.name_en AS category_name, s.name_en AS season_name,
+              b.name_en AS brand_name, c.name_en AS category_name, s.name_en AS season_name, g.name_en AS group_name,
               (SELECT ib.barcode FROM item_barcodes ib WHERE ib.item_variant_id = iv.id AND ib.is_primary = true LIMIT 1) AS primary_barcode,
               COUNT(*) OVER() AS total_count
        FROM item_variants iv
@@ -356,6 +362,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
        LEFT JOIN brands b ON b.id = i.brand_id
        LEFT JOIN categories c ON c.id = i.category_id
        LEFT JOIN seasons s ON s.id = i.season_id
+       LEFT JOIN item_groups g ON g.id = i.group_id
        WHERE ${conditions.join(" AND ")}
        ORDER BY ${sortColumn} ${q.sortDir === "desc" ? "DESC" : "ASC"}, iv.id
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
@@ -459,7 +466,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
     const query = listQuerySchema.parse(request.query);
 
     const items = await pool.query(
-      `SELECT id, item_code, name_en, name_ar, brand_id, category_id, season_id, item_year,
+      `SELECT id, item_code, name_en, name_ar, brand_id, category_id, season_id, group_id, item_year,
               default_tax_code_id, material, country_of_origin, supplier_style_number, is_active, updated_at
        FROM items
        WHERE company_id = $1 AND ($2::timestamptz IS NULL OR updated_at > $2)

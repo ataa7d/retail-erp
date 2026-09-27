@@ -36,6 +36,14 @@ interface Season {
   is_active: boolean;
 }
 
+interface ItemGroup {
+  id: string;
+  code: string;
+  name_en: string;
+  name_ar: string;
+  is_active: boolean;
+}
+
 interface UnitOfMeasure {
   id: string;
   code: string;
@@ -77,6 +85,7 @@ interface Item {
   brand_id: string | null;
   category_id: string | null;
   season_id: string | null;
+  group_id: string | null;
   item_year: number | null;
   default_tax_code_id: string | null;
   material: string | null;
@@ -92,6 +101,7 @@ function NewItemForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const { data: brands } = useApiList<Brand>("/api/brands");
   const { data: categories } = useApiList<Category>("/api/categories");
   const { data: seasons } = useApiList<Season>("/api/seasons");
+  const { data: groups } = useApiList<ItemGroup>("/api/item-groups");
   const { data: taxCodes } = useApiList<TaxCode>("/api/tax-codes");
   const [itemCode, setItemCode] = useState("");
   const [nameEn, setNameEn] = useState("");
@@ -100,6 +110,7 @@ function NewItemForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const [brandId, setBrandId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [seasonId, setSeasonId] = useState("");
+  const [groupId, setGroupId] = useState("");
   const [itemYear, setItemYear] = useState("");
   const [defaultTaxCodeId, setDefaultTaxCodeId] = useState("");
   const [material, setMaterial] = useState("");
@@ -130,6 +141,7 @@ function NewItemForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
           brandId: brandId || null,
           categoryId: categoryId || null,
           seasonId: seasonId || null,
+          groupId: groupId || null,
           itemYear: itemYear ? Number(itemYear) : null,
           defaultTaxCodeId: defaultTaxCodeId || null,
           material: material || null,
@@ -199,6 +211,16 @@ function NewItemForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
             {seasons?.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name_en} ({s.code})
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="Group">
+          <SelectInput value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+            <option value="">None</option>
+            {groups?.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name_en} ({g.code})
               </option>
             ))}
           </SelectInput>
@@ -377,10 +399,12 @@ function ClassifyItemForm({ item, onChanged }: { item: Item; onChanged: () => vo
   const { data: brands } = useApiList<Brand>("/api/brands");
   const { data: categories } = useApiList<Category>("/api/categories");
   const { data: seasons } = useApiList<Season>("/api/seasons");
+  const { data: groups } = useApiList<ItemGroup>("/api/item-groups");
   const { data: taxCodes } = useApiList<TaxCode>("/api/tax-codes");
   const [brandId, setBrandId] = useState(item.brand_id ?? "");
   const [categoryId, setCategoryId] = useState(item.category_id ?? "");
   const [seasonId, setSeasonId] = useState(item.season_id ?? "");
+  const [groupId, setGroupId] = useState(item.group_id ?? "");
   const [itemYear, setItemYear] = useState(item.item_year != null ? String(item.item_year) : "");
   const [defaultTaxCodeId, setDefaultTaxCodeId] = useState(item.default_tax_code_id ?? "");
   const [material, setMaterial] = useState(item.material ?? "");
@@ -399,6 +423,7 @@ function ClassifyItemForm({ item, onChanged }: { item: Item; onChanged: () => vo
           brandId: brandId || null,
           categoryId: categoryId || null,
           seasonId: seasonId || null,
+          groupId: groupId || null,
           itemYear: itemYear ? Number(itemYear) : null,
           defaultTaxCodeId: defaultTaxCodeId || null,
           material: material || null,
@@ -440,6 +465,16 @@ function ClassifyItemForm({ item, onChanged }: { item: Item; onChanged: () => vo
           {seasons?.map((s) => (
             <option key={s.id} value={s.id}>
               {s.code}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      <Field label="Group">
+        <SelectInput value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+          <option value="">None</option>
+          {groups?.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.code}
             </option>
           ))}
         </SelectInput>
@@ -1022,6 +1057,7 @@ interface VariantRow {
   brand_name: string | null;
   category_name: string | null;
   season_name: string | null;
+  group_name: string | null;
   primary_barcode: string | null;
 }
 
@@ -1045,12 +1081,13 @@ interface VariantFilters {
   brandId: string;
   categoryId: string;
   seasonId: string;
+  groupId: string;
   isActive: string; // "" | "true" | "false"
 }
 
 const EMPTY_VARIANT_FILTERS: VariantFilters = {
   search: "", itemCode: "", variantCode: "", name: "", color: "", size: "", barcode: "",
-  brandId: "", categoryId: "", seasonId: "", isActive: "",
+  brandId: "", categoryId: "", seasonId: "", groupId: "", isActive: "",
 };
 
 /**
@@ -1064,6 +1101,8 @@ function AllVariantsTab() {
   const { data: brands } = useApiList<Brand>("/api/brands");
   const { data: categories } = useApiList<Category>("/api/categories");
   const { data: seasons } = useApiList<Season>("/api/seasons");
+  const { data: groups } = useApiList<ItemGroup>("/api/item-groups");
+  const { token, companyId } = useAuth();
 
   const [filters, setFilters] = useState<VariantFilters>(EMPTY_VARIANT_FILTERS);
   const [debouncedFilters, setDebouncedFilters] = useState<VariantFilters>(EMPTY_VARIANT_FILTERS);
@@ -1073,7 +1112,10 @@ function AllVariantsTab() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [result, setResult] = useState<VariantSearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const { token, companyId } = useAuth();
+  const [error, setError] = useState<string | null>(null);
+  const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
+  const [reorderDrafts, setReorderDrafts] = useState<Record<string, string>>({});
+  const [savingCell, setSavingCell] = useState<string | null>(null);
 
   // Debounce free-typed filter input so every keystroke doesn't hit the
   // server -- 300ms after the user stops typing, the debounced value (and
@@ -1090,6 +1132,7 @@ function AllVariantsTab() {
     if (!token || !companyId) return;
     let cancelled = false;
     setLoading(true);
+    setError(null);
     const params = new URLSearchParams();
     params.set("page", String(page));
     params.set("pageSize", String(pageSize));
@@ -1100,7 +1143,14 @@ function AllVariantsTab() {
     }
     apiRequest<VariantSearchResponse>(`/api/item-variants?${params.toString()}`, { token, companyId })
       .then((res) => {
-        if (!cancelled) setResult(res);
+        if (!cancelled) {
+          setResult(res);
+          setCostDrafts({});
+          setReorderDrafts({});
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof ApiError ? err.message : "Failed to load variants");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -1112,6 +1162,69 @@ function AllVariantsTab() {
 
   function updateFilter(key: keyof VariantFilters, value: string) {
     setFilters((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function patchRow(id: string, patch: Partial<VariantRow>) {
+    setResult((prev) => (prev ? { ...prev, rows: prev.rows.map((r) => (r.id === id ? { ...r, ...patch } : r)) } : prev));
+  }
+
+  async function saveCost(row: VariantRow, raw: string) {
+    const value = raw.trim() === "" ? null : Number(raw);
+    if (value !== null && !Number.isFinite(value)) return;
+    if (value === (row.standard_cost !== null ? Number(row.standard_cost) : null)) return;
+    setSavingCell(`${row.id}:cost`);
+    setError(null);
+    try {
+      await apiRequest(`/api/item-variants/${row.id}/attributes`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { standardCost: value, weightKg: row.weight_kg ? Number(row.weight_kg) : null },
+      });
+      patchRow(row.id, { standard_cost: value !== null ? String(value) : null });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save cost");
+    } finally {
+      setSavingCell(null);
+    }
+  }
+
+  async function saveReorderPoint(row: VariantRow, raw: string) {
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) return;
+    if (value === Number(row.reorder_point)) return;
+    setSavingCell(`${row.id}:reorder`);
+    setError(null);
+    try {
+      await apiRequest(`/api/item-variants/${row.id}/reorder-point`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { reorderPoint: value },
+      });
+      patchRow(row.id, { reorder_point: String(value) });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save reorder point");
+    } finally {
+      setSavingCell(null);
+    }
+  }
+
+  async function toggleStatus(row: VariantRow) {
+    setSavingCell(`${row.id}:status`);
+    setError(null);
+    try {
+      await apiRequest(`/api/item-variants/${row.id}/${row.is_active ? "deactivate" : "reactivate"}`, {
+        method: "POST",
+        token,
+        companyId,
+      });
+      patchRow(row.id, { is_active: !row.is_active });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to change status");
+    } finally {
+      setSavingCell(null);
+    }
   }
 
   function toggleSort(col: VariantSortColumn) {
@@ -1132,6 +1245,8 @@ function AllVariantsTab() {
 
   const thClass = "cursor-pointer select-none whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400 hover:text-slate-600";
   const filterInputClass = "w-full rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-brand-400 focus:outline-none";
+
+  const editableInputClass = "w-20 rounded border border-transparent bg-transparent px-1 py-0.5 text-end text-xs tabular-nums hover:border-slate-200 focus:border-brand-400 focus:bg-white focus:outline-none";
 
   return (
     <div>
@@ -1155,6 +1270,8 @@ function AllVariantsTab() {
         </span>
       </div>
 
+      {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
@@ -1164,10 +1281,13 @@ function AllVariantsTab() {
               <th className={thClass} onClick={() => toggleSort("name")}>Name{sortIndicator("name")}</th>
               <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400">Brand</th>
               <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400">Category</th>
+              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400">Season</th>
+              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400">Group</th>
               <th className={thClass} onClick={() => toggleSort("color")}>Color{sortIndicator("color")}</th>
               <th className={thClass} onClick={() => toggleSort("size")}>Size{sortIndicator("size")}</th>
               <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400">Barcode</th>
               <th className={`${thClass} text-end`} onClick={() => toggleSort("standardCost")}>Cost{sortIndicator("standardCost")}</th>
+              <th className={`${thClass} text-end`} onClick={() => toggleSort("reorderPoint")}>Reorder{sortIndicator("reorderPoint")}</th>
               <th className={thClass} onClick={() => toggleSort("status")}>Status{sortIndicator("status")}</th>
             </tr>
             <tr className="border-b border-slate-100 bg-slate-50">
@@ -1186,9 +1306,22 @@ function AllVariantsTab() {
                   {categories?.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}
                 </select>
               </th>
+              <th className="px-2 py-1.5">
+                <select className={filterInputClass} value={filters.seasonId} onChange={(e) => updateFilter("seasonId", e.target.value)}>
+                  <option value="">All</option>
+                  {seasons?.map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}
+                </select>
+              </th>
+              <th className="px-2 py-1.5">
+                <select className={filterInputClass} value={filters.groupId} onChange={(e) => updateFilter("groupId", e.target.value)}>
+                  <option value="">All</option>
+                  {groups?.map((g) => <option key={g.id} value={g.id}>{g.code}</option>)}
+                </select>
+              </th>
               <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.color} onChange={(e) => updateFilter("color", e.target.value)} /></th>
               <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.size} onChange={(e) => updateFilter("size", e.target.value)} /></th>
               <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.barcode} onChange={(e) => updateFilter("barcode", e.target.value)} /></th>
+              <th className="px-2 py-1.5" />
               <th className="px-2 py-1.5" />
               <th className="px-2 py-1.5">
                 <select className={filterInputClass} value={filters.isActive} onChange={(e) => updateFilter("isActive", e.target.value)}>
@@ -1202,7 +1335,7 @@ function AllVariantsTab() {
           <tbody>
             {result?.rows.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-400">
+                <td colSpan={13} className="px-4 py-12 text-center text-sm text-slate-400">
                   No variants match these filters.
                 </td>
               </tr>
@@ -1214,11 +1347,46 @@ function AllVariantsTab() {
                 <td className="px-3 py-2 text-slate-900">{r.name_en}</td>
                 <td className="px-3 py-2 text-slate-600">{r.brand_name ?? "—"}</td>
                 <td className="px-3 py-2 text-slate-600">{r.category_name ?? "—"}</td>
+                <td className="px-3 py-2 text-slate-600">{r.season_name ?? "—"}</td>
+                <td className="px-3 py-2 text-slate-600">{r.group_name ?? "—"}</td>
                 <td className="px-3 py-2 text-slate-600">{r.color ?? "—"}</td>
                 <td className="px-3 py-2 text-slate-600">{r.size ?? "—"}</td>
                 <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-500">{r.primary_barcode ?? "—"}</td>
-                <td className="px-3 py-2 text-end tabular-nums text-slate-700">{r.standard_cost ? Number(r.standard_cost).toFixed(2) : "—"}</td>
-                <td className="px-3 py-2"><StatusBadge status={r.is_active ? "active" : "inactive"} /></td>
+                <td className="px-1 py-1 text-end">
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className={editableInputClass}
+                    value={costDrafts[r.id] ?? r.standard_cost ?? ""}
+                    onChange={(e) => setCostDrafts((prev) => ({ ...prev, [r.id]: e.target.value }))}
+                    onBlur={(e) => saveCost(r, e.target.value)}
+                    disabled={savingCell === `${r.id}:cost`}
+                    placeholder="—"
+                  />
+                </td>
+                <td className="px-1 py-1 text-end">
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.001"
+                    className={editableInputClass}
+                    value={reorderDrafts[r.id] ?? r.reorder_point}
+                    onChange={(e) => setReorderDrafts((prev) => ({ ...prev, [r.id]: e.target.value }))}
+                    onBlur={(e) => saveReorderPoint(r, e.target.value)}
+                    disabled={savingCell === `${r.id}:reorder`}
+                  />
+                </td>
+                <td className="px-3 py-2">
+                  <button
+                    onClick={() => toggleStatus(r)}
+                    disabled={savingCell === `${r.id}:status`}
+                    className="disabled:opacity-50"
+                    title={r.is_active ? "Click to deactivate" : "Click to reactivate"}
+                  >
+                    <StatusBadge status={r.is_active ? "active" : "inactive"} />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1287,6 +1455,11 @@ export default function Items() {
         key: "seasons",
         label: "Seasons",
         content: <ClassificationTab title="Season" basePath="/api/seasons" emptyText="No seasons found." />,
+      },
+      {
+        key: "groups",
+        label: "Groups",
+        content: <ClassificationTab title="Group" basePath="/api/item-groups" emptyText="No groups found." />,
       },
     ],
     [t],
