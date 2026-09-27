@@ -18,6 +18,7 @@ interface SalesInvoice {
   invoice_date: string;
   document_status: string;
   gross_amount: string;
+  credited_amount: string;
   customer_name_en: string | null;
   customer_name_ar: string | null;
 }
@@ -63,6 +64,7 @@ interface FullSalesInvoice {
   lines: FullInvoiceLine[];
   zatcaQr: string | null;
   zatcaQrError: string | null;
+  creditedAmount: string;
 }
 
 interface FullCreditNote {
@@ -132,13 +134,72 @@ function XmlDownloadButton({ status, path }: { status: string; path: string }) {
   );
 }
 
-function SalesInvoiceDetailModal({ invoiceId, onClose }: { invoiceId: string; onClose: () => void }) {
+function VoidInvoiceForm({ invoiceId, onClose, onVoided }: { invoiceId: string; onClose: () => void; onVoided: () => void }) {
   const { token, companyId } = useAuth();
+  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
+  const openPeriodId = periods?.find((p) => p.status === "open")?.id ?? "";
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest(`/api/sales-invoices/${invoiceId}/void`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { fiscalPeriodId: openPeriodId, reason },
+      });
+      onVoided();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to void this sale");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-3 rounded-md border border-red-200 bg-red-50 p-3">
+      <p className="mb-2 text-xs text-red-700">
+        This issues and posts a full credit note against every line on this invoice — the invoice itself is never altered (ZATCA doesn't
+        allow that), only fully reversed. Cannot be undone.
+      </p>
+      <Field label="Reason" required>
+        <TextInput required value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. wrong item rung up" />
+      </Field>
+      {!openPeriodId && <p className="mb-2 text-xs text-red-600">No open fiscal period — cannot void right now.</p>}
+      {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={submitting || !openPeriodId}
+          className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+        >
+          {submitting ? "Voiding..." : "Confirm Void"}
+        </button>
+        <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function SalesInvoiceDetailModal({ invoiceId, onClose, onVoided }: { invoiceId: string; onClose: () => void; onVoided: () => void }) {
+  const { token, companyId, hasPermission } = useAuth();
   const [detail, setDetail] = useState<FullSalesInvoice | null>(null);
+  const [showVoid, setShowVoid] = useState(false);
 
   useEffect(() => {
     apiRequest<FullSalesInvoice>(`/api/sales-invoices/${invoiceId}`, { token, companyId }).then(setDetail);
   }, [invoiceId, token, companyId]);
+
+  const isVoided = detail ? Number(detail.creditedAmount) >= Number(detail.gross_amount) && Number(detail.gross_amount) > 0 : false;
+  const canVoid = detail?.document_status === "posted" && !isVoided && hasPermission("sales.document.void");
 
   return (
     <Modal title={detail?.document_number ?? "Sales Invoice"} onClose={onClose}>
@@ -150,7 +211,7 @@ function SalesInvoiceDetailModal({ invoiceId, onClose }: { invoiceId: string; on
             <span className="capitalize text-slate-500">
               {detail.invoice_channel} · {detail.zatca_invoice_category}
             </span>
-            <StatusBadge status={detail.document_status} />
+            <StatusBadge status={isVoided ? "voided" : detail.document_status} />
           </div>
           <div className="space-y-1 border-y border-dashed border-slate-200 py-2 text-sm">
             {detail.lines.map((l) => (
@@ -178,6 +239,24 @@ function SalesInvoiceDetailModal({ invoiceId, onClose }: { invoiceId: string; on
           </div>
           <ZatcaQrPanel status={detail.document_status} qr={detail.zatcaQr} qrError={detail.zatcaQrError} />
           <XmlDownloadButton status={detail.document_status} path={`/api/sales-invoices/${detail.id}/xml`} />
+          {canVoid && !showVoid && (
+            <button
+              onClick={() => setShowVoid(true)}
+              className="mt-3 w-full rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
+            >
+              Void This Sale
+            </button>
+          )}
+          {showVoid && (
+            <VoidInvoiceForm
+              invoiceId={detail.id}
+              onClose={() => setShowVoid(false)}
+              onVoided={() => {
+                onVoided();
+                apiRequest<FullSalesInvoice>(`/api/sales-invoices/${invoiceId}`, { token, companyId }).then(setDetail);
+              }}
+            />
+          )}
         </div>
       )}
     </Modal>
@@ -764,7 +843,13 @@ function SalesInvoicesTab() {
     },
     { key: "date", header: "Date", render: (r) => new Date(r.invoice_date).toLocaleDateString() },
     { key: "amount", header: "Total", render: (r) => Number(r.gross_amount).toFixed(2), numeric: true },
-    { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
+    {
+      key: "status",
+      header: "Status",
+      render: (r) => (
+        <StatusBadge status={Number(r.credited_amount) >= Number(r.gross_amount) && Number(r.gross_amount) > 0 ? "voided" : r.document_status} />
+      ),
+    },
   ];
 
   return (
@@ -788,7 +873,7 @@ function SalesInvoicesTab() {
           <NewSalesInvoiceForm onClose={() => setShowNew(false)} onCreated={reload} />
         </Modal>
       )}
-      {detailId && <SalesInvoiceDetailModal invoiceId={detailId} onClose={() => setDetailId(null)} />}
+      {detailId && <SalesInvoiceDetailModal invoiceId={detailId} onClose={() => setDetailId(null)} onVoided={reload} />}
     </>
   );
 }

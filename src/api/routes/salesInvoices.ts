@@ -1,10 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
-import { createSalesInvoice, postSalesInvoice } from "../../sales/salesService.js";
-import { NotFoundError } from "../errors.js";
+import { createSalesInvoice, postSalesInvoice, createCreditNote, postCreditNote } from "../../sales/salesService.js";
+import { NotFoundError, BusinessRuleError } from "../errors.js";
 import { renderZatcaQrDataUrl } from "../../zatca/qrCode.js";
-import { finalizeSalesInvoiceXmlHash, renderSalesInvoiceXml } from "../../zatca/invoiceXmlService.js";
+import { finalizeSalesInvoiceXmlHash, renderSalesInvoiceXml, finalizeCreditNoteXmlHash } from "../../zatca/invoiceXmlService.js";
 
 const lineSchema = z.object({
   itemVariantId: z.string().uuid().nullable(),
@@ -21,6 +21,12 @@ const paymentSchema = z.object({
   paymentMethod: z.enum(["cash", "card", "credit", "points", "gift_card"]),
   amount: z.number().positive(),
   reference: z.string().optional(),
+});
+
+const voidSchema = z.object({
+  fiscalPeriodId: z.string().uuid(),
+  creditNoteDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  reason: z.string().min(1),
 });
 
 const createSchema = z.object({
@@ -41,7 +47,9 @@ export async function salesInvoiceRoutes(app: FastifyInstance): Promise<void> {
     const result = await pool.query(
       `SELECT si.id, si.document_number, si.invoice_channel, si.invoice_date, si.document_status,
               si.net_amount, si.vat_amount, si.gross_amount,
-              c.name_en AS customer_name_en, c.name_ar AS customer_name_ar
+              c.name_en AS customer_name_en, c.name_ar AS customer_name_ar,
+              COALESCE((SELECT SUM(gross_amount) FROM credit_notes
+                        WHERE original_invoice_id = si.id AND document_status = 'posted'), 0) AS credited_amount
        FROM sales_invoices si
        LEFT JOIN customers c ON c.id = si.customer_id
        WHERE si.company_id = $1
@@ -101,6 +109,11 @@ export async function salesInvoiceRoutes(app: FastifyInstance): Promise<void> {
         `SELECT * FROM sales_invoice_payments WHERE invoice_id = $1`,
         [request.params.id],
       );
+      const credited = await pool.query<{ credited_amount: string }>(
+        `SELECT COALESCE(SUM(gross_amount), 0) AS credited_amount FROM credit_notes
+         WHERE original_invoice_id = $1 AND document_status = 'posted'`,
+        [request.params.id],
+      );
 
       // ZATCA Phase 1: every posted tax invoice carries this QR. A draft has
       // no posted_at yet (and may still change), so it gets none. A missing
@@ -122,7 +135,14 @@ export async function salesInvoiceRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
-      return { ...invoice, lines: lines.rows, payments: payments.rows, zatcaQr, zatcaQrError };
+      return {
+        ...invoice,
+        lines: lines.rows,
+        payments: payments.rows,
+        zatcaQr,
+        zatcaQrError,
+        creditedAmount: credited.rows[0]!.credited_amount,
+      };
     },
   );
 
@@ -142,6 +162,80 @@ export async function salesInvoiceRoutes(app: FastifyInstance): Promise<void> {
       }, request.authUser.id);
 
       return { id: request.params.id, status: "posted" };
+    },
+  );
+
+  // Void a posted sale. ZATCA requires a submitted tax invoice to never be
+  // altered or deleted -- "voiding" it is really just issuing a full credit
+  // note against every line, immediately posted, under a permission that's
+  // separate from a manual partial return (sales.document.void vs
+  // sales.return.create). Restricted to invoices with no existing credit
+  // notes so the "full void" and "partial return" flows can't collide --
+  // an invoice that's already been partly returned should go through the
+  // ordinary credit-note form instead.
+  app.post<{ Params: { id: string } }>(
+    "/sales-invoices/:id/void",
+    { preHandler: [app.authenticate, app.requirePermission("sales.document.void")] },
+    async (request, reply) => {
+      const body = voidSchema.parse(request.body);
+
+      const creditNoteId = await withTransaction(async (client) => {
+        const invoice = await client.query(
+          `SELECT id, store_id, document_status, zatca_invoice_category, customer_id, gross_amount
+           FROM sales_invoices WHERE id = $1 AND company_id = $2`,
+          [request.params.id, request.companyId],
+        );
+        if (invoice.rows.length === 0) throw new NotFoundError("sales invoice not found");
+        const inv = invoice.rows[0]!;
+        if (inv.document_status !== "posted") {
+          throw new BusinessRuleError("only a posted invoice can be voided");
+        }
+
+        const existingCredits = await client.query(
+          `SELECT COALESCE(SUM(gross_amount), 0) AS total FROM credit_notes
+           WHERE original_invoice_id = $1 AND document_status = 'posted'`,
+          [request.params.id],
+        );
+        if (Number(existingCredits.rows[0]!.total) > 0) {
+          throw new BusinessRuleError(
+            "this invoice already has a credit note against it; use the Credit Notes form for a partial return instead",
+          );
+        }
+
+        const lines = await client.query(
+          `SELECT id, item_variant_id, item_description, qty, unit_price, discount_amount, vat_rate, price_includes_vat
+           FROM sales_invoice_lines WHERE invoice_id = $1 ORDER BY line_number`,
+          [request.params.id],
+        );
+
+        const id = await createCreditNote(client, {
+          companyId: request.companyId,
+          storeId: inv.store_id,
+          originalInvoiceId: request.params.id,
+          zatcaInvoiceCategory: inv.zatca_invoice_category,
+          creditNoteDate: body.creditNoteDate ?? new Date().toISOString().slice(0, 10),
+          fiscalPeriodId: body.fiscalPeriodId,
+          customerId: inv.customer_id,
+          reason: `Voided: ${body.reason}`,
+          createdBy: request.authUser.id,
+          lines: lines.rows.map((l) => ({
+            sourceLineId: l.id,
+            itemVariantId: l.item_variant_id,
+            itemDescription: l.item_description,
+            qty: Number(l.qty),
+            unitPrice: Number(l.unit_price),
+            discountAmount: Number(l.discount_amount),
+            vatRate: Number(l.vat_rate),
+            priceIncludesVat: l.price_includes_vat,
+          })),
+        });
+        await postCreditNote(client, id, request.authUser.id);
+        await finalizeCreditNoteXmlHash(client, id);
+        return id;
+      }, request.authUser.id);
+
+      reply.status(201);
+      return { creditNoteId, status: "posted" };
     },
   );
 
