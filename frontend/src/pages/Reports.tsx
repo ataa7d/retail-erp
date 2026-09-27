@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, Receipt } from "lucide-react";
 import { useAuth } from "../lib/auth";
+import { useApiList } from "../lib/useApiList";
 import { apiRequest } from "../lib/api";
 import Tabs from "../components/Tabs";
 import DataTable from "../components/DataTable";
@@ -180,6 +181,116 @@ function BalanceSheetTab() {
   );
 }
 
+interface Customer {
+  id: string;
+  name_en: string;
+}
+
+interface StatementRow {
+  txn_date: string;
+  document_type: "invoice" | "credit_note" | "receipt";
+  document_number: string;
+  description: string;
+  debit: string;
+  credit: string;
+  running_balance: string;
+}
+
+interface StatementResponse {
+  openingBalance: string;
+  closingBalance: string;
+  rows: StatementRow[];
+}
+
+const DOCUMENT_TYPE_LABEL: Record<StatementRow["document_type"], string> = {
+  invoice: "Invoice",
+  credit_note: "Credit Note",
+  receipt: "Receipt",
+};
+
+function CustomerStatementTab() {
+  const { token, companyId } = useAuth();
+  const { data: customers } = useApiList<Customer>("/api/customers");
+  const [customerId, setCustomerId] = useState("");
+  const [startDate, setStartDate] = useState(yearStartISO());
+  const [endDate, setEndDate] = useState(todayISO());
+  const [statement, setStatement] = useState<StatementResponse | null>(null);
+
+  useEffect(() => {
+    if (!token || !companyId || !customerId) {
+      setStatement(null);
+      return;
+    }
+    setStatement(null);
+    apiRequest<StatementResponse>(
+      `/api/reports/customer-statement?customerId=${customerId}&startDate=${startDate}&endDate=${endDate}`,
+      { token, companyId },
+    ).then(setStatement);
+  }, [token, companyId, customerId, startDate, endDate]);
+
+  const columns: Column<StatementRow>[] = [
+    { key: "date", header: "Date", render: (r) => new Date(r.txn_date).toLocaleDateString() },
+    { key: "type", header: "Type", render: (r) => DOCUMENT_TYPE_LABEL[r.document_type] },
+    { key: "number", header: "Document #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "description", header: "Description", render: (r) => <span className="text-slate-600">{r.description}</span> },
+    { key: "debit", header: "Debit", render: (r) => (Number(r.debit) ? Number(r.debit).toFixed(2) : "—"), numeric: true },
+    { key: "credit", header: "Credit", render: (r) => (Number(r.credit) ? Number(r.credit).toFixed(2) : "—"), numeric: true },
+    { key: "balance", header: "Balance", render: (r) => <span className="font-medium text-slate-900">{Number(r.running_balance).toFixed(2)}</span>, numeric: true },
+  ];
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <label className="text-sm text-slate-600">Customer</label>
+        <select
+          value={customerId}
+          onChange={(e) => setCustomerId(e.target.value)}
+          className="min-w-56 rounded-md border border-slate-200 px-2 py-1 text-sm"
+        >
+          <option value="">Select a customer...</option>
+          {customers?.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name_en}
+            </option>
+          ))}
+        </select>
+        <label className="text-sm text-slate-600">From</label>
+        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm" />
+        <label className="text-sm text-slate-600">To</label>
+        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm" />
+      </div>
+
+      {!customerId && <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-400">Select a customer to view their statement.</p>}
+
+      {customerId && (
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          {statement === null ? (
+            <p className="p-6 text-sm text-slate-400">Loading...</p>
+          ) : (
+            <>
+              <div className="flex justify-between border-b border-slate-100 px-4 py-2.5 text-sm">
+                <span className="text-slate-500">Opening Balance</span>
+                <span className="font-medium text-slate-900">{Number(statement.openingBalance).toFixed(2)}</span>
+              </div>
+              <DataTable
+                columns={columns}
+                rows={statement.rows}
+                getRowKey={(r) => `${r.document_type}-${r.document_number}`}
+                emptyIcon={Receipt}
+                emptyText="No AR activity for this customer in this period."
+              />
+              <div className="flex justify-between border-t border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
+                <span>Closing Balance</span>
+                <span>{Number(statement.closingBalance).toFixed(2)}</span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Reports() {
   const { t } = useTranslation();
   return (
@@ -190,6 +301,7 @@ export default function Reports() {
           { key: "tb", label: "Trial Balance", content: <TrialBalanceTab /> },
           { key: "is", label: "Income Statement", content: <IncomeStatementTab /> },
           { key: "bs", label: "Balance Sheet", content: <BalanceSheetTab /> },
+          { key: "cs", label: "Customer Statement", content: <CustomerStatementTab /> },
         ]}
       />
     </div>
