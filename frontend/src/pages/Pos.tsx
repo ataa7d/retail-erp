@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Plus, Minus, Trash2, WifiOff, Wifi, RefreshCw, LogOut, X, ShoppingCart } from "lucide-react";
+import { Search, Plus, Minus, Trash2, WifiOff, Wifi, RefreshCw, LogOut, X, ShoppingCart, Wallet } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
-import { apiRequest } from "../lib/api";
+import { apiRequest, ApiError } from "../lib/api";
 
 interface PosDevice {
   id: string;
@@ -98,6 +98,19 @@ interface SyncResult {
   error?: string;
 }
 
+interface ZReportPaymentRow {
+  payment_method: string;
+  total: string;
+  invoice_count: string;
+}
+
+interface ZReport {
+  openingFloat: string;
+  paymentTotals: ZReportPaymentRow[];
+  expectedCash: number;
+  variance: number | null;
+}
+
 const VAT_RATE = 15;
 const DEVICE_KEY = "pos_terminal_device_id";
 const seqKey = (deviceId: string) => `pos_terminal_seq_${deviceId}`;
@@ -178,6 +191,172 @@ function DevicePicker({ onSelected }: { onSelected: (deviceId: string) => void }
   );
 }
 
+function OpenShiftScreen({ device, onOpened }: { device: PosDevice; onOpened: (shiftId: string) => void }) {
+  const { token, companyId } = useAuth();
+  const [openingFloat, setOpeningFloat] = useState("200");
+  const [notes, setNotes] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function open() {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const created = await apiRequest<{ id: string }>("/api/cash-shifts", {
+        method: "POST",
+        token,
+        companyId,
+        body: { storeId: device.store_id, deviceId: device.id, openingFloat: Number(openingFloat), openingNotes: notes || null },
+      });
+      onOpened(created.id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to open cash shift");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-950 p-6">
+      <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl">
+        <Wallet size={28} className="mb-2 text-brand-500" />
+        <h1 className="mb-1 text-lg font-semibold text-slate-900">Open Cash Shift</h1>
+        <p className="mb-4 text-sm text-slate-500">
+          {device.device_name} needs an open shift before it can take sales. Count the float in the drawer and enter it below.
+        </p>
+        <label className="mb-1 block text-xs font-medium text-slate-600">Opening Float</label>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          autoFocus
+          value={openingFloat}
+          onChange={(e) => setOpeningFloat(e.target.value)}
+          className="mb-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+        />
+        <label className="mb-1 block text-xs font-medium text-slate-600">Notes (optional)</label>
+        <input
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          className="mb-4 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+        />
+        {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+        <button
+          onClick={open}
+          disabled={submitting}
+          className="w-full rounded-md bg-brand-500 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
+        >
+          {submitting ? "Opening..." : "Open Shift & Start Selling"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CloseShiftModal({ shiftId, onClose, onClosed }: { shiftId: string; onClose: () => void; onClosed: () => void }) {
+  const { token, companyId } = useAuth();
+  const [report, setReport] = useState<ZReport | null>(null);
+  const [counted, setCounted] = useState("");
+  const [notes, setNotes] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [finalVariance, setFinalVariance] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!token || !companyId) return;
+    apiRequest<ZReport>(`/api/cash-shifts/${shiftId}/z-report`, { token, companyId }).then(setReport);
+  }, [shiftId, token, companyId]);
+
+  async function submitClose() {
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest(`/api/cash-shifts/${shiftId}/close`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { closingFloatCounted: Number(counted), closingNotes: notes || null },
+      });
+      setFinalVariance(Number(counted) - (report?.expectedCash ?? 0));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to close cash shift");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/50 p-4">
+      <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-900">Close Cash Shift</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            <X size={18} />
+          </button>
+        </div>
+
+        {!report ? (
+          <p className="text-sm text-slate-400">Loading...</p>
+        ) : finalVariance === null ? (
+          <>
+            <div className="mb-3 space-y-1 rounded-md border border-slate-200 p-2.5 text-sm">
+              <div className="flex justify-between text-slate-500">
+                <span>Opening Float</span>
+                <span className="tabular-nums text-slate-900">{Number(report.openingFloat).toFixed(2)}</span>
+              </div>
+              {report.paymentTotals.map((p) => (
+                <div key={p.payment_method} className="flex justify-between text-slate-500">
+                  <span className="capitalize">{p.payment_method} sales</span>
+                  <span className="tabular-nums text-slate-900">{Number(p.total).toFixed(2)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between border-t border-slate-100 pt-1 font-medium text-slate-700">
+                <span>Expected Cash</span>
+                <span className="tabular-nums">{report.expectedCash.toFixed(2)}</span>
+              </div>
+            </div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">Counted Cash in Drawer</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              autoFocus
+              value={counted}
+              onChange={(e) => setCounted(e.target.value)}
+              className="mb-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            />
+            <label className="mb-1 block text-xs font-medium text-slate-600">Notes (optional)</label>
+            <input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="mb-4 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            />
+            {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+            <button
+              onClick={submitClose}
+              disabled={submitting || counted === ""}
+              className="w-full rounded-md bg-brand-500 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
+            >
+              {submitting ? "Closing..." : "Close Shift"}
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="mb-2 text-sm text-slate-600">Shift closed. Expected {report.expectedCash.toFixed(2)}, counted {Number(counted).toFixed(2)}.</p>
+            <p className={`mb-4 text-base font-semibold ${finalVariance === 0 ? "text-slate-700" : finalVariance < 0 ? "text-red-600" : "text-green-600"}`}>
+              Variance: {finalVariance > 0 ? "+" : ""}
+              {finalVariance.toFixed(2)}
+            </p>
+            <button onClick={onClosed} className="w-full rounded-md bg-brand-500 py-2.5 text-sm font-semibold text-white hover:bg-brand-600">
+              Done
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Pos() {
   const { token, companyId, logout } = useAuth();
   const navigate = useNavigate();
@@ -219,6 +398,16 @@ export default function Pos() {
   } | null>(null);
   const [queue, setQueue] = useState<QueuedInvoicePayload[]>(() => (deviceId ? loadQueue(deviceId) : []));
   const [syncing, setSyncing] = useState(false);
+  const [shiftId, setShiftId] = useState<string | null | undefined>(undefined); // undefined = not checked yet
+  const [showCloseShift, setShowCloseShift] = useState(false);
+
+  useEffect(() => {
+    if (!token || !companyId || !deviceId) {
+      setShiftId(undefined);
+      return;
+    }
+    apiRequest<{ id: string | null }>(`/api/cash-shifts/open?deviceId=${deviceId}`, { token, companyId }).then((r) => setShiftId(r.id));
+  }, [deviceId, token, companyId]);
 
   const priceMap = useMemo(() => {
     const m = new Map<string, number>();
@@ -350,7 +539,7 @@ export default function Pos() {
   }, [online, device?.id]);
 
   async function charge() {
-    if (!device || cart.length === 0 || !openPeriodId) return;
+    if (!device || cart.length === 0 || !openPeriodId || !shiftId) return;
     setCharging(true);
     setChargeError(null);
     try {
@@ -423,6 +612,12 @@ export default function Pos() {
   if (!device) {
     return <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">Loading device...</div>;
   }
+  if (shiftId === undefined) {
+    return <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">Checking cash shift...</div>;
+  }
+  if (shiftId === null) {
+    return <OpenShiftScreen device={device} onOpened={setShiftId} />;
+  }
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-slate-100">
@@ -433,6 +628,12 @@ export default function Pos() {
           {online ? <Wifi size={14} className="text-green-400" /> : <WifiOff size={14} className="text-red-400" />}
           {online ? "Online" : "Offline"}
         </div>
+        <button
+          onClick={() => setShowCloseShift(true)}
+          className="flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white/20"
+        >
+          <Wallet size={12} /> Close Shift
+        </button>
         {queue.length > 0 && (
           <button
             onClick={() => flushQueue()}
@@ -628,7 +829,7 @@ export default function Pos() {
 
             <button
               onClick={charge}
-              disabled={cart.length === 0 || charging || !openPeriodId || (paymentMethod === "cash" && Number(tendered || 0) < total)}
+              disabled={cart.length === 0 || charging || !openPeriodId || !shiftId || (paymentMethod === "cash" && Number(tendered || 0) < total)}
               className="w-full rounded-md bg-brand-500 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-40"
             >
               {charging ? "Charging..." : `Charge ${total.toFixed(2)}`}
@@ -686,6 +887,17 @@ export default function Pos() {
             </button>
           </div>
         </div>
+      )}
+
+      {showCloseShift && shiftId && (
+        <CloseShiftModal
+          shiftId={shiftId}
+          onClose={() => setShowCloseShift(false)}
+          onClosed={() => {
+            setShowCloseShift(false);
+            setShiftId(null);
+          }}
+        />
       )}
     </div>
   );

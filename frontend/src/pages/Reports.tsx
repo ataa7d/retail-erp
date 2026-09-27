@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BarChart3, Receipt, Boxes } from "lucide-react";
+import { BarChart3, Receipt, Boxes, Wallet } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest } from "../lib/api";
 import Tabs from "../components/Tabs";
 import DataTable from "../components/DataTable";
+import Modal from "../components/Modal";
+import StatusBadge from "../components/StatusBadge";
 import type { Column } from "../components/DataTable";
 
 interface ReportRow {
@@ -321,6 +323,145 @@ interface StockValuationResponse {
   rows: StockValuationRow[];
 }
 
+interface CashShift {
+  id: string;
+  status: string;
+  opening_float: string;
+  opened_at: string;
+  closing_float_counted: string | null;
+  closed_at: string | null;
+  device_code: string;
+  device_name: string;
+  store_name_en: string;
+  opened_by_email: string | null;
+  closed_by_email: string | null;
+}
+
+interface ZReportPaymentRow {
+  payment_method: string;
+  total: string;
+  invoice_count: string;
+}
+
+interface ZReport {
+  status: string;
+  openedAt: string;
+  closedAt: string | null;
+  openingFloat: string;
+  closingFloatCounted: string | null;
+  paymentTotals: ZReportPaymentRow[];
+  cashSalesTotal: number;
+  expectedCash: number;
+  variance: number | null;
+  grossSalesTotal: number;
+  invoiceCount: number;
+}
+
+function CashShiftDetailModal({ shiftId, onClose }: { shiftId: string; onClose: () => void }) {
+  const { token, companyId } = useAuth();
+  const [shift, setShift] = useState<CashShift | null>(null);
+  const [zReport, setZReport] = useState<ZReport | null>(null);
+
+  useEffect(() => {
+    if (!token || !companyId) return;
+    apiRequest<CashShift>(`/api/cash-shifts/${shiftId}`, { token, companyId }).then(setShift);
+    apiRequest<ZReport>(`/api/cash-shifts/${shiftId}/z-report`, { token, companyId }).then(setZReport);
+  }, [shiftId, token, companyId]);
+
+  if (!shift || !zReport) return <p className="text-sm text-slate-400">Loading...</p>;
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <div className="text-sm font-medium text-slate-900">
+            {shift.device_name} <span className="font-mono text-xs text-slate-400">({shift.device_code})</span>
+          </div>
+          <div className="text-xs text-slate-500">
+            {shift.store_name_en} · opened by {shift.opened_by_email ?? "—"} at {new Date(shift.opened_at).toLocaleString()}
+          </div>
+        </div>
+        <StatusBadge status={shift.status} />
+      </div>
+
+      <div className="mb-3 space-y-1 rounded-md border border-slate-200 p-2 text-sm">
+        <div className="flex justify-between text-slate-500">
+          <span>Opening Float</span>
+          <span className="tabular-nums text-slate-900">{Number(zReport.openingFloat).toFixed(2)}</span>
+        </div>
+        {zReport.paymentTotals.map((p) => (
+          <div key={p.payment_method} className="flex justify-between text-slate-500">
+            <span className="capitalize">{p.payment_method} sales ({p.invoice_count})</span>
+            <span className="tabular-nums text-slate-900">{Number(p.total).toFixed(2)}</span>
+          </div>
+        ))}
+        {zReport.paymentTotals.length === 0 && <p className="text-xs text-slate-400">No posted sales in this shift yet.</p>}
+        <div className="flex justify-between border-t border-slate-100 pt-1 font-medium text-slate-700">
+          <span>Expected Cash in Drawer</span>
+          <span className="tabular-nums">{zReport.expectedCash.toFixed(2)}</span>
+        </div>
+        {zReport.closingFloatCounted !== null && (
+          <>
+            <div className="flex justify-between text-slate-500">
+              <span>Counted Cash</span>
+              <span className="tabular-nums text-slate-900">{Number(zReport.closingFloatCounted).toFixed(2)}</span>
+            </div>
+            <div className={`flex justify-between font-semibold ${zReport.variance === 0 ? "text-slate-700" : Number(zReport.variance) < 0 ? "text-red-600" : "text-green-600"}`}>
+              <span>Variance</span>
+              <span className="tabular-nums">{zReport.variance! > 0 ? "+" : ""}{zReport.variance!.toFixed(2)}</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="text-xs text-slate-400">
+        {zReport.invoiceCount} posted invoice{zReport.invoiceCount === 1 ? "" : "s"}, gross sales {zReport.grossSalesTotal.toFixed(2)}.
+        {shift.closed_at && ` Closed by ${shift.closed_by_email ?? "—"} at ${new Date(shift.closed_at).toLocaleString()}.`}
+      </div>
+    </div>
+  );
+}
+
+function CashShiftsTab() {
+  const { data, error } = useApiList<CashShift>("/api/cash-shifts");
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  const columns: Column<CashShift>[] = [
+    { key: "device", header: "Device", render: (r) => `${r.device_name} (${r.device_code})` },
+    { key: "store", header: "Store", render: (r) => r.store_name_en },
+    { key: "opened", header: "Opened", render: (r) => new Date(r.opened_at).toLocaleString() },
+    { key: "opened_by", header: "Opened By", render: (r) => r.opened_by_email ?? "—" },
+    { key: "float", header: "Opening Float", render: (r) => Number(r.opening_float).toFixed(2), numeric: true },
+    {
+      key: "counted",
+      header: "Counted",
+      render: (r) => (r.closing_float_counted !== null ? Number(r.closing_float_counted).toFixed(2) : "—"),
+      numeric: true,
+    },
+    { key: "status", header: "Status", render: (r) => <StatusBadge status={r.status} /> },
+  ];
+
+  return (
+    <>
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <DataTable
+          columns={columns}
+          rows={data ?? []}
+          getRowKey={(r) => r.id}
+          emptyIcon={Wallet}
+          emptyText={error ? "Failed to load cash shifts." : "No cash shifts yet."}
+          onRowClick={(r) => setOpenId(r.id)}
+        />
+      </div>
+      {openId && (
+        <Modal title="Cash Shift" onClose={() => setOpenId(null)}>
+          <CashShiftDetailModal shiftId={openId} onClose={() => setOpenId(null)} />
+        </Modal>
+      )}
+    </>
+  );
+}
+
 function StockValuationTab() {
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
@@ -407,6 +548,7 @@ export default function Reports() {
           { key: "bs", label: "Balance Sheet", content: <BalanceSheetTab /> },
           { key: "cs", label: "Customer Statement", content: <CustomerStatementTab /> },
           { key: "sv", label: "Stock Valuation", content: <StockValuationTab /> },
+          { key: "cs2", label: "Cash Shifts", content: <CashShiftsTab /> },
         ]}
       />
     </div>
