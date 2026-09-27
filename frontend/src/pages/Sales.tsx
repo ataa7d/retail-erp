@@ -287,6 +287,7 @@ interface PriceList {
   name_en: string;
   price_includes_vat: boolean;
   is_default: boolean;
+  default_tax_code_id: string | null;
 }
 
 interface InvoiceLineDraft {
@@ -321,6 +322,7 @@ function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => void; onCr
   const { data: customers } = useApiList<Customer>("/api/customers");
   const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
   const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
+  const { data: taxCodes } = useApiList<TaxCodeOption>("/api/tax-codes");
   const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
   const variantOptions = useVariantOptions();
 
@@ -365,7 +367,10 @@ function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => void; onCr
         if (i !== index) return l;
         const next = { ...l, ...patch };
         // Auto-fill from the selected price list when the variant changes,
-        // so the common case (selling at list price) needs no typing.
+        // so the common case (selling at list price) needs no typing --
+        // including the VAT rate, from the list's own default tax code
+        // (e.g. a Reference or Tender list quoted at a different rate than
+        // the shelf price), not just the price itself.
         if (patch.itemVariantId !== undefined) {
           const variant = variantOptions.find((v) => v.id === patch.itemVariantId);
           next.itemDescription = variant?.itemName ?? "";
@@ -375,6 +380,8 @@ function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => void; onCr
             next.unitPrice = priceEntry.price;
             next.priceIncludesVat = list?.price_includes_vat ?? next.priceIncludesVat;
           }
+          const taxCode = taxCodes?.find((t) => t.id === list?.default_tax_code_id);
+          if (taxCode) next.vatRate = taxCode.rate;
         }
         return next;
       }),
@@ -874,6 +881,7 @@ function NewQuotationForm({ onClose, onCreated }: { onClose: () => void; onCreat
   const { data: stores } = useApiList<Store>("/api/stores");
   const { data: customers } = useApiList<Customer>("/api/customers");
   const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
+  const { data: taxCodes } = useApiList<TaxCodeOption>("/api/tax-codes");
   const variantOptions = useVariantOptions();
 
   const [storeId, setStoreId] = useState("");
@@ -919,6 +927,8 @@ function NewQuotationForm({ onClose, onCreated }: { onClose: () => void; onCreat
             next.unitPrice = priceEntry.price;
             next.priceIncludesVat = list?.price_includes_vat ?? next.priceIncludesVat;
           }
+          const taxCode = taxCodes?.find((t) => t.id === list?.default_tax_code_id);
+          if (taxCode) next.vatRate = taxCode.rate;
         }
         return next;
       }),

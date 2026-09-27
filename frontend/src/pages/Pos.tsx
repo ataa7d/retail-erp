@@ -54,6 +54,8 @@ interface PosItem {
 
 interface PriceList {
   id: string;
+  code: string;
+  name_en: string;
   is_default: boolean;
 }
 
@@ -187,8 +189,15 @@ export default function Pos() {
   const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
   const { data: items } = useApiList<PosItem>("/api/items");
   const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
-  const defaultPriceListId = priceLists?.find((p) => p.is_default)?.id ?? null;
-  const { data: priceListItems } = useApiList<PriceListItem>(defaultPriceListId ? `/api/price-lists/${defaultPriceListId}/items` : null);
+  // A cashier can switch the active price list mid-shift (e.g. a Big Sale
+  // promotion, or Tender pricing for an institutional walk-in) -- null
+  // means "not chosen yet," which falls back to the company's default
+  // list. Switching only changes prices for items added to the cart
+  // afterward; lines already in the cart keep the price they were rung up
+  // at, same as a real till.
+  const [priceListId, setPriceListId] = useState<string | null>(null);
+  const effectivePriceListId = priceListId ?? priceLists?.find((p) => p.is_default)?.id ?? null;
+  const { data: priceListItems } = useApiList<PriceListItem>(effectivePriceListId ? `/api/price-lists/${effectivePriceListId}/items` : null);
 
   const device = devices?.find((d) => d.id === deviceId) ?? null;
   const openPeriodId = periods?.find((p) => p.status === "open")?.id ?? "";
@@ -455,16 +464,30 @@ export default function Pos() {
       <div className="flex min-h-0 flex-1">
         {/* Product grid */}
         <div className="flex min-w-0 flex-1 flex-col p-4">
-          <div className="mb-3 flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2">
-            <Search size={16} className="me-2 text-slate-400" />
-            <input
-              autoFocus
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              placeholder="Search item or scan barcode, then Enter..."
-              className="w-full bg-transparent text-sm focus:outline-none"
-            />
+          <div className="mb-3 flex items-center gap-2">
+            <div className="flex flex-1 items-center rounded-lg border border-slate-300 bg-white px-3 py-2">
+              <Search size={16} className="me-2 text-slate-400" />
+              <input
+                autoFocus
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Search item or scan barcode, then Enter..."
+                className="w-full bg-transparent text-sm focus:outline-none"
+              />
+            </div>
+            <select
+              value={effectivePriceListId ?? ""}
+              onChange={(e) => setPriceListId(e.target.value)}
+              title="Price list"
+              className="shrink-0 rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            >
+              {priceLists?.map((pl) => (
+                <option key={pl.id} value={pl.id}>
+                  {pl.name_en}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="grid flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto pb-4 sm:grid-cols-3 lg:grid-cols-4">
             {filteredGrid.map((g) => (
