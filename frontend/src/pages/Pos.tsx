@@ -24,6 +24,8 @@ interface Store {
 interface Customer {
   id: string;
   name_en: string;
+  is_loyalty_member: boolean;
+  loyalty_points_balance: number;
 }
 
 interface FiscalPeriod {
@@ -88,7 +90,7 @@ interface QueuedInvoicePayload {
     vatRate: number;
     priceIncludesVat: boolean;
   }>;
-  payments: Array<{ paymentMethod: "cash" | "card" | "gift_card"; amount: number; reference?: string }>;
+  payments: Array<{ paymentMethod: "cash" | "card" | "gift_card" | "points"; amount: number; reference?: string }>;
 }
 
 interface GiftCardLookup {
@@ -118,6 +120,8 @@ interface ZReport {
 }
 
 const VAT_RATE = 15;
+// Must match src/sales/loyaltyService.ts's POINT_REDEMPTION_VALUE.
+const POINT_REDEMPTION_VALUE = 0.05;
 const DEVICE_KEY = "pos_terminal_device_id";
 const seqKey = (deviceId: string) => `pos_terminal_seq_${deviceId}`;
 const queueKey = (deviceId: string) => `pos_terminal_queue_${deviceId}`;
@@ -390,7 +394,7 @@ export default function Pos() {
   const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "gift_card">("cash");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "gift_card" | "points">("cash");
   const [tendered, setTendered] = useState("");
   const [giftCardNumber, setGiftCardNumber] = useState("");
   const [giftCard, setGiftCard] = useState<GiftCardLookup | null>(null);
@@ -518,6 +522,9 @@ export default function Pos() {
   const vat = total - net;
   const change = paymentMethod === "cash" ? Math.max(0, Number(tendered || 0) - total) : 0;
   const giftCardReady = giftCard !== null && giftCard.card_number === giftCardNumber.trim().toUpperCase() && giftCard.status === "active" && Number(giftCard.balance) >= total;
+  const selectedCustomer = customers?.find((c) => c.id === customerId) ?? null;
+  const pointsNeeded = Math.round(total / POINT_REDEMPTION_VALUE);
+  const pointsReady = selectedCustomer?.is_loyalty_member === true && selectedCustomer.loyalty_points_balance >= pointsNeeded;
 
   async function checkGiftCard() {
     const number = giftCardNumber.trim().toUpperCase();
@@ -570,6 +577,7 @@ export default function Pos() {
   async function charge() {
     if (!device || cart.length === 0 || !openPeriodId || !shiftId) return;
     if (paymentMethod === "gift_card" && (!online || !giftCardReady)) return;
+    if (paymentMethod === "points" && (!online || !pointsReady)) return;
     setCharging(true);
     setChargeError(null);
     try {
@@ -624,11 +632,16 @@ export default function Pos() {
           return;
         } catch {
           // fall through to offline queue on network failure -- except for
-          // gift cards, which must be validated live: queuing one on a
-          // stale looked-up balance risks it failing (or double-spending
-          // against another sale) once sync finally reaches the server.
+          // gift cards and points, which must be validated live: queuing
+          // one on a stale looked-up balance risks it failing (or
+          // double-spending against another sale) once sync finally
+          // reaches the server.
           if (paymentMethod === "gift_card") {
             setChargeError("Could not reach the server to redeem this gift card. Try again once back online.");
+            return;
+          }
+          if (paymentMethod === "points") {
+            setChargeError("Could not reach the server to redeem points. Try again once back online.");
             return;
           }
         }
@@ -834,7 +847,7 @@ export default function Pos() {
               </div>
             </div>
 
-            <div className="mb-2 grid grid-cols-3 gap-1.5">
+            <div className="mb-2 grid grid-cols-4 gap-1.5">
               <button
                 onClick={() => setPaymentMethod("cash")}
                 className={`rounded-md border px-2 py-1.5 text-sm font-medium ${
@@ -860,6 +873,16 @@ export default function Pos() {
                 }`}
               >
                 Gift Card
+              </button>
+              <button
+                onClick={() => setPaymentMethod("points")}
+                disabled={!online}
+                title={online ? undefined : "Points need a live connection to redeem"}
+                className={`rounded-md border px-2 py-1.5 text-sm font-medium disabled:opacity-40 ${
+                  paymentMethod === "points" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600"
+                }`}
+              >
+                Points
               </button>
             </div>
 
@@ -906,6 +929,21 @@ export default function Pos() {
               </div>
             )}
 
+            {paymentMethod === "points" && (
+              <div className="mb-2">
+                {!selectedCustomer ? (
+                  <p className="text-xs text-amber-600">Select a customer above to pay with points.</p>
+                ) : !selectedCustomer.is_loyalty_member ? (
+                  <p className="text-xs text-red-600">{selectedCustomer.name_en} is not enrolled in the loyalty program.</p>
+                ) : (
+                  <p className={`text-xs ${pointsReady ? "text-green-700" : "text-red-600"}`}>
+                    {selectedCustomer.name_en} has {selectedCustomer.loyalty_points_balance} points
+                    {pointsReady ? ` — covers the ${pointsNeeded}-point sale.` : `, needs ${pointsNeeded} to cover this sale.`}
+                  </p>
+                )}
+              </div>
+            )}
+
             {chargeError && <p className="mb-2 text-xs text-red-600">{chargeError}</p>}
 
             <button
@@ -916,7 +954,8 @@ export default function Pos() {
                 !openPeriodId ||
                 !shiftId ||
                 (paymentMethod === "cash" && Number(tendered || 0) < total) ||
-                (paymentMethod === "gift_card" && !giftCardReady)
+                (paymentMethod === "gift_card" && !giftCardReady) ||
+                (paymentMethod === "points" && !pointsReady)
               }
               className="w-full rounded-md bg-brand-500 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-40"
             >

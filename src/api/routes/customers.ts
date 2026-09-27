@@ -19,6 +19,11 @@ const createSchema = z.object({
   defaultPriceListId: z.string().uuid().nullable().optional(),
 });
 
+const loyaltySchema = z.object({
+  isLoyaltyMember: z.boolean(),
+  loyaltyCardNumber: z.string().nullable().optional(),
+});
+
 const termsSchema = z.object({
   crNumber: z.string().nullable().optional(),
   vatRegistrationNumber: z.string().nullable().optional(),
@@ -34,7 +39,7 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
     const result = await pool.query(
       `SELECT id, customer_code, name_en, name_ar, customer_type, cr_number, vat_registration_number,
               address, city, phone, email, credit_limit, payment_terms_days, default_price_list_id,
-              is_loyalty_member, loyalty_card_number, is_active
+              is_loyalty_member, loyalty_card_number, loyalty_points_balance, is_active
        FROM customers WHERE company_id = $1 ORDER BY name_en`,
       [request.companyId],
     );
@@ -113,4 +118,46 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
       return { id: request.params.id };
     },
   );
+
+  // Loyalty enrollment (is_loyalty_member / loyalty_card_number) is edited
+  // separately from B2B terms above -- it's a retail-customer concern, not
+  // a commercial-terms one, and unrelated to credit limits/price lists.
+  app.post<{ Params: { id: string } }>(
+    "/customers/:id/loyalty",
+    { preHandler: [app.authenticate, app.requirePermission("sales.customer.manage")] },
+    async (request) => {
+      const body = loyaltySchema.parse(request.body);
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM customers WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("customer not found");
+        await client.query(`UPDATE customers SET is_loyalty_member = $1, loyalty_card_number = $2 WHERE id = $3`, [
+          body.isLoyaltyMember,
+          body.loyaltyCardNumber ?? null,
+          request.params.id,
+        ]);
+      }, request.authUser.id);
+      return { id: request.params.id };
+    },
+  );
+
+  app.get<{ Params: { id: string } }>("/customers/:id/loyalty-transactions", { preHandler: app.authenticate }, async (request) => {
+    const existing = await pool.query(`SELECT id FROM customers WHERE id = $1 AND company_id = $2`, [
+      request.params.id,
+      request.companyId,
+    ]);
+    if (existing.rows.length === 0) throw new NotFoundError("customer not found");
+
+    const result = await pool.query(
+      `SELECT lpt.*, si.document_number AS sales_invoice_number
+       FROM loyalty_points_transactions lpt
+       LEFT JOIN sales_invoices si ON si.id = lpt.sales_invoice_id
+       WHERE lpt.customer_id = $1
+       ORDER BY lpt.created_at DESC`,
+      [request.params.id],
+    );
+    return result.rows;
+  });
 }

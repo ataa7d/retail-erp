@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Users } from "lucide-react";
 import { useAuth } from "../lib/auth";
@@ -32,7 +32,18 @@ interface Customer {
   payment_terms_days: number;
   default_price_list_id: string | null;
   is_loyalty_member: boolean;
+  loyalty_card_number: string | null;
+  loyalty_points_balance: number;
   is_active: boolean;
+}
+
+interface LoyaltyTransaction {
+  id: string;
+  transaction_type: string;
+  points: number;
+  balance_after: number;
+  sales_invoice_number: string | null;
+  created_at: string;
 }
 
 function NewCustomerForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
@@ -243,6 +254,89 @@ function EditTermsForm({ customer, onChanged }: { customer: Customer; onChanged:
   );
 }
 
+function LoyaltyPanel({ customer, onChanged }: { customer: Customer; onChanged: () => void }) {
+  const { token, companyId } = useAuth();
+  const [isLoyaltyMember, setIsLoyaltyMember] = useState(customer.is_loyalty_member);
+  const [loyaltyCardNumber, setLoyaltyCardNumber] = useState(customer.loyalty_card_number ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [transactions, setTransactions] = useState<LoyaltyTransaction[] | null>(null);
+
+  useEffect(() => {
+    apiRequest<LoyaltyTransaction[]>(`/api/customers/${customer.id}/loyalty-transactions`, { token, companyId }).then(setTransactions);
+  }, [customer.id, token, companyId]);
+
+  async function save() {
+    setError(null);
+    setSaving(true);
+    try {
+      await apiRequest(`/api/customers/${customer.id}/loyalty`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { isLoyaltyMember, loyaltyCardNumber: loyaltyCardNumber || null },
+      });
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save loyalty enrollment");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t border-slate-200 pt-4">
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Loyalty Program</p>
+      <label className="mb-2 flex items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" checked={isLoyaltyMember} onChange={(e) => setIsLoyaltyMember(e.target.checked)} />
+        Enrolled in loyalty program
+      </label>
+      {isLoyaltyMember && (
+        <Field label="Loyalty Card Number">
+          <TextInput value={loyaltyCardNumber} onChange={(e) => setLoyaltyCardNumber(e.target.value)} placeholder="Optional" />
+        </Field>
+      )}
+      {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
+      <button
+        onClick={save}
+        disabled={saving}
+        className="mb-3 rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+      >
+        {saving ? "Saving..." : "Save Loyalty Enrollment"}
+      </button>
+
+      {customer.is_loyalty_member && (
+        <div className="rounded-md border border-slate-200 p-2.5">
+          <div className="mb-2 flex items-center justify-between text-sm">
+            <span className="text-slate-500">Current Balance</span>
+            <span className="font-semibold text-slate-900">{customer.loyalty_points_balance} points</span>
+          </div>
+          {transactions === null ? (
+            <p className="text-xs text-slate-400">Loading history...</p>
+          ) : transactions.length === 0 ? (
+            <p className="text-xs text-slate-400">No point activity yet.</p>
+          ) : (
+            <div className="space-y-1">
+              {transactions.map((t) => (
+                <div key={t.id} className="flex items-center justify-between text-xs">
+                  <span className="capitalize text-slate-600">
+                    {t.transaction_type}
+                    {t.sales_invoice_number && ` (${t.sales_invoice_number})`}
+                  </span>
+                  <span className={`tabular-nums font-medium ${t.points < 0 ? "text-red-600" : "text-green-600"}`}>
+                    {t.points > 0 ? "+" : ""}
+                    {t.points}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Customers() {
   const { t, i18n } = useTranslation();
   const { data, error, reload } = useApiList<Customer>("/api/customers");
@@ -263,6 +357,7 @@ export default function Customers() {
     { key: "terms", header: "Payment Terms", render: (r) => `${r.payment_terms_days}d`, numeric: true },
     { key: "credit", header: "Credit Limit", render: (r) => (r.credit_limit ? Number(r.credit_limit).toFixed(2) : "—"), numeric: true },
     { key: "priceList", header: "Price List", render: (r) => priceListLabel(r.default_price_list_id) },
+    { key: "loyalty", header: "Loyalty", render: (r) => (r.is_loyalty_member ? `${r.loyalty_points_balance} pts` : "—"), numeric: true },
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.is_active ? "active" : "inactive"} /> },
   ];
 
@@ -290,8 +385,9 @@ export default function Customers() {
         </Modal>
       )}
       {detailCustomer && (
-        <Modal title={`${detailCustomer.name_en} — B2B Terms`} onClose={() => setDetailId(null)}>
+        <Modal title={detailCustomer.name_en} onClose={() => setDetailId(null)}>
           <EditTermsForm customer={detailCustomer} onChanged={reload} />
+          <LoyaltyPanel customer={detailCustomer} onChanged={reload} />
         </Modal>
       )}
     </>

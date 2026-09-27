@@ -17,6 +17,7 @@ import type { Client } from "pg";
 import { calculateLineAmounts, type LineInput } from "../money.js";
 import { recordStockMovement } from "../inventory/inventoryService.js";
 import { redeemGiftCard } from "./giftCardService.js";
+import { earnLoyaltyPoints, redeemLoyaltyPoints } from "./loyaltyService.js";
 
 export interface SalesInvoiceLineRequest extends LineInput {
   itemVariantId: string | null;
@@ -146,7 +147,7 @@ export async function createSalesInvoice(client: Client, params: CreateSalesInvo
 
 export async function postSalesInvoice(client: Client, invoiceId: string, postedBy: string): Promise<void> {
   const invoiceResult = await client.query(
-    `SELECT company_id, store_id, invoice_channel, invoice_date, fiscal_period_id, net_amount, vat_amount, gross_amount
+    `SELECT company_id, store_id, invoice_channel, invoice_date, fiscal_period_id, net_amount, vat_amount, gross_amount, customer_id
      FROM sales_invoices WHERE id = $1`,
     [invoiceId],
   );
@@ -188,6 +189,25 @@ export async function postSalesInvoice(client: Client, invoiceId: string, posted
         redeemedBy: postedBy,
       });
     }
+
+    // Same, for loyalty points -- always paid against the invoice's own
+    // customer, never a reference on the payment row.
+    const pointsPayments = await client.query<{ amount: string }>(
+      `SELECT amount FROM sales_invoice_payments WHERE invoice_id = $1 AND payment_method = 'points'`,
+      [invoiceId],
+    );
+    if (pointsPayments.rows.length > 0 && !invoice.customer_id) {
+      throw new Error(`points payment on invoice ${invoiceId} requires a customer on the invoice`);
+    }
+    for (const pp of pointsPayments.rows) {
+      await redeemLoyaltyPoints(client, {
+        companyId: invoice.company_id,
+        customerId: invoice.customer_id,
+        amount: Number(pp.amount),
+        salesInvoiceId: invoiceId,
+        redeemedBy: postedBy,
+      });
+    }
   }
 
   const cashAccountId = await getAccountId(client, invoice.company_id, "1110");
@@ -205,6 +225,9 @@ export async function postSalesInvoice(client: Client, invoiceId: string, posted
       : [];
   const giftCardAccountId = paymentMethodsUsed.includes("gift_card")
     ? await getAccountId(client, invoice.company_id, "2150")
+    : null;
+  const loyaltyAccountId = paymentMethodsUsed.includes("points")
+    ? await getAccountId(client, invoice.company_id, "2160")
     : null;
 
   const fiscalYear = Number(invoice.invoice_date.toISOString().slice(0, 4));
@@ -230,7 +253,13 @@ export async function postSalesInvoice(client: Client, invoiceId: string, posted
     for (const p of payments.rows) {
       lineNumber += 1;
       const accountId =
-        p.payment_method === "credit" ? arAccountId : p.payment_method === "gift_card" ? giftCardAccountId! : cashAccountId;
+        p.payment_method === "credit"
+          ? arAccountId
+          : p.payment_method === "gift_card"
+            ? giftCardAccountId!
+            : p.payment_method === "points"
+              ? loyaltyAccountId!
+              : cashAccountId;
       await client.query(
         `INSERT INTO journal_lines (company_id, journal_id, line_number, account_id, debit_amount, description)
          VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -310,6 +339,27 @@ export async function postSalesInvoice(client: Client, invoiceId: string, posted
     `UPDATE sales_invoices SET document_status = 'posted', posted_by = $2, journal_id = $3 WHERE id = $1`,
     [invoiceId, postedBy, journalId],
   );
+
+  // Accrue loyalty points on this sale -- POS only, only for a customer
+  // actually enrolled in the program, and never on the same invoice a
+  // customer paid with points (no earning and spending points in one
+  // visit).
+  if (invoice.invoice_channel === "pos" && invoice.customer_id && !paymentMethodsUsed.includes("points")) {
+    const customer = await client.query<{ is_loyalty_member: boolean }>(`SELECT is_loyalty_member FROM customers WHERE id = $1`, [
+      invoice.customer_id,
+    ]);
+    if (customer.rows[0]?.is_loyalty_member) {
+      await earnLoyaltyPoints(client, {
+        companyId: invoice.company_id,
+        customerId: invoice.customer_id,
+        netAmount: Number(invoice.net_amount),
+        fiscalPeriodId: invoice.fiscal_period_id,
+        earnDate: invoice.invoice_date.toISOString().slice(0, 10),
+        salesInvoiceId: invoiceId,
+        earnedBy: postedBy,
+      });
+    }
+  }
 }
 
 export interface CreditNoteLineRequest {
