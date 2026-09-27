@@ -17,7 +17,7 @@ let variantId: string;
 
 const PASSWORD = "TestPass123!";
 
-async function inject(method: "GET" | "POST", url: string, body?: unknown) {
+async function inject(method: "GET" | "POST", url: string, body?: Record<string, unknown>) {
   return app.inject({
     method,
     url,
