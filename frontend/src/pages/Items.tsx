@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Package, Plus, Barcode as BarcodeIcon, Tag, Upload, Download } from "lucide-react";
+import { Package, Plus, Barcode as BarcodeIcon, Tag, Upload, Download, Printer } from "lucide-react";
+import JsBarcode from "jsbarcode";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError, uploadFile } from "../lib/api";
@@ -1097,6 +1098,124 @@ const EMPTY_VARIANT_FILTERS: VariantFilters = {
  * server via GET /item-variants, never by loading the whole catalog into
  * the browser and filtering client-side the way the grouped Items tab does.
  */
+interface LabelPriceList {
+  id: string;
+  is_default: boolean;
+}
+
+interface LabelPriceListItem {
+  item_variant_id: string;
+  price: string;
+}
+
+function LabelBarcodeSvg({ value }: { value: string }) {
+  const ref = useRef<SVGSVGElement>(null);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    try {
+      JsBarcode(ref.current, value, {
+        format: "CODE128",
+        displayValue: false,
+        height: 40,
+        margin: 0,
+      });
+    } catch {
+      // Some stored barcodes are short/legacy values CODE128 still renders
+      // fine, but a genuinely invalid string shouldn't crash the whole
+      // print run -- leave that one label's barcode blank.
+    }
+  }, [value]);
+
+  return <svg ref={ref} />;
+}
+
+function PrintLabelsModal({ variants, onClose }: { variants: VariantRow[]; onClose: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: priceLists } = useApiList<LabelPriceList>("/api/price-lists");
+  const defaultPriceListId = priceLists?.find((p) => p.is_default)?.id ?? null;
+  const [priceMap, setPriceMap] = useState<Record<string, string>>({});
+  const [copies, setCopies] = useState<Record<string, number>>(() => Object.fromEntries(variants.map((v) => [v.id, 1])));
+  const [showPrice, setShowPrice] = useState(true);
+
+  useEffect(() => {
+    if (!defaultPriceListId || !token || !companyId) return;
+    apiRequest<LabelPriceListItem[]>(`/api/price-lists/${defaultPriceListId}/items`, { token, companyId }).then((items) => {
+      setPriceMap(Object.fromEntries(items.map((i) => [i.item_variant_id, i.price])));
+    });
+  }, [defaultPriceListId, token, companyId]);
+
+  const printable = variants.filter((v) => v.primary_barcode);
+  const skipped = variants.filter((v) => !v.primary_barcode);
+  const labels = printable.flatMap((v) => Array.from({ length: Math.max(0, copies[v.id] ?? 1) }, () => v));
+
+  return (
+    <Modal title={`Print Labels (${printable.length})`} onClose={onClose}>
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          #barcode-print-area, #barcode-print-area * { visibility: visible; }
+          #barcode-print-area { position: fixed; inset: 0; width: 100%; margin: 0; padding: 8mm; }
+        }
+      `}</style>
+
+      {skipped.length > 0 && (
+        <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          {skipped.length} selected variant{skipped.length === 1 ? "" : "s"} have no barcode and will be skipped:{" "}
+          {skipped.map((v) => v.variant_code).join(", ")}.
+        </p>
+      )}
+
+      <label className="mb-3 flex items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" checked={showPrice} onChange={(e) => setShowPrice(e.target.checked)} />
+        Show price (from the default price list) on each label
+      </label>
+
+      <div className="mb-4 max-h-64 space-y-1.5 overflow-y-auto rounded-md border border-slate-200 p-2">
+        {printable.map((v) => (
+          <div key={v.id} className="flex items-center justify-between gap-2 text-sm">
+            <span className="min-w-0 truncate text-slate-700">
+              {v.name_en} <span className="text-xs text-slate-400">({v.variant_code})</span>
+            </span>
+            <div className="flex flex-none items-center gap-1.5">
+              <span className="text-xs text-slate-400">Copies</span>
+              <input
+                type="number"
+                min={0}
+                value={copies[v.id] ?? 1}
+                onChange={(e) => setCopies((prev) => ({ ...prev, [v.id]: Number(e.target.value) }))}
+                className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-end text-xs tabular-nums focus:border-brand-400 focus:outline-none"
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={() => window.print()}
+        disabled={labels.length === 0}
+        className="flex w-full items-center justify-center gap-1.5 rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+      >
+        <Printer size={15} /> Print {labels.length} Label{labels.length === 1 ? "" : "s"}
+      </button>
+
+      <div id="barcode-print-area" className="hidden print:grid print:grid-cols-3 print:gap-3">
+        {labels.map((v, i) => (
+          <div key={`${v.id}-${i}`} className="flex flex-col items-center border border-dashed border-slate-300 p-2 text-center">
+            <div className="w-full truncate text-[10px] font-medium text-slate-900">{v.name_en}</div>
+            <div className="text-[9px] text-slate-500">
+              {[v.color, v.size].filter(Boolean).join(" / ") || v.variant_code}
+            </div>
+            <LabelBarcodeSvg value={v.primary_barcode!} />
+            <div className="font-mono text-[9px] text-slate-700">{v.primary_barcode}</div>
+            {showPrice && priceMap[v.id] && <div className="mt-0.5 text-xs font-semibold text-slate-900">{Number(priceMap[v.id]).toFixed(2)}</div>}
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
 function AllVariantsTab() {
   const { data: brands } = useApiList<Brand>("/api/brands");
   const { data: categories } = useApiList<Category>("/api/categories");
@@ -1116,6 +1235,11 @@ function AllVariantsTab() {
   const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
   const [reorderDrafts, setReorderDrafts] = useState<Record<string, string>>({});
   const [savingCell, setSavingCell] = useState<string | null>(null);
+  // Keyed by id rather than just a Set<string> so a selection made on one
+  // page survives paging away and back -- the row data (needed for the
+  // label itself) doesn't have to be re-fetched to print it.
+  const [selected, setSelected] = useState<Record<string, VariantRow>>({});
+  const [showPrintLabels, setShowPrintLabels] = useState(false);
 
   // Debounce free-typed filter input so every keystroke doesn't hit the
   // server -- 300ms after the user stops typing, the debounced value (and
@@ -1227,6 +1351,28 @@ function AllVariantsTab() {
     }
   }
 
+  function toggleSelected(row: VariantRow) {
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (next[row.id]) delete next[row.id];
+      else next[row.id] = row;
+      return next;
+    });
+  }
+
+  function toggleSelectPage() {
+    const rows = result?.rows ?? [];
+    const allSelected = rows.length > 0 && rows.every((r) => selected[r.id]);
+    setSelected((prev) => {
+      const next = { ...prev };
+      for (const r of rows) {
+        if (allSelected) delete next[r.id];
+        else next[r.id] = r;
+      }
+      return next;
+    });
+  }
+
   function toggleSort(col: VariantSortColumn) {
     if (sortBy === col) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -1268,6 +1414,14 @@ function AllVariantsTab() {
         <span className="text-sm text-slate-500">
           {result ? `${result.total.toLocaleString()} variant${result.total === 1 ? "" : "s"}` : loading ? "Loading..." : ""}
         </span>
+        {Object.keys(selected).length > 0 && (
+          <button
+            onClick={() => setShowPrintLabels(true)}
+            className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <Printer size={13} /> Print Labels ({Object.keys(selected).length})
+          </button>
+        )}
       </div>
 
       {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -1276,6 +1430,13 @@ function AllVariantsTab() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100">
+              <th className="px-2 py-2">
+                <input
+                  type="checkbox"
+                  checked={(result?.rows.length ?? 0) > 0 && result!.rows.every((r) => selected[r.id])}
+                  onChange={toggleSelectPage}
+                />
+              </th>
               <th className={thClass} onClick={() => toggleSort("variantCode")}>Variant Code{sortIndicator("variantCode")}</th>
               <th className={thClass} onClick={() => toggleSort("itemCode")}>Item Code{sortIndicator("itemCode")}</th>
               <th className={thClass} onClick={() => toggleSort("name")}>Name{sortIndicator("name")}</th>
@@ -1291,6 +1452,7 @@ function AllVariantsTab() {
               <th className={thClass} onClick={() => toggleSort("status")}>Status{sortIndicator("status")}</th>
             </tr>
             <tr className="border-b border-slate-100 bg-slate-50">
+              <th className="px-2 py-1.5" />
               <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.variantCode} onChange={(e) => updateFilter("variantCode", e.target.value)} /></th>
               <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.itemCode} onChange={(e) => updateFilter("itemCode", e.target.value)} /></th>
               <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.name} onChange={(e) => updateFilter("name", e.target.value)} /></th>
@@ -1335,13 +1497,16 @@ function AllVariantsTab() {
           <tbody>
             {result?.rows.length === 0 && (
               <tr>
-                <td colSpan={13} className="px-4 py-12 text-center text-sm text-slate-400">
+                <td colSpan={14} className="px-4 py-12 text-center text-sm text-slate-400">
                   No variants match these filters.
                 </td>
               </tr>
             )}
             {result?.rows.map((r) => (
               <tr key={r.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+                <td className="px-2 py-2">
+                  <input type="checkbox" checked={Boolean(selected[r.id])} onChange={() => toggleSelected(r)} />
+                </td>
                 <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-700">{r.variant_code}</td>
                 <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-500">{r.item_code}</td>
                 <td className="px-3 py-2 text-slate-900">{r.name_en}</td>
@@ -1430,6 +1595,10 @@ function AllVariantsTab() {
             </button>
           </div>
         </div>
+      )}
+
+      {showPrintLabels && (
+        <PrintLabelsModal variants={Object.values(selected)} onClose={() => setShowPrintLabels(false)} />
       )}
     </div>
   );
