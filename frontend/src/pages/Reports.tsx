@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BarChart3, Receipt } from "lucide-react";
+import { BarChart3, Receipt, Boxes } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest } from "../lib/api";
@@ -291,6 +291,110 @@ function CustomerStatementTab() {
   );
 }
 
+interface Store {
+  id: string;
+  name_en: string;
+}
+
+interface ItemGroup {
+  id: string;
+  name_en: string;
+}
+
+interface StockValuationRow {
+  store_id: string;
+  store_name_en: string;
+  item_variant_id: string;
+  variant_code: string;
+  color: string | null;
+  size: string | null;
+  item_code: string;
+  item_name_en: string;
+  group_name_en: string | null;
+  qty_on_hand: string;
+  avg_unit_cost: string;
+  total_value: string;
+}
+
+interface StockValuationResponse {
+  totalValue: string;
+  rows: StockValuationRow[];
+}
+
+function StockValuationTab() {
+  const { token, companyId } = useAuth();
+  const { data: stores } = useApiList<Store>("/api/stores");
+  const { data: groups } = useApiList<ItemGroup>("/api/item-groups");
+  const [storeId, setStoreId] = useState("");
+  const [groupId, setGroupId] = useState("");
+  const [data, setData] = useState<StockValuationResponse | null>(null);
+
+  useEffect(() => {
+    if (!token || !companyId) return;
+    setData(null);
+    const params = new URLSearchParams();
+    if (storeId) params.set("storeId", storeId);
+    if (groupId) params.set("groupId", groupId);
+    apiRequest<StockValuationResponse>(`/api/reports/stock-valuation?${params.toString()}`, { token, companyId }).then(setData);
+  }, [token, companyId, storeId, groupId]);
+
+  const columns: Column<StockValuationRow>[] = [
+    { key: "store", header: "Store", render: (r) => r.store_name_en },
+    { key: "item_code", header: "Item Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.item_code}</span> },
+    { key: "name", header: "Name", render: (r) => r.item_name_en },
+    { key: "variant", header: "Variant", render: (r) => [r.color, r.size].filter(Boolean).join(" / ") || "—" },
+    { key: "group", header: "Group", render: (r) => r.group_name_en ?? "—" },
+    { key: "qty", header: "Qty on Hand", render: (r) => Number(r.qty_on_hand).toLocaleString(), numeric: true },
+    { key: "cost", header: "Avg Cost", render: (r) => Number(r.avg_unit_cost).toFixed(2), numeric: true },
+    { key: "value", header: "Total Value", render: (r) => <span className="font-medium text-slate-900">{Number(r.total_value).toFixed(2)}</span>, numeric: true },
+  ];
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <label className="text-sm text-slate-600">Store</label>
+        <select value={storeId} onChange={(e) => setStoreId(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm">
+          <option value="">All Stores</option>
+          {stores?.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name_en}
+            </option>
+          ))}
+        </select>
+        <label className="text-sm text-slate-600">Group</label>
+        <select value={groupId} onChange={(e) => setGroupId(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm">
+          <option value="">All Groups</option>
+          {groups?.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name_en}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        {data === null ? (
+          <p className="p-6 text-sm text-slate-400">Loading...</p>
+        ) : (
+          <>
+            <DataTable
+              columns={columns}
+              rows={data.rows}
+              getRowKey={(r) => `${r.store_id}-${r.item_variant_id}`}
+              emptyIcon={Boxes}
+              emptyText="No stock on hand matches these filters."
+            />
+            {data.rows.length > 0 && (
+              <div className="flex justify-end border-t border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
+                <span>Total Inventory Value: {Number(data.totalValue).toFixed(2)}</span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Reports() {
   const { t } = useTranslation();
   return (
@@ -302,6 +406,7 @@ export default function Reports() {
           { key: "is", label: "Income Statement", content: <IncomeStatementTab /> },
           { key: "bs", label: "Balance Sheet", content: <BalanceSheetTab /> },
           { key: "cs", label: "Customer Statement", content: <CustomerStatementTab /> },
+          { key: "sv", label: "Stock Valuation", content: <StockValuationTab /> },
         ]}
       />
     </div>

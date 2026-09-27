@@ -12,6 +12,10 @@ const customerStatementSchema = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
+const stockValuationSchema = z.object({
+  storeId: z.string().uuid().optional(),
+  groupId: z.string().uuid().optional(),
+});
 
 export async function reportRoutes(app: FastifyInstance): Promise<void> {
   app.get(
@@ -86,6 +90,38 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
         closingBalance,
         rows: inRange,
       };
+    },
+  );
+
+  // stock_balances already carries a running weighted-average cost and
+  // total_value per store+variant (migration 0025) -- unlike the GL-based
+  // reports above, this is a live snapshot, not a point-in-time
+  // reconstruction, so it's a plain filtered query rather than a stored
+  // fn_* function.
+  app.get(
+    "/reports/stock-valuation",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.view")] },
+    async (request) => {
+      const query = stockValuationSchema.parse(request.query);
+      const result = await pool.query(
+        `SELECT sb.store_id, s.name_en AS store_name_en, s.name_ar AS store_name_ar,
+                sb.item_variant_id, iv.variant_code, iv.color, iv.size,
+                i.item_code, i.name_en AS item_name_en, i.name_ar AS item_name_ar,
+                ig.name_en AS group_name_en,
+                sb.qty_on_hand, sb.avg_unit_cost, sb.total_value
+         FROM stock_balances sb
+         JOIN stores s ON s.id = sb.store_id
+         JOIN item_variants iv ON iv.id = sb.item_variant_id
+         JOIN items i ON i.id = iv.item_id
+         LEFT JOIN item_groups ig ON ig.id = i.group_id
+         WHERE sb.company_id = $1 AND sb.qty_on_hand <> 0
+           AND ($2::uuid IS NULL OR sb.store_id = $2)
+           AND ($3::uuid IS NULL OR i.group_id = $3)
+         ORDER BY s.name_en, i.item_code, iv.variant_code`,
+        [request.companyId, query.storeId ?? null, query.groupId ?? null],
+      );
+      const totalValue = result.rows.reduce((sum, r) => sum + Number(r.total_value), 0);
+      return { totalValue: totalValue.toFixed(2), rows: result.rows };
     },
   );
 }
