@@ -703,7 +703,7 @@ const IMPORT_TEMPLATE_EXAMPLE = [
   "IT-1001", "Basic Tee", "تيشيرت أساسي", "GEN", "APPAREL", "SS26", "2026",
   "100% Cotton", "Bangladesh", "SUP-001", "PC", "VAT15",
   "IT-1001-BLK-M", "Black", "M", "", "15.00", "0.200", "10",
-  "S1", "50", "35.00", "25.00", "", "", "30.00",
+  "ST01", "50", "35.00", "25.00", "", "", "30.00",
 ];
 
 function downloadImportTemplate() {
