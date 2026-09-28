@@ -13,19 +13,26 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
   app.get("/dashboard/summary", { preHandler: app.authenticate }, async (request) => {
     const companyId = request.companyId;
 
+    // Computed in JS (UTC) rather than left to Postgres's CURRENT_DATE,
+    // whose calendar day depends on the session timezone -- near local
+    // midnight that can disagree with the UTC date invoice_date values are
+    // recorded against elsewhere in the app (see salesService.ts).
+    const today = new Date().toISOString().slice(0, 10);
+    const monthStart = `${today.slice(0, 7)}-01`;
+
     const [todaySales, mtdSales, inventoryValue, arTotal, apTotal, lowStock] = await Promise.all([
       pool.query<{ total: string; count: string }>(
         `SELECT COALESCE(SUM(gross_amount), 0) AS total, COUNT(*) AS count
          FROM sales_invoices
-         WHERE company_id = $1 AND document_status = 'posted' AND invoice_date = CURRENT_DATE`,
-        [companyId],
+         WHERE company_id = $1 AND document_status = 'posted' AND invoice_date = $2`,
+        [companyId, today],
       ),
       pool.query<{ total: string; count: string }>(
         `SELECT COALESCE(SUM(gross_amount), 0) AS total, COUNT(*) AS count
          FROM sales_invoices
          WHERE company_id = $1 AND document_status = 'posted'
-           AND invoice_date >= date_trunc('month', CURRENT_DATE)::date AND invoice_date <= CURRENT_DATE`,
-        [companyId],
+           AND invoice_date >= $2 AND invoice_date <= $3`,
+        [companyId, monthStart, today],
       ),
       pool.query<{ total: string }>(`SELECT COALESCE(SUM(total_value), 0) AS total FROM stock_balances WHERE company_id = $1`, [
         companyId,
