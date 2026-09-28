@@ -30,6 +30,7 @@ interface ItemVariant {
   variant_code: string;
   color: string | null;
   size: string | null;
+  barcodes?: Array<{ barcode: string }> | null;
 }
 
 interface Item {
@@ -124,6 +125,24 @@ function useVariantOptions() {
     }
   }
   return options;
+}
+
+// Same client-side barcode -> variant lookup as POS.tsx's cart scanning and
+// Purchasing.tsx's goods-receipt scanning -- built once from the already-
+// loaded catalog, no round trip per scan.
+function useBarcodeMap() {
+  const { data: items } = useApiList<Item>("/api/items");
+  const map = new Map<string, { variantId: string; label: string }>();
+  for (const item of items ?? []) {
+    for (const v of item.variants) {
+      const detail = [v.color, v.size].filter(Boolean).join(" / ");
+      const label = `${item.name_en} — ${v.variant_code}${detail ? ` (${detail})` : ""}`;
+      for (const b of v.barcodes ?? []) {
+        map.set(b.barcode, { variantId: v.id, label });
+      }
+    }
+  }
+  return map;
 }
 
 function StockTab() {
@@ -356,6 +375,7 @@ function NewInventoryTransferForm({ onClose, onCreated }: { onClose: () => void;
   const { data: stores } = useApiList<Store>("/api/stores");
   const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
   const variantOptions = useVariantOptions();
+  const barcodeMap = useBarcodeMap();
   const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
 
   const [sourceStoreId, setSourceStoreId] = useState("");
@@ -366,6 +386,8 @@ function NewInventoryTransferForm({ onClose, onCreated }: { onClose: () => void;
   const [lines, setLines] = useState<Array<{ itemVariantId: string; qty: string }>>([{ itemVariantId: "", qty: "1" }]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [scanValue, setScanValue] = useState("");
+  const [scanMessage, setScanMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   function updateLine(index: number, patch: Partial<{ itemVariantId: string; qty: string }>) {
     setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
@@ -375,6 +397,39 @@ function NewInventoryTransferForm({ onClose, onCreated }: { onClose: () => void;
   }
   function removeLine(index: number) {
     setLines((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  // Unlike goods-receipt scanning, a transfer isn't matched against a fixed
+  // set of expected lines -- scanning here just builds the line list up as
+  // you go: a barcode you've already scanned bumps that line's qty by one,
+  // a new one adds a line (filling the first empty row rather than always
+  // appending, so starting with the default blank line doesn't leave a
+  // stray empty row above the scanned ones).
+  function handleScan(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== "Enter") return;
+    const trimmed = scanValue.trim();
+    if (!trimmed) return;
+    setScanValue("");
+
+    const found = barcodeMap.get(trimmed);
+    if (!found) {
+      setScanMessage({ type: "error", text: `Barcode "${trimmed}" is not recognized.` });
+      return;
+    }
+    setLines((prev) => {
+      const existingIndex = prev.findIndex((l) => l.itemVariantId === found.variantId);
+      if (existingIndex >= 0) {
+        const next = prev.map((l, i) => (i === existingIndex ? { ...l, qty: String(Number(l.qty || "0") + 1) } : l));
+        setScanMessage({ type: "success", text: `${found.label}: ${next[existingIndex]!.qty}` });
+        return next;
+      }
+      const emptyIndex = prev.findIndex((l) => !l.itemVariantId);
+      setScanMessage({ type: "success", text: `${found.label}: 1` });
+      if (emptyIndex >= 0) {
+        return prev.map((l, i) => (i === emptyIndex ? { itemVariantId: found.variantId, qty: "1" } : l));
+      }
+      return [...prev, { itemVariantId: found.variantId, qty: "1" }];
+    });
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -453,6 +508,20 @@ function NewInventoryTransferForm({ onClose, onCreated }: { onClose: () => void;
       <Field label="Notes">
         <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" />
       </Field>
+
+      <Field label="Scan to add">
+        <input
+          type="text"
+          value={scanValue}
+          onChange={(e) => setScanValue(e.target.value)}
+          onKeyDown={handleScan}
+          placeholder="Scan barcode or UPC, then Enter..."
+          className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+        />
+      </Field>
+      {scanMessage && (
+        <p className={`-mt-2 mb-2 text-xs ${scanMessage.type === "error" ? "text-red-600" : "text-emerald-600"}`}>{scanMessage.text}</p>
+      )}
 
       <div className="mb-2 mt-3 text-sm font-medium text-slate-700">Lines</div>
       <div className="space-y-2">
