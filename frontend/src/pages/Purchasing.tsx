@@ -72,11 +72,30 @@ interface ItemVariant {
   variant_code: string;
   color: string | null;
   size: string | null;
+  barcodes?: Array<{ barcode: string }> | null;
 }
 
 interface Item {
   name_en: string;
   variants: ItemVariant[];
+}
+
+// Same barcode -> variant lookup pattern as POS.tsx's handleSearchKeyDown --
+// built once from the already-loaded item catalog, no server round trip per
+// scan, so it works exactly as fast whether it's the 1st or 1000th unit.
+function useBarcodeMap() {
+  const { data: items } = useApiList<Item>("/api/items");
+  const map = new Map<string, { variantId: string; label: string }>();
+  for (const item of items ?? []) {
+    for (const v of item.variants) {
+      const detail = [v.color, v.size].filter(Boolean).join(" / ");
+      const label = `${item.name_en} — ${v.variant_code}${detail ? ` (${detail})` : ""}`;
+      for (const b of v.barcodes ?? []) {
+        map.set(b.barcode, { variantId: v.id, label });
+      }
+    }
+  }
+  return map;
 }
 
 interface PoLineDraft {
@@ -636,6 +655,10 @@ function NewGoodsReceiptForm({ onClose, onCreated }: { onClose: () => void; onCr
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const baseCurrency = useBaseCurrency();
+  const barcodeMap = useBarcodeMap();
+  const [scanValue, setScanValue] = useState("");
+  const [hasScanned, setHasScanned] = useState(false);
+  const [scanMessage, setScanMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     if (!purchaseOrderId || !token || !companyId) {
@@ -650,8 +673,47 @@ function NewGoodsReceiptForm({ onClose, onCreated }: { onClose: () => void; onCr
         if (remaining > 0) init[line.id] = String(remaining);
       }
       setQtyByLine(init);
+      setHasScanned(false);
+      setScanMessage(null);
     });
   }, [purchaseOrderId, token, companyId]);
+
+  // Scanning starts a shipment count from zero -- the manual quantity
+  // fields default to "assume everything ordered arrived" for typed partial
+  // adjustments, but that default is the wrong starting point once you're
+  // physically counting units by scanning them one by one, so the first
+  // scan on a PO zeroes every line and counts up from there. Strictly
+  // matched against this PO: an unrecognized barcode or one that isn't on
+  // this order is rejected outright rather than silently over-receiving.
+  function handleScan(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== "Enter" || !poDetail) return;
+    const trimmed = scanValue.trim();
+    if (!trimmed) return;
+    setScanValue("");
+
+    const found = barcodeMap.get(trimmed);
+    if (!found) {
+      setScanMessage({ type: "error", text: `Barcode "${trimmed}" is not recognized.` });
+      return;
+    }
+    const line = poDetail.lines.find((l) => l.item_variant_id === found.variantId);
+    if (!line) {
+      setScanMessage({ type: "error", text: `${found.label} is not on this purchase order — can't receive items that weren't ordered.` });
+      return;
+    }
+    const remaining = Number(line.qty) - Number(line.received_qty);
+    const base = hasScanned ? qtyByLine : Object.fromEntries(poDetail.lines.map((l) => [l.id, "0"]));
+    const current = Number(base[line.id] ?? "0");
+    if (current >= remaining) {
+      setQtyByLine(base);
+      setHasScanned(true);
+      setScanMessage({ type: "error", text: `${found.label}: already at the ordered quantity (${line.qty}) — can't receive more than was ordered.` });
+      return;
+    }
+    setQtyByLine({ ...base, [line.id]: String(current + 1) });
+    setHasScanned(true);
+    setScanMessage({ type: "success", text: `${found.label}: ${current + 1} of ${line.qty}` });
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -721,6 +783,23 @@ function NewGoodsReceiptForm({ onClose, onCreated }: { onClose: () => void; onCr
 
       {poDetail && (
         <>
+          <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Scan to receive</div>
+          <input
+            type="text"
+            value={scanValue}
+            onChange={(e) => setScanValue(e.target.value)}
+            onKeyDown={handleScan}
+            placeholder="Scan barcode, then Enter..."
+            className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          />
+          {scanMessage && (
+            <p className={`mt-1 text-xs ${scanMessage.type === "error" ? "text-red-600" : "text-emerald-600"}`}>{scanMessage.text}</p>
+          )}
+          <p className="mt-1 text-xs text-slate-400">
+            The first scan resets quantities below to zero and counts up as you scan. Only items on this PO can be scanned in, up to the
+            ordered quantity. You can still type quantities directly instead.
+          </p>
+
           <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Lines to receive</div>
           <div className="space-y-2">
             {poDetail.lines.map((line) => {
