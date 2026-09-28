@@ -13,12 +13,14 @@ interface PosDevice {
   series_prefix: string;
   status: string;
   last_synced_invoice_seq: string | number | null;
+  price_list_id: string | null;
 }
 
 interface Store {
   id: string;
   store_code: string;
   name_en: string;
+  default_price_list_id: string | null;
 }
 
 interface Customer {
@@ -404,17 +406,20 @@ export default function Pos() {
   const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
   const { data: items } = useApiList<PosItem>("/api/items");
   const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
-  // A cashier can switch the active price list mid-shift (e.g. a Big Sale
-  // promotion, or Tender pricing for an institutional walk-in) -- null
-  // means "not chosen yet," which falls back to the company's default
-  // list. Switching only changes prices for items added to the cart
-  // afterward; lines already in the cart keep the price they were rung up
-  // at, same as a real till.
-  const [priceListId, setPriceListId] = useState<string | null>(null);
-  const effectivePriceListId = priceListId ?? priceLists?.find((p) => p.is_default)?.id ?? null;
-  const { data: priceListItems } = useApiList<PriceListItem>(effectivePriceListId ? `/api/price-lists/${effectivePriceListId}/items` : null);
+  const { data: stores } = useApiList<Store>("/api/stores");
 
   const device = devices?.find((d) => d.id === deviceId) ?? null;
+  const store = stores?.find((s) => s.id === device?.store_id) ?? null;
+  // A cashier choosing their own price level at the register is a pricing
+  // error waiting to happen -- which price list applies is decided by
+  // which till this is, not by whoever's standing at it. A device can be
+  // pinned to a specific list (Administration > POS Devices, e.g. this
+  // till only ever does Tender pricing), otherwise it follows its store's
+  // default, otherwise the company-wide default -- same fallback chain
+  // that used to be the dropdown's implicit behavior when nothing was
+  // picked, just without the dropdown.
+  const effectivePriceListId = device?.price_list_id ?? store?.default_price_list_id ?? priceLists?.find((p) => p.is_default)?.id ?? null;
+  const { data: priceListItems } = useApiList<PriceListItem>(effectivePriceListId ? `/api/price-lists/${effectivePriceListId}/items` : null);
   const openPeriodId = periods?.find((p) => p.status === "open")?.id ?? "";
 
   const [search, setSearch] = useState("");
@@ -840,18 +845,12 @@ export default function Pos() {
                 className="w-full bg-transparent text-sm focus:outline-none"
               />
             </div>
-            <select
-              value={effectivePriceListId ?? ""}
-              onChange={(e) => setPriceListId(e.target.value)}
-              title="Price list"
-              className="shrink-0 rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            <div
+              title="Price list is set per till in Administration > POS Devices, not chosen at the register"
+              className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500"
             >
-              {priceLists?.map((pl) => (
-                <option key={pl.id} value={pl.id}>
-                  {pl.name_en}
-                </option>
-              ))}
-            </select>
+              {priceLists?.find((pl) => pl.id === effectivePriceListId)?.name_en ?? "No price list"}
+            </div>
           </div>
           <div className="grid flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto pb-4 sm:grid-cols-3 lg:grid-cols-4">
             {filteredGrid.map((g) => (

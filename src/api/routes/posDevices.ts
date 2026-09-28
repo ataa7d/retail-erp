@@ -13,6 +13,10 @@ const registerSchema = z.object({
   seriesPrefix: z.string().regex(/^[A-Z0-9]+-[A-Z0-9]+-$/, "series prefix must look like 'ST01-POS3-'"),
 });
 
+const priceListSchema = z.object({
+  priceListId: z.string().uuid().nullable(),
+});
+
 export async function posDeviceRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/pos-devices",
@@ -37,7 +41,7 @@ export async function posDeviceRoutes(app: FastifyInstance): Promise<void> {
   app.get("/pos-devices", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
       `SELECT pd.id, pd.store_id, pd.device_code, pd.device_name, pd.series_prefix, pd.status,
-              pd.registered_at, pd.retired_at,
+              pd.registered_at, pd.retired_at, pd.price_list_id,
               inv_seq.last_synced_seq AS last_synced_invoice_seq,
               cn_seq.last_synced_seq AS last_synced_credit_note_seq
        FROM pos_devices pd
@@ -49,6 +53,30 @@ export async function posDeviceRoutes(app: FastifyInstance): Promise<void> {
     );
     return result.rows;
   });
+
+  app.post<{ Params: { id: string } }>(
+    "/pos-devices/:id/price-list",
+    { preHandler: [app.authenticate, app.requirePermission("sales.pos_device.manage")] },
+    async (request) => {
+      const body = priceListSchema.parse(request.body);
+      await withTransaction(async (client) => {
+        const device = await client.query(`SELECT id FROM pos_devices WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (device.rows.length === 0) throw new NotFoundError("pos device not found");
+        if (body.priceListId) {
+          const priceList = await client.query(`SELECT id FROM price_lists WHERE id = $1 AND company_id = $2`, [
+            body.priceListId,
+            request.companyId,
+          ]);
+          if (priceList.rows.length === 0) throw new NotFoundError("price list not found");
+        }
+        await client.query(`UPDATE pos_devices SET price_list_id = $1 WHERE id = $2`, [body.priceListId, request.params.id]);
+      }, request.authUser.id);
+      return { id: request.params.id, priceListId: body.priceListId };
+    },
+  );
 
   app.post<{ Params: { id: string } }>(
     "/pos-devices/:id/retire",

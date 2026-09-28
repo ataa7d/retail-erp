@@ -509,6 +509,14 @@ interface Store {
   id: string;
   store_code: string;
   name_en: string;
+  default_price_list_id: string | null;
+}
+
+interface PriceList {
+  id: string;
+  code: string;
+  name_en: string;
+  is_default: boolean;
 }
 
 interface PosDevice {
@@ -517,6 +525,7 @@ interface PosDevice {
   device_code: string;
   device_name: string;
   series_prefix: string;
+  price_list_id: string | null;
   status: string;
   last_synced_invoice_seq: string | number | null;
   last_synced_credit_note_seq: string | number | null;
@@ -589,10 +598,70 @@ function NewPosDeviceForm({ onClose, onCreated }: { onClose: () => void; onCreat
   );
 }
 
+// A store's own default -- used by every device at that store that doesn't
+// have its own override below. Kept as a plain list here rather than a
+// full store-management page, since this is the only store-level setting
+// the app currently exposes.
+function StoreDefaultPriceLists() {
+  const { token, companyId } = useAuth();
+  const { data: stores, reload } = useApiList<Store>("/api/stores");
+  const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function setDefault(storeId: string, priceListId: string) {
+    setBusyId(storeId);
+    try {
+      await apiRequest(`/api/stores/${storeId}/default-price-list`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { priceListId: priceListId || null },
+      });
+      reload();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (!stores?.length) return null;
+
+  return (
+    <div className="mb-4 rounded-lg border border-slate-200 p-3">
+      <div className="mb-2 text-sm font-medium text-slate-700">Store Default Price Lists</div>
+      <p className="mb-3 text-xs text-slate-400">
+        Applies to any till at that store without its own price list override below. Falls back to the company default when unset.
+      </p>
+      <div className="space-y-1.5">
+        {stores.map((s) => (
+          <div key={s.id} className="flex items-center justify-between gap-2 text-sm">
+            <span className="text-slate-600">
+              {s.name_en} <span className="text-slate-400">({s.store_code})</span>
+            </span>
+            <select
+              value={s.default_price_list_id ?? ""}
+              onChange={(e) => setDefault(s.id, e.target.value)}
+              disabled={busyId === s.id}
+              className="rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
+            >
+              <option value="">Company default</option>
+              {priceLists?.map((pl) => (
+                <option key={pl.id} value={pl.id}>
+                  {pl.name_en}
+                </option>
+              ))}
+            </select>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PosDevicesTab() {
   const { token, companyId } = useAuth();
   const { data, error, reload } = useApiList<PosDevice>("/api/pos-devices");
   const { data: stores } = useApiList<Store>("/api/stores");
+  const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
   const [showNew, setShowNew] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -608,10 +677,48 @@ function PosDevicesTab() {
     }
   }
 
+  async function setDevicePriceList(deviceId: string, priceListId: string) {
+    setBusyId(deviceId);
+    try {
+      await apiRequest(`/api/pos-devices/${deviceId}/price-list`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { priceListId: priceListId || null },
+      });
+      reload();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const columns: Column<PosDevice>[] = [
     { key: "code", header: "Device", render: (r) => <span className="font-medium text-slate-900">{r.device_name}</span> },
     { key: "store", header: "Store", render: (r) => storeLabel(r.store_id) },
     { key: "prefix", header: "Series Prefix", render: (r) => <span className="font-mono text-xs text-slate-500">{r.series_prefix}</span> },
+    {
+      key: "price_list",
+      header: "Price List",
+      render: (r) => (
+        <select
+          value={r.price_list_id ?? ""}
+          onChange={(e) => {
+            e.stopPropagation();
+            setDevicePriceList(r.id, e.target.value);
+          }}
+          onClick={(e) => e.stopPropagation()}
+          disabled={busyId === r.id}
+          className="rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
+        >
+          <option value="">Store default</option>
+          {priceLists?.map((pl) => (
+            <option key={pl.id} value={pl.id}>
+              {pl.name_en}
+            </option>
+          ))}
+        </select>
+      ),
+    },
     { key: "inv_seq", header: "Invoices Synced", render: (r) => Number(r.last_synced_invoice_seq ?? 0), numeric: true },
     { key: "cn_seq", header: "Credit Notes Synced", render: (r) => Number(r.last_synced_credit_note_seq ?? 0), numeric: true },
     {
@@ -639,6 +746,7 @@ function PosDevicesTab() {
 
   return (
     <>
+      <StoreDefaultPriceLists />
       <ListPage
         title=""
         data={data}
