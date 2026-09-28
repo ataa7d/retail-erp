@@ -150,6 +150,7 @@ async function main() {
       ["2150", "Gift Card Liability", "التزام بطاقات الهدايا", "liability", "credit", "2000"],
       ["2160", "Loyalty Points Liability", "التزام نقاط الولاء", "liability", "credit", "2000"],
       ["5130", "Loyalty Program Expense", "مصروف برنامج الولاء", "expense", "debit", "5000"],
+      ["2170", "Customer Deposits", "دفعات العملاء المقدمة", "liability", "credit", "2000"],
     ];
     const leafAccountIds: Record<string, string> = {};
     for (const [code, nameEn, nameAr, type, balance, parentCode] of leafAccounts) {

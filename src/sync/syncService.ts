@@ -101,7 +101,7 @@ export interface SyncPosInvoiceParams {
   priceListId: string | null;
   createdBy: string;
   lines: SalesInvoiceLineRequest[];
-  payments?: Array<{ paymentMethod: "cash" | "card" | "credit" | "points" | "gift_card"; amount: number; reference?: string }>;
+  payments?: Array<{ paymentMethod: "cash" | "card" | "credit" | "points" | "gift_card" | "deposit"; amount: number; reference?: string }>;
 }
 
 export async function syncPosInvoice(client: Client, params: SyncPosInvoiceParams): Promise<SyncResult> {

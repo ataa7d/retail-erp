@@ -18,6 +18,7 @@ import { calculateLineAmounts, type LineInput } from "../money.js";
 import { recordStockMovement } from "../inventory/inventoryService.js";
 import { redeemGiftCard } from "./giftCardService.js";
 import { earnLoyaltyPoints, redeemLoyaltyPoints } from "./loyaltyService.js";
+import { applyCustomerDeposit } from "./customerDepositService.js";
 
 export interface SalesInvoiceLineRequest extends LineInput {
   itemVariantId: string | null;
@@ -37,7 +38,7 @@ export interface CreateSalesInvoiceParams {
   priceListId: string | null;
   createdBy: string | null;
   lines: SalesInvoiceLineRequest[];
-  payments?: Array<{ paymentMethod: "cash" | "card" | "credit" | "points" | "gift_card"; amount: number; reference?: string }>;
+  payments?: Array<{ paymentMethod: "cash" | "card" | "credit" | "points" | "gift_card" | "deposit"; amount: number; reference?: string }>;
   /** Set only by src/sync/syncService.ts: a device-assigned, already-final
    * document number bypasses fn_next_document_number entirely — the device's
    * own series, not the company-wide one, is authoritative for these. */
@@ -208,6 +209,27 @@ export async function postSalesInvoice(client: Client, invoiceId: string, posted
         redeemedBy: postedBy,
       });
     }
+
+    // Same, for customer deposits -- these do carry a reference (which
+    // specific deposit), since a customer can have more than one open.
+    const depositPayments = await client.query<{ amount: string; reference: string | null }>(
+      `SELECT amount, reference FROM sales_invoice_payments WHERE invoice_id = $1 AND payment_method = 'deposit'`,
+      [invoiceId],
+    );
+    if (depositPayments.rows.length > 0 && !invoice.customer_id) {
+      throw new Error(`deposit payment on invoice ${invoiceId} requires a customer on the invoice`);
+    }
+    for (const dp of depositPayments.rows) {
+      if (!dp.reference) throw new Error(`deposit payment on invoice ${invoiceId} is missing a deposit document number`);
+      await applyCustomerDeposit(client, {
+        companyId: invoice.company_id,
+        documentNumber: dp.reference,
+        customerId: invoice.customer_id,
+        amount: Number(dp.amount),
+        salesInvoiceId: invoiceId,
+        appliedBy: postedBy,
+      });
+    }
   }
 
   const cashAccountId = await getAccountId(client, invoice.company_id, "1110");
@@ -228,6 +250,9 @@ export async function postSalesInvoice(client: Client, invoiceId: string, posted
     : null;
   const loyaltyAccountId = paymentMethodsUsed.includes("points")
     ? await getAccountId(client, invoice.company_id, "2160")
+    : null;
+  const depositAccountId = paymentMethodsUsed.includes("deposit")
+    ? await getAccountId(client, invoice.company_id, "2170")
     : null;
 
   const fiscalYear = Number(invoice.invoice_date.toISOString().slice(0, 4));
@@ -259,7 +284,9 @@ export async function postSalesInvoice(client: Client, invoiceId: string, posted
             ? giftCardAccountId!
             : p.payment_method === "points"
               ? loyaltyAccountId!
-              : cashAccountId;
+              : p.payment_method === "deposit"
+                ? depositAccountId!
+                : cashAccountId;
       await client.query(
         `INSERT INTO journal_lines (company_id, journal_id, line_number, account_id, debit_amount, description)
          VALUES ($1, $2, $3, $4, $5, $6)`,

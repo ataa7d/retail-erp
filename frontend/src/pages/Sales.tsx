@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Receipt, RotateCcw, Plus, Trash2, Tag, FileText } from "lucide-react";
+import { Receipt, RotateCcw, Plus, Trash2, Tag, FileText, Wallet } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError, downloadFile } from "../lib/api";
@@ -1963,6 +1963,225 @@ function GiftCardsTab() {
   );
 }
 
+interface CustomerDeposit {
+  id: string;
+  document_number: string;
+  reference: string | null;
+  initial_value: string;
+  balance: string;
+  status: string;
+  deposit_date: string;
+  store_name_en: string;
+  customer_name_en: string;
+  customer_name_ar: string;
+}
+
+interface CustomerDepositTransaction {
+  id: string;
+  transaction_type: string;
+  amount: string;
+  balance_after: string;
+  sales_invoice_number: string | null;
+  created_at: string;
+}
+
+interface CustomerDepositDetail extends CustomerDeposit {
+  transactions: CustomerDepositTransaction[];
+}
+
+function RecordDepositForm({ onClose, onRecorded }: { onClose: () => void; onRecorded: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: stores } = useApiList<Store>("/api/stores");
+  const { data: customers } = useApiList<Customer>("/api/customers");
+  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
+  const openPeriodId = periods?.find((p) => p.status === "open")?.id ?? "";
+
+  const [storeId, setStoreId] = useState("");
+  const [customerId, setCustomerId] = useState("");
+  const [amount, setAmount] = useState("100");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">("cash");
+  const [reference, setReference] = useState("");
+  const [depositDate, setDepositDate] = useState(new Date().toISOString().slice(0, 10));
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/customer-deposits", {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          storeId,
+          customerId,
+          amount: Number(amount),
+          paymentMethod,
+          reference: reference || null,
+          fiscalPeriodId: openPeriodId,
+          depositDate,
+        },
+      });
+      onRecorded();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to record deposit");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Customer" required>
+          <SelectInput required value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+            <option value="">Select...</option>
+            {customers?.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name_en}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="Store" required>
+          <SelectInput required value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+            <option value="">Select...</option>
+            {stores?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name_en}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Amount" required>
+          <TextInput required type="number" min={0.01} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </Field>
+        <Field label="Received As" required>
+          <SelectInput required value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as "cash" | "card")}>
+            <option value="cash">Cash</option>
+            <option value="card">Card</option>
+          </SelectInput>
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Date" required>
+          <TextInput required type="date" value={depositDate} onChange={(e) => setDepositDate(e.target.value)} />
+        </Field>
+        <Field label="Reference">
+          <TextInput value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. custom order #123" />
+        </Field>
+      </div>
+      {!openPeriodId && <p className="mb-2 text-xs text-red-600">No open fiscal period — cannot record right now.</p>}
+      <p className="mb-3 mt-2 text-xs text-slate-400">
+        Books Dr {paymentMethod} / Cr Customer Deposits — a deposit is not revenue until it's applied to a real sale.
+      </p>
+      <FormActions error={error} submitting={submitting || !openPeriodId} submitLabel="Record Deposit" />
+    </form>
+  );
+}
+
+function CustomerDepositDetailModal({ depositId, onClose }: { depositId: string; onClose: () => void }) {
+  const { token, companyId } = useAuth();
+  const [detail, setDetail] = useState<CustomerDepositDetail | null>(null);
+
+  useEffect(() => {
+    apiRequest<CustomerDepositDetail>(`/api/customer-deposits/${depositId}`, { token, companyId }).then(setDetail);
+  }, [depositId, token, companyId]);
+
+  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <div className="font-mono text-sm text-slate-900">{detail.document_number}</div>
+          <div className="text-xs text-slate-500">
+            {detail.store_name_en} · {detail.customer_name_en}
+            {detail.reference && ` · ${detail.reference}`}
+          </div>
+        </div>
+        <StatusBadge status={detail.status} />
+      </div>
+      <div className="mb-3 grid grid-cols-2 gap-2 rounded-md border border-slate-200 p-2 text-sm">
+        <div>
+          <div className="text-xs text-slate-400">Initial Value</div>
+          <div className="font-medium text-slate-900">{Number(detail.initial_value).toFixed(2)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-slate-400">Current Balance</div>
+          <div className="font-medium text-slate-900">{Number(detail.balance).toFixed(2)}</div>
+        </div>
+      </div>
+      <div className="mb-1 text-sm font-medium text-slate-700">Transaction History</div>
+      <div className="space-y-1">
+        {detail.transactions.map((t) => (
+          <div key={t.id} className="flex items-center justify-between rounded border border-slate-100 px-2 py-1.5 text-sm">
+            <div>
+              <span className="capitalize text-slate-700">{t.transaction_type}</span>
+              {t.sales_invoice_number && <span className="ms-1.5 text-xs text-slate-400">({t.sales_invoice_number})</span>}
+            </div>
+            <span className={`tabular-nums font-medium ${Number(t.amount) < 0 ? "text-red-600" : "text-green-600"}`}>
+              {Number(t.amount) > 0 ? "+" : ""}
+              {Number(t.amount).toFixed(2)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CustomerDepositsTab() {
+  const { hasPermission } = useAuth();
+  const { data, error, reload } = useApiList<CustomerDeposit>("/api/customer-deposits");
+  const [showNew, setShowNew] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
+
+  const columns: Column<CustomerDeposit>[] = [
+    { key: "number", header: "Deposit #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "customer", header: "Customer", render: (r) => r.customer_name_en },
+    { key: "reference", header: "Reference", render: (r) => r.reference ?? "—" },
+    { key: "initial", header: "Initial Value", render: (r) => Number(r.initial_value).toFixed(2), numeric: true },
+    { key: "balance", header: "Balance", render: (r) => Number(r.balance).toFixed(2), numeric: true },
+    { key: "date", header: "Date", render: (r) => new Date(r.deposit_date).toLocaleDateString() },
+    { key: "status", header: "Status", render: (r) => <StatusBadge status={r.status} /> },
+  ];
+
+  return (
+    <>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => `${r.document_number} ${r.customer_name_en} ${r.reference ?? ""}`}
+        emptyIcon={Wallet}
+        emptyText="No customer deposits yet."
+        searchPlaceholder="Search deposits..."
+        actionLabel={hasPermission("sales.deposit.record") ? "Record Deposit" : undefined}
+        onAction={hasPermission("sales.deposit.record") ? () => setShowNew(true) : undefined}
+        onRowClick={(r) => setDetailId(r.id)}
+      />
+      {showNew && (
+        <Modal title="Record Customer Deposit" onClose={() => setShowNew(false)}>
+          <RecordDepositForm onClose={() => setShowNew(false)} onRecorded={reload} />
+        </Modal>
+      )}
+      {detailId && (
+        <Modal title="Customer Deposit" onClose={() => setDetailId(null)}>
+          <CustomerDepositDetailModal depositId={detailId} onClose={() => setDetailId(null)} />
+        </Modal>
+      )}
+    </>
+  );
+}
+
 export default function Sales() {
   const { t } = useTranslation();
   const tabs = useMemo(
@@ -1971,6 +2190,7 @@ export default function Sales() {
       { key: "invoices", label: "Sales Invoices", content: <SalesInvoicesTab /> },
       { key: "credits", label: "Credit Notes", content: <CreditNotesTab /> },
       { key: "gift-cards", label: "Gift Cards", content: <GiftCardsTab /> },
+      { key: "deposits", label: "Customer Deposits", content: <CustomerDepositsTab /> },
       { key: "price-lists", label: "Price Lists", content: <PriceListsTab /> },
     ],
     [],

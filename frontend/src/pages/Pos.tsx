@@ -90,11 +90,17 @@ interface QueuedInvoicePayload {
     vatRate: number;
     priceIncludesVat: boolean;
   }>;
-  payments: Array<{ paymentMethod: "cash" | "card" | "gift_card" | "points"; amount: number; reference?: string }>;
+  payments: Array<{ paymentMethod: "cash" | "card" | "gift_card" | "points" | "deposit"; amount: number; reference?: string }>;
 }
 
 interface GiftCardLookup {
   card_number: string;
+  balance: string;
+  status: string;
+}
+
+interface DepositLookup {
+  document_number: string;
   balance: string;
   status: string;
 }
@@ -414,12 +420,16 @@ export default function Pos() {
   const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "gift_card" | "points">("cash");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "gift_card" | "points" | "deposit">("cash");
   const [tendered, setTendered] = useState("");
   const [giftCardNumber, setGiftCardNumber] = useState("");
   const [giftCard, setGiftCard] = useState<GiftCardLookup | null>(null);
   const [giftCardError, setGiftCardError] = useState<string | null>(null);
   const [checkingGiftCard, setCheckingGiftCard] = useState(false);
+  const [depositNumber, setDepositNumber] = useState("");
+  const [deposit, setDeposit] = useState<DepositLookup | null>(null);
+  const [depositError, setDepositError] = useState<string | null>(null);
+  const [checkingDeposit, setCheckingDeposit] = useState(false);
   const [charging, setCharging] = useState(false);
   const [chargeError, setChargeError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<{
@@ -582,6 +592,8 @@ export default function Pos() {
   const selectedCustomer = customers?.find((c) => c.id === customerId) ?? null;
   const pointsNeeded = Math.round(total / POINT_REDEMPTION_VALUE);
   const pointsReady = selectedCustomer?.is_loyalty_member === true && selectedCustomer.loyalty_points_balance >= pointsNeeded;
+  const depositReady =
+    deposit !== null && deposit.document_number === depositNumber.trim().toUpperCase() && deposit.status === "active" && Number(deposit.balance) >= total;
 
   async function checkGiftCard() {
     const number = giftCardNumber.trim().toUpperCase();
@@ -598,6 +610,27 @@ export default function Pos() {
       setGiftCardError("No gift card found with that number.");
     } finally {
       setCheckingGiftCard(false);
+    }
+  }
+
+  async function checkDeposit() {
+    const number = depositNumber.trim().toUpperCase();
+    if (!number || !customerId) return;
+    setDepositError(null);
+    setDeposit(null);
+    setCheckingDeposit(true);
+    try {
+      const d = await apiRequest<DepositLookup>(
+        `/api/customer-deposits/lookup?documentNumber=${encodeURIComponent(number)}&customerId=${customerId}`,
+        { token, companyId },
+      );
+      setDeposit(d);
+      if (d.status !== "active") setDepositError(`This deposit is ${d.status}.`);
+      else if (Number(d.balance) < total) setDepositError(`Deposit balance (${Number(d.balance).toFixed(2)}) is less than the total.`);
+    } catch {
+      setDepositError("No matching deposit found for this customer.");
+    } finally {
+      setCheckingDeposit(false);
     }
   }
 
@@ -635,6 +668,7 @@ export default function Pos() {
     if (!device || cart.length === 0 || !openPeriodId || !shiftId) return;
     if (paymentMethod === "gift_card" && (!online || !giftCardReady)) return;
     if (paymentMethod === "points" && (!online || !pointsReady)) return;
+    if (paymentMethod === "deposit" && (!online || !depositReady)) return;
     setCharging(true);
     setChargeError(null);
     try {
@@ -659,7 +693,9 @@ export default function Pos() {
         payments: [
           paymentMethod === "gift_card"
             ? { paymentMethod, amount: total, reference: giftCardNumber.trim().toUpperCase() }
-            : { paymentMethod, amount: total },
+            : paymentMethod === "deposit"
+              ? { paymentMethod, amount: total, reference: depositNumber.trim().toUpperCase() }
+              : { paymentMethod, amount: total },
         ],
       };
       saveSeq(device.id, nextSeq + 1);
@@ -686,19 +722,25 @@ export default function Pos() {
           setTendered("");
           setGiftCardNumber("");
           setGiftCard(null);
+          setDepositNumber("");
+          setDeposit(null);
           return;
         } catch {
           // fall through to offline queue on network failure -- except for
-          // gift cards and points, which must be validated live: queuing
-          // one on a stale looked-up balance risks it failing (or
-          // double-spending against another sale) once sync finally
-          // reaches the server.
+          // gift cards, points, and deposits, which must be validated
+          // live: queuing one on a stale looked-up balance risks it
+          // failing (or double-spending against another sale) once sync
+          // finally reaches the server.
           if (paymentMethod === "gift_card") {
             setChargeError("Could not reach the server to redeem this gift card. Try again once back online.");
             return;
           }
           if (paymentMethod === "points") {
             setChargeError("Could not reach the server to redeem points. Try again once back online.");
+            return;
+          }
+          if (paymentMethod === "deposit") {
+            setChargeError("Could not reach the server to apply this deposit. Try again once back online.");
             return;
           }
         }
@@ -912,7 +954,7 @@ export default function Pos() {
               </div>
             </div>
 
-            <div className="mb-2 grid grid-cols-4 gap-1.5">
+            <div className="mb-2 grid grid-cols-3 gap-1.5">
               <button
                 onClick={() => setPaymentMethod("cash")}
                 className={`rounded-md border px-2 py-1.5 text-sm font-medium ${
@@ -948,6 +990,16 @@ export default function Pos() {
                 }`}
               >
                 Points
+              </button>
+              <button
+                onClick={() => setPaymentMethod("deposit")}
+                disabled={!online}
+                title={online ? undefined : "Deposits need a live connection to apply"}
+                className={`rounded-md border px-2 py-1.5 text-sm font-medium disabled:opacity-40 ${
+                  paymentMethod === "deposit" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600"
+                }`}
+              >
+                Deposit
               </button>
             </div>
 
@@ -1009,6 +1061,40 @@ export default function Pos() {
               </div>
             )}
 
+            {paymentMethod === "deposit" && (
+              <div className="mb-2">
+                {!customerId ? (
+                  <p className="text-xs text-amber-600">Select a customer above to pay with a deposit.</p>
+                ) : (
+                  <>
+                    <div className="flex gap-1.5">
+                      <input
+                        value={depositNumber}
+                        onChange={(e) => {
+                          setDepositNumber(e.target.value);
+                          setDeposit(null);
+                          setDepositError(null);
+                        }}
+                        placeholder="Deposit number"
+                        className="min-w-0 flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+                      />
+                      <button
+                        onClick={checkDeposit}
+                        disabled={!depositNumber.trim() || checkingDeposit}
+                        className="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        {checkingDeposit ? "..." : "Check"}
+                      </button>
+                    </div>
+                    {deposit && !depositError && (
+                      <p className="mt-1 text-xs text-green-700">Balance {Number(deposit.balance).toFixed(2)} — covers the sale.</p>
+                    )}
+                    {depositError && <p className="mt-1 text-xs text-red-600">{depositError}</p>}
+                  </>
+                )}
+              </div>
+            )}
+
             {chargeError && <p className="mb-2 text-xs text-red-600">{chargeError}</p>}
 
             <button
@@ -1020,7 +1106,8 @@ export default function Pos() {
                 !shiftId ||
                 (paymentMethod === "cash" && Number(tendered || 0) < total) ||
                 (paymentMethod === "gift_card" && !giftCardReady) ||
-                (paymentMethod === "points" && !pointsReady)
+                (paymentMethod === "points" && !pointsReady) ||
+                (paymentMethod === "deposit" && !depositReady)
               }
               className="w-full rounded-md bg-brand-500 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-40"
             >

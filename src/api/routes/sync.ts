@@ -15,7 +15,7 @@ const lineSchema = z.object({
 });
 
 const paymentSchema = z.object({
-  paymentMethod: z.enum(["cash", "card", "credit", "points", "gift_card"]),
+  paymentMethod: z.enum(["cash", "card", "credit", "points", "gift_card", "deposit"]),
   amount: z.number().positive(),
   reference: z.string().optional(),
 });
