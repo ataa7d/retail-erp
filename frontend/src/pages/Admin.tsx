@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { ShieldCheck, KeyRound, ScrollText, Smartphone, RefreshCw, CheckCircle2, XCircle, Circle, AlertTriangle } from "lucide-react";
+import { ShieldCheck, KeyRound, ScrollText, Smartphone, RefreshCw, CheckCircle2, XCircle, Circle, AlertTriangle, Plus } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -1468,6 +1468,422 @@ function ZatcaOnboardingTab() {
   );
 }
 
+interface CompanyProfile {
+  id: string;
+  company_code: string;
+  name_en: string;
+  name_ar: string;
+  vat_registration_number: string | null;
+  cr_number: string | null;
+  address: string | null;
+  base_currency: string;
+}
+
+function CompanyProfileTab() {
+  const { token, companyId, hasPermission } = useAuth();
+  const [company, setCompany] = useState<CompanyProfile | null>(null);
+  const [nameEn, setNameEn] = useState("");
+  const [nameAr, setNameAr] = useState("");
+  const [crNumber, setCrNumber] = useState("");
+  const [vatNumber, setVatNumber] = useState("");
+  const [address, setAddress] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const canManage = hasPermission("admin.companies.manage");
+
+  function load() {
+    apiRequest<CompanyProfile>("/api/companies/current", { token, companyId }).then((c) => {
+      setCompany(c);
+      setNameEn(c.name_en);
+      setNameAr(c.name_ar);
+      setCrNumber(c.cr_number ?? "");
+      setVatNumber(c.vat_registration_number ?? "");
+      setAddress(c.address ?? "");
+    });
+  }
+
+  useEffect(load, [token, companyId]);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSaved(false);
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/companies/current", {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          nameEn,
+          nameAr,
+          crNumber: crNumber || null,
+          vatRegistrationNumber: vatNumber || null,
+          address: address || null,
+        },
+      });
+      setSaved(true);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save company profile");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!company) return <p className="text-sm text-slate-400">Loading...</p>;
+
+  return (
+    <div className="max-w-lg">
+      <form onSubmit={handleSubmit}>
+        <div className="mb-3 grid grid-cols-2 gap-3">
+          <Field label="Company Code">
+            <TextInput value={company.company_code} disabled className="bg-slate-50 text-slate-400" />
+          </Field>
+          <Field label="Base Currency">
+            <TextInput value={company.base_currency} disabled className="bg-slate-50 text-slate-400" />
+          </Field>
+        </div>
+        <Field label="Name (English)" required>
+          <TextInput required disabled={!canManage} value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
+        </Field>
+        <Field label="Name (Arabic)" required>
+          <TextInput required disabled={!canManage} dir="rtl" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="CR Number">
+            <TextInput disabled={!canManage} value={crNumber} onChange={(e) => setCrNumber(e.target.value)} />
+          </Field>
+          <Field label="VAT Registration Number">
+            <TextInput disabled={!canManage} value={vatNumber} onChange={(e) => setVatNumber(e.target.value)} />
+          </Field>
+        </div>
+        <Field label="Address">
+          <TextInput disabled={!canManage} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Used as the seller address fallback on printed invoices" />
+        </Field>
+        {!canManage && <p className="mb-3 text-xs text-slate-400">You don't have permission to edit the company profile.</p>}
+        {canManage && (
+          <>
+            {saved && <p className="mb-3 text-sm text-emerald-600">Saved.</p>}
+            <FormActions error={error} submitting={submitting} submitLabel="Save Company Profile" />
+          </>
+        )}
+      </form>
+    </div>
+  );
+}
+
+interface Branch {
+  id: string;
+  branch_code: string;
+  name_en: string;
+  name_ar: string;
+  cr_number: string | null;
+  vat_registration_number: string | null;
+  address: string | null;
+  city: string | null;
+  is_active: boolean;
+}
+
+interface StoreDetail {
+  id: string;
+  branch_id: string;
+  store_code: string;
+  name_en: string;
+  name_ar: string;
+  store_type: string;
+  address: string | null;
+  city: string | null;
+  is_active: boolean;
+}
+
+function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClose: () => void; onSaved: () => void }) {
+  const { token, companyId } = useAuth();
+  const [branchCode, setBranchCode] = useState(branch?.branch_code ?? "");
+  const [nameEn, setNameEn] = useState(branch?.name_en ?? "");
+  const [nameAr, setNameAr] = useState(branch?.name_ar ?? "");
+  const [crNumber, setCrNumber] = useState(branch?.cr_number ?? "");
+  const [vatNumber, setVatNumber] = useState(branch?.vat_registration_number ?? "");
+  const [address, setAddress] = useState(branch?.address ?? "");
+  const [city, setCity] = useState(branch?.city ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const body = {
+        branchCode,
+        nameEn,
+        nameAr,
+        crNumber: crNumber || null,
+        vatRegistrationNumber: vatNumber || null,
+        address: address || null,
+        city: city || null,
+      };
+      if (branch) {
+        await apiRequest(`/api/branches/${branch.id}`, { method: "POST", token, companyId, body });
+      } else {
+        await apiRequest("/api/branches", { method: "POST", token, companyId, body });
+      }
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save branch");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal title={branch ? `Edit ${branch.branch_code}` : "New Branch"} onClose={onClose}>
+      <form onSubmit={handleSubmit}>
+        <Field label="Branch Code" required>
+          <TextInput required disabled={!!branch} value={branchCode} onChange={(e) => setBranchCode(e.target.value.toUpperCase())} placeholder="e.g. HQ" />
+        </Field>
+        <Field label="Name (English)" required>
+          <TextInput required value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
+        </Field>
+        <Field label="Name (Arabic)" required>
+          <TextInput required dir="rtl" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
+        </Field>
+        <p className="mb-3 text-xs text-slate-400">
+          CR/VAT number here override the company's own for ZATCA purposes — leave blank to fall back to the company's registration.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="CR Number">
+            <TextInput value={crNumber} onChange={(e) => setCrNumber(e.target.value)} />
+          </Field>
+          <Field label="VAT Registration Number">
+            <TextInput value={vatNumber} onChange={(e) => setVatNumber(e.target.value)} />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Address">
+            <TextInput value={address} onChange={(e) => setAddress(e.target.value)} />
+          </Field>
+          <Field label="City">
+            <TextInput value={city} onChange={(e) => setCity(e.target.value)} />
+          </Field>
+        </div>
+        <FormActions error={error} submitting={submitting} submitLabel={branch ? "Save Branch" : "Create Branch"} />
+      </form>
+    </Modal>
+  );
+}
+
+function StoreForm({ store, branches, onClose, onSaved }: { store: StoreDetail | null; branches: Branch[]; onClose: () => void; onSaved: () => void }) {
+  const { token, companyId } = useAuth();
+  const [branchId, setBranchId] = useState(store?.branch_id ?? "");
+  const [storeCode, setStoreCode] = useState(store?.store_code ?? "");
+  const [nameEn, setNameEn] = useState(store?.name_en ?? "");
+  const [nameAr, setNameAr] = useState(store?.name_ar ?? "");
+  const [storeType, setStoreType] = useState(store?.store_type ?? "retail");
+  const [address, setAddress] = useState(store?.address ?? "");
+  const [city, setCity] = useState(store?.city ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const body = { branchId, storeCode, nameEn, nameAr, storeType, address: address || null, city: city || null };
+      if (store) {
+        await apiRequest(`/api/stores/${store.id}`, { method: "POST", token, companyId, body });
+      } else {
+        await apiRequest("/api/stores", { method: "POST", token, companyId, body });
+      }
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save store");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal title={store ? `Edit ${store.store_code}` : "New Store"} onClose={onClose}>
+      <form onSubmit={handleSubmit}>
+        <Field label="Branch" required>
+          <SelectInput required value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+            <option value="">Select...</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name_en} ({b.branch_code})
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="Store Code" required>
+          <TextInput required disabled={!!store} value={storeCode} onChange={(e) => setStoreCode(e.target.value.toUpperCase())} placeholder="e.g. ST03" />
+        </Field>
+        <Field label="Name (English)" required>
+          <TextInput required value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
+        </Field>
+        <Field label="Name (Arabic)" required>
+          <TextInput required dir="rtl" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
+        </Field>
+        <Field label="Store Type" required>
+          <SelectInput required value={storeType} onChange={(e) => setStoreType(e.target.value)}>
+            <option value="retail">Retail</option>
+            <option value="warehouse">Warehouse</option>
+            <option value="kiosk">Kiosk</option>
+            <option value="online">Online</option>
+          </SelectInput>
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Address">
+            <TextInput value={address} onChange={(e) => setAddress(e.target.value)} />
+          </Field>
+          <Field label="City">
+            <TextInput value={city} onChange={(e) => setCity(e.target.value)} />
+          </Field>
+        </div>
+        <FormActions error={error} submitting={submitting} submitLabel={store ? "Save Store" : "Create Store"} />
+      </form>
+    </Modal>
+  );
+}
+
+function BranchesStoresTab() {
+  const { hasPermission } = useAuth();
+  const { data: branches, reload: reloadBranches } = useApiList<Branch>("/api/branches");
+  const { data: stores, reload: reloadStores } = useApiList<StoreDetail>("/api/stores");
+  const [editingBranch, setEditingBranch] = useState<Branch | null | "new">(null);
+  const [editingStore, setEditingStore] = useState<StoreDetail | null | "new">(null);
+  const canManage = hasPermission("admin.companies.manage");
+
+  const branchLabel = (id: string) => branches?.find((b) => b.id === id)?.branch_code ?? "?";
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <div className="text-sm font-medium text-slate-700">Branches</div>
+          {canManage && (
+            <button onClick={() => setEditingBranch("new")} className="flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
+              <Plus size={14} /> New Branch
+            </button>
+          )}
+        </div>
+        <div className="overflow-hidden rounded-lg border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-xs text-slate-500">
+              <tr>
+                <th className="px-3 py-2 text-start font-medium">Code</th>
+                <th className="px-3 py-2 text-start font-medium">Name</th>
+                <th className="px-3 py-2 text-start font-medium">City</th>
+                <th className="px-3 py-2 text-start font-medium">VAT / CR Override</th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {branches?.map((b) => (
+                <tr key={b.id} className="border-t border-slate-100">
+                  <td className="px-3 py-2 font-mono text-xs">{b.branch_code}</td>
+                  <td className="px-3 py-2">{b.name_en}</td>
+                  <td className="px-3 py-2 text-slate-500">{b.city ?? "—"}</td>
+                  <td className="px-3 py-2 text-slate-500">{b.vat_registration_number ?? b.cr_number ?? "—"}</td>
+                  <td className="px-3 py-2 text-end">
+                    {canManage && (
+                      <button onClick={() => setEditingBranch(b)} className="text-xs font-medium text-brand-600 hover:text-brand-700">
+                        Edit
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {branches?.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-3 py-4 text-center text-slate-400">
+                    No branches yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <div className="text-sm font-medium text-slate-700">Stores</div>
+          {canManage && (
+            <button
+              onClick={() => setEditingStore("new")}
+              disabled={!branches?.length}
+              className="flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700 disabled:opacity-40"
+            >
+              <Plus size={14} /> New Store
+            </button>
+          )}
+        </div>
+        <div className="overflow-hidden rounded-lg border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-xs text-slate-500">
+              <tr>
+                <th className="px-3 py-2 text-start font-medium">Code</th>
+                <th className="px-3 py-2 text-start font-medium">Name</th>
+                <th className="px-3 py-2 text-start font-medium">Branch</th>
+                <th className="px-3 py-2 text-start font-medium">Type</th>
+                <th className="px-3 py-2 text-start font-medium">City</th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {stores?.map((s) => (
+                <tr key={s.id} className="border-t border-slate-100">
+                  <td className="px-3 py-2 font-mono text-xs">{s.store_code}</td>
+                  <td className="px-3 py-2">{s.name_en}</td>
+                  <td className="px-3 py-2 text-slate-500">{branchLabel(s.branch_id)}</td>
+                  <td className="px-3 py-2 capitalize text-slate-500">{s.store_type}</td>
+                  <td className="px-3 py-2 text-slate-500">{s.city ?? "—"}</td>
+                  <td className="px-3 py-2 text-end">
+                    {canManage && (
+                      <button onClick={() => setEditingStore(s)} className="text-xs font-medium text-brand-600 hover:text-brand-700">
+                        Edit
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {stores?.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-4 text-center text-slate-400">
+                    No stores yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {editingBranch && (
+        <BranchForm
+          branch={editingBranch === "new" ? null : editingBranch}
+          onClose={() => setEditingBranch(null)}
+          onSaved={reloadBranches}
+        />
+      )}
+      {editingStore && (
+        <StoreForm
+          store={editingStore === "new" ? null : editingStore}
+          branches={branches ?? []}
+          onClose={() => setEditingStore(null)}
+          onSaved={reloadStores}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function Admin() {
   const { t } = useTranslation();
   return (
@@ -1475,6 +1891,8 @@ export default function Admin() {
       <h1 className="mb-4 text-xl font-semibold text-slate-900">{t("nav.admin")}</h1>
       <Tabs
         tabs={[
+          { key: "company", label: "Company Profile", content: <CompanyProfileTab /> },
+          { key: "branches-stores", label: "Branches & Stores", content: <BranchesStoresTab /> },
           { key: "users", label: "Users", content: <UsersTab /> },
           { key: "roles", label: "Roles", content: <RolesTab /> },
           { key: "pos-devices", label: "POS Devices", content: <PosDevicesTab /> },

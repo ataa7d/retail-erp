@@ -1,6 +1,15 @@
 import type { FastifyInstance } from "fastify";
-import { pool } from "../db.js";
+import { z } from "zod";
+import { pool, withTransaction } from "../db.js";
 import { NotFoundError } from "../errors.js";
+
+const updateCompanySchema = z.object({
+  nameEn: z.string().min(1),
+  nameAr: z.string().min(1),
+  crNumber: z.string().nullable().optional(),
+  vatRegistrationNumber: z.string().nullable().optional(),
+  address: z.string().nullable().optional(),
+});
 
 // The one route a frontend can call before it has a company selected —
 // list the companies this user actually has access to, so it can show a
@@ -24,11 +33,26 @@ export async function companyRoutes(app: FastifyInstance): Promise<void> {
   // X-Company-Id like every other authenticated route.
   app.get("/companies/current", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
-      `SELECT id, company_code, name_en, name_ar, vat_registration_number, cr_number, base_currency
+      `SELECT id, company_code, name_en, name_ar, vat_registration_number, cr_number, address, base_currency
        FROM companies WHERE id = $1`,
       [request.companyId],
     );
     if (result.rows.length === 0) throw new NotFoundError("company not found");
     return result.rows[0];
   });
+
+  app.post(
+    "/companies/current",
+    { preHandler: [app.authenticate, app.requirePermission("admin.companies.manage")] },
+    async (request) => {
+      const body = updateCompanySchema.parse(request.body);
+      await withTransaction(async (client) => {
+        await client.query(
+          `UPDATE companies SET name_en = $1, name_ar = $2, cr_number = $3, vat_registration_number = $4, address = $5 WHERE id = $6`,
+          [body.nameEn, body.nameAr, body.crNumber ?? null, body.vatRegistrationNumber ?? null, body.address ?? null, request.companyId],
+        );
+      }, request.authUser.id);
+      return { id: request.companyId };
+    },
+  );
 }
