@@ -16,6 +16,11 @@ const stockValuationSchema = z.object({
   storeId: z.string().uuid().optional(),
   groupId: z.string().uuid().optional(),
 });
+const budgetVsActualSchema = z.object({
+  budgetId: z.string().uuid(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
 
 export async function reportRoutes(app: FastifyInstance): Promise<void> {
   app.get(
@@ -122,6 +127,21 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
       );
       const totalValue = result.rows.reduce((sum, r) => sum + Number(r.total_value), 0);
       return { totalValue: totalValue.toFixed(2), rows: result.rows };
+    },
+  );
+
+  app.get(
+    "/reports/budget-vs-actual",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.view")] },
+    async (request) => {
+      const query = budgetVsActualSchema.parse(request.query);
+      const result = await pool.query(`SELECT * FROM fn_budget_vs_actual($1, $2, $3, $4)`, [
+        request.companyId,
+        query.budgetId,
+        query.startDate,
+        query.endDate,
+      ]);
+      return { budgetId: query.budgetId, startDate: query.startDate, endDate: query.endDate, rows: result.rows };
     },
   );
 }

@@ -1594,6 +1594,263 @@ function PeriodCloseTab() {
   );
 }
 
+interface Budget {
+  id: string;
+  name: string;
+  status: string;
+  year_name: string;
+  created_at: string;
+  created_by_email: string | null;
+  line_count: string;
+}
+
+interface BudgetLine {
+  id: string;
+  fiscal_period_id: string;
+  account_id: string;
+  amount: string;
+  period_number: number;
+  account_code: string;
+  account_name_en: string;
+}
+
+interface BudgetDetail extends Budget {
+  fiscal_year_id: string;
+  lines: BudgetLine[];
+}
+
+function NewBudgetForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: fiscalYears } = useApiList<FiscalYear>("/api/fiscal-years");
+  const [fiscalYearId, setFiscalYearId] = useState("");
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/budgets", { method: "POST", token, companyId, body: { fiscalYearId, name } });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create budget");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Field label="Fiscal Year" required>
+        <SelectInput required value={fiscalYearId} onChange={(e) => setFiscalYearId(e.target.value)}>
+          <option value="">Select...</option>
+          {fiscalYears?.map((fy) => (
+            <option key={fy.id} value={fy.id}>
+              {fy.year_name}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      <Field label="Budget Name" required>
+        <TextInput required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. FY2026 Original Budget" />
+      </Field>
+      <p className="mb-3 text-xs text-slate-400">
+        Multiple named budgets can exist per fiscal year (an original plan, a mid-year revision) -- only an approved one counts toward
+        the Budget vs Actual report.
+      </p>
+      <FormActions error={error} submitting={submitting} submitLabel="Create Budget" />
+    </form>
+  );
+}
+
+function BudgetDetailModal({ budgetId, onClose, onChanged }: { budgetId: string; onClose: () => void; onChanged: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
+  const { data: accounts } = useApiList<Account>("/api/chart-of-accounts");
+  const [detail, setDetail] = useState<BudgetDetail | null>(null);
+  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
+  const [accountId, setAccountId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const budgetableAccounts = accounts?.filter((a) => !a.is_header && (a.account_type === "revenue" || a.account_type === "expense")) ?? [];
+  const yearPeriods = periods?.filter((p) => p.fiscal_year_id === detail?.fiscal_year_id) ?? [];
+
+  async function reload() {
+    const d = await apiRequest<BudgetDetail>(`/api/budgets/${budgetId}`, { token, companyId });
+    setDetail(d);
+  }
+
+  useEffect(() => {
+    if (!token || !companyId) return;
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [budgetId, token, companyId]);
+
+  async function setLine(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest(`/api/budgets/${budgetId}/lines`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { fiscalPeriodId, accountId, amount: Number(amount) },
+      });
+      setFiscalPeriodId("");
+      setAccountId("");
+      setAmount("");
+      await reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save budget line");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function toggleStatus() {
+    if (!detail) return;
+    setBusy(true);
+    try {
+      await apiRequest(`/api/budgets/${budgetId}/status`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { status: detail.status === "approved" ? "draft" : "approved" },
+      });
+      await reload();
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+  const isApproved = detail.status === "approved";
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <div className="text-sm font-medium text-slate-900">{detail.name}</div>
+          <div className="text-xs text-slate-500">{detail.year_name}</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusBadge status={detail.status} />
+          <button
+            onClick={toggleStatus}
+            disabled={busy}
+            className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {isApproved ? "Reopen to Draft" : "Approve"}
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-3 max-h-56 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2">
+        {detail.lines.length === 0 && <p className="text-xs text-slate-400">No budget lines yet.</p>}
+        {detail.lines.map((l) => (
+          <div key={l.id} className="flex items-center justify-between text-sm">
+            <span className="text-slate-600">
+              P{l.period_number} — {l.account_name_en} <span className="font-mono text-xs text-slate-400">({l.account_code})</span>
+            </span>
+            <span className="font-medium tabular-nums text-slate-900">{Number(l.amount).toFixed(2)}</span>
+          </div>
+        ))}
+      </div>
+
+      {isApproved ? (
+        <p className="text-xs text-slate-400">This budget is approved. Reopen it to draft to change amounts.</p>
+      ) : (
+        <form onSubmit={setLine} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Period">
+              <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
+                <option value="">Select...</option>
+                {yearPeriods.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    P{p.period_number} ({new Date(p.start_date).toLocaleDateString()})
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+            <Field label="Account">
+              <SelectInput required value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                <option value="">Select...</option>
+                {budgetableAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.account_code} — {a.name_en}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+          </div>
+          <Field label="Amount">
+            <TextInput required type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </Field>
+          {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {submitting ? "Saving..." : "Set Line"}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function BudgetsTab() {
+  const { data, error, reload } = useApiList<Budget>("/api/budgets");
+  const [showNew, setShowNew] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
+
+  const columns: Column<Budget>[] = [
+    { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900">{r.name}</span> },
+    { key: "year", header: "Fiscal Year", render: (r) => r.year_name },
+    { key: "lines", header: "Lines", render: (r) => r.line_count, numeric: true },
+    { key: "created", header: "Created", render: (r) => new Date(r.created_at).toLocaleDateString() },
+    { key: "status", header: "Status", render: (r) => <StatusBadge status={r.status} /> },
+  ];
+
+  return (
+    <>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => `${r.name} ${r.year_name}`}
+        emptyIcon={Coins}
+        emptyText="No budgets yet."
+        searchPlaceholder="Search budgets..."
+        actionLabel="New Budget"
+        onAction={() => setShowNew(true)}
+        onRowClick={(r) => setDetailId(r.id)}
+      />
+      {showNew && (
+        <Modal title="New Budget" onClose={() => setShowNew(false)}>
+          <NewBudgetForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+      {detailId && (
+        <Modal title="Budget" onClose={() => setDetailId(null)}>
+          <BudgetDetailModal budgetId={detailId} onClose={() => setDetailId(null)} onChanged={reload} />
+        </Modal>
+      )}
+    </>
+  );
+}
+
 export default function Accounting() {
   const { t } = useTranslation();
   const tabs = useMemo(
@@ -1608,6 +1865,7 @@ export default function Accounting() {
       { key: "ap", label: "AP Ageing", content: <ApAgeingTab /> },
       { key: "fx", label: "Exchange Rates", content: <ExchangeRatesTab /> },
       { key: "close", label: "Period Close", content: <PeriodCloseTab /> },
+      { key: "budgets", label: "Budgets", content: <BudgetsTab /> },
     ],
     [],
   );

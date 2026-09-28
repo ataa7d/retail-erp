@@ -536,6 +536,110 @@ function StockValuationTab() {
   );
 }
 
+interface Budget {
+  id: string;
+  name: string;
+  status: string;
+  year_name: string;
+}
+
+interface BudgetVsActualRow {
+  account_code: string;
+  name_en: string;
+  name_ar: string;
+  account_type: string;
+  budget_amount: string;
+  actual_amount: string;
+  variance: string;
+}
+
+function BudgetVsActualTab() {
+  const { i18n } = useTranslation();
+  const { token, companyId } = useAuth();
+  const { data: budgets } = useApiList<Budget>("/api/budgets");
+  const [budgetId, setBudgetId] = useState("");
+  const [startDate, setStartDate] = useState(yearStartISO());
+  const [endDate, setEndDate] = useState(todayISO());
+  const [rows, setRows] = useState<BudgetVsActualRow[] | null>(null);
+
+  useEffect(() => {
+    if (!budgets || budgetId || budgets.length === 0) return;
+    setBudgetId(budgets.find((b) => b.status === "approved")?.id ?? budgets[0]!.id);
+  }, [budgets, budgetId]);
+
+  useEffect(() => {
+    if (!token || !companyId || !budgetId) return;
+    setRows(null);
+    apiRequest<{ rows: BudgetVsActualRow[] }>(
+      `/api/reports/budget-vs-actual?budgetId=${budgetId}&startDate=${startDate}&endDate=${endDate}`,
+      { token, companyId },
+    ).then((r) => setRows(r.rows));
+  }, [token, companyId, budgetId, startDate, endDate]);
+
+  const totalBudget = rows?.reduce((s, r) => s + Number(r.budget_amount), 0) ?? 0;
+  const totalActual = rows?.reduce((s, r) => s + Number(r.actual_amount), 0) ?? 0;
+
+  const columns: Column<BudgetVsActualRow>[] = [
+    { key: "code", header: "Account", render: (r) => <span className="font-mono text-xs text-slate-500">{r.account_code}</span> },
+    { key: "name", header: "Name", render: (r) => (i18n.language.startsWith("ar") ? r.name_ar : r.name_en) },
+    { key: "type", header: "Type", render: (r) => <span className="capitalize">{r.account_type}</span> },
+    { key: "budget", header: "Budget", render: (r) => Number(r.budget_amount).toFixed(2), numeric: true },
+    { key: "actual", header: "Actual", render: (r) => Number(r.actual_amount).toFixed(2), numeric: true },
+    {
+      key: "variance",
+      header: "Variance",
+      render: (r) => {
+        const v = Number(r.variance);
+        // Over budget reads as "bad" for expenses (spent more than
+        // planned) but "good" for revenue (earned more than planned) --
+        // the raw sign alone doesn't tell you which, so flip it for
+        // expense rows before coloring.
+        const favorable = r.account_type === "expense" ? v <= 0 : v >= 0;
+        return <span className={favorable ? "text-green-600" : "text-red-600"}>{v > 0 ? "+" : ""}{v.toFixed(2)}</span>;
+      },
+      numeric: true,
+    },
+  ];
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <label className="text-sm text-slate-600">Budget</label>
+        <select value={budgetId} onChange={(e) => setBudgetId(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm">
+          {budgets?.length === 0 && <option value="">No budgets yet</option>}
+          {budgets?.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name} ({b.year_name}) — {b.status}
+            </option>
+          ))}
+        </select>
+        <label className="text-sm text-slate-600">From</label>
+        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm" />
+        <label className="text-sm text-slate-600">To</label>
+        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm" />
+      </div>
+      {budgets?.length === 0 && (
+        <p className="mb-3 text-sm text-slate-400">No budgets exist yet — create one under Accounting → Budgets.</p>
+      )}
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        {rows === null ? (
+          <p className="p-6 text-sm text-slate-400">{budgetId ? "Loading..." : ""}</p>
+        ) : (
+          <>
+            <DataTable columns={columns} rows={rows} getRowKey={(r) => r.account_code} emptyIcon={Wallet} emptyText="No budget or actual activity in this range." />
+            {rows.length > 0 && (
+              <div className="flex justify-end gap-8 border-t border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
+                <span>Total Budget: {totalBudget.toFixed(2)}</span>
+                <span>Total Actual: {totalActual.toFixed(2)}</span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Reports() {
   const { t } = useTranslation();
   return (
@@ -549,6 +653,7 @@ export default function Reports() {
           { key: "cs", label: "Customer Statement", content: <CustomerStatementTab /> },
           { key: "sv", label: "Stock Valuation", content: <StockValuationTab /> },
           { key: "cs2", label: "Cash Shifts", content: <CashShiftsTab /> },
+          { key: "bva", label: "Budget vs Actual", content: <BudgetVsActualTab /> },
         ]}
       />
     </div>
