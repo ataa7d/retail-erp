@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Plus, Minus, Trash2, WifiOff, Wifi, RefreshCw, LogOut, X, ShoppingCart, Wallet, PauseCircle } from "lucide-react";
+import { Search, Plus, Minus, Trash2, WifiOff, Wifi, RefreshCw, LogOut, X, ShoppingCart, Wallet, PauseCircle, Printer } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
+import { InvoicePrintArea } from "../components/InvoicePrint";
 
 interface PosDevice {
   id: string;
@@ -407,6 +408,14 @@ export default function Pos() {
   const { data: items } = useApiList<PosItem>("/api/items");
   const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
   const { data: stores } = useApiList<Store>("/api/stores");
+  const [company, setCompany] = useState<{ name_en: string; name_ar: string; vat_registration_number: string | null } | null>(null);
+  useEffect(() => {
+    if (!token || !companyId) return;
+    apiRequest<{ name_en: string; name_ar: string; vat_registration_number: string | null }>("/api/companies/current", {
+      token,
+      companyId,
+    }).then(setCompany);
+  }, [token, companyId]);
 
   const device = devices?.find((d) => d.id === deviceId) ?? null;
   const store = stores?.find((s) => s.id === device?.store_id) ?? null;
@@ -1165,12 +1174,35 @@ export default function Pos() {
               </div>
             )}
             <button
+              onClick={() => window.print()}
+              className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              <Printer size={14} /> Print Receipt
+            </button>
+            <button
               onClick={() => setReceipt(null)}
               className="w-full rounded-md bg-brand-500 py-2 text-sm font-medium text-white hover:bg-brand-600"
             >
               New Sale
             </button>
           </div>
+          <InvoicePrintArea
+            category="simplified"
+            documentNumber={receipt.documentNumber}
+            invoiceDate={new Date().toISOString().slice(0, 10)}
+            companyNameEn={company?.name_en ?? ""}
+            companyNameAr={company?.name_ar ?? ""}
+            companyVatNumber={company?.vat_registration_number ?? null}
+            lines={receipt.lines.map((l) => {
+              const gross = l.qty * l.unitPrice;
+              const net = gross / (1 + VAT_RATE / 100);
+              return { description: l.label, qty: l.qty, unitPrice: l.unitPrice, net, vat: gross - net, gross };
+            })}
+            netAmount={receipt.total / (1 + VAT_RATE / 100)}
+            vatAmount={receipt.total - receipt.total / (1 + VAT_RATE / 100)}
+            grossAmount={receipt.total}
+            qr={receipt.zatcaQr}
+          />
         </div>
       )}
 

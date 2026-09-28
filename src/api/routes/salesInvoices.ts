@@ -93,8 +93,13 @@ export async function salesInvoiceRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: app.authenticate },
     async (request) => {
       const header = await pool.query(
-        `SELECT si.*, c.name_en AS company_name_en, c.vat_registration_number AS company_vat_number
-         FROM sales_invoices si JOIN companies c ON c.id = si.company_id
+        `SELECT si.*, c.name_en AS company_name_en, c.name_ar AS company_name_ar,
+                c.vat_registration_number AS company_vat_number, c.cr_number AS company_cr_number,
+                cust.name_en AS customer_name_en, cust.name_ar AS customer_name_ar,
+                cust.vat_registration_number AS customer_vat_number
+         FROM sales_invoices si
+         JOIN companies c ON c.id = si.company_id
+         LEFT JOIN customers cust ON cust.id = si.customer_id
          WHERE si.id = $1 AND si.company_id = $2`,
         [request.params.id, request.companyId],
       );

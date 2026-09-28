@@ -291,6 +291,18 @@ describe("master data reads", () => {
     expect(res.json()).toHaveProperty("asOf");
     expect(res.json()).toHaveProperty("balances");
   });
+
+  it("returns the active company's seller details for printed documents", async () => {
+    const res = await app.inject({
+      method: "GET", url: "/api/companies/current",
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.id).toBe(companyId);
+    expect(body).toHaveProperty("name_en");
+    expect(body).toHaveProperty("vat_registration_number");
+  });
 });
 
 describe("permissions", () => {

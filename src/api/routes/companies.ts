@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { pool } from "../db.js";
+import { NotFoundError } from "../errors.js";
 
 // The one route a frontend can call before it has a company selected —
 // list the companies this user actually has access to, so it can show a
@@ -15,5 +16,19 @@ export async function companyRoutes(app: FastifyInstance): Promise<void> {
       [request.authUser.id],
     );
     return result.rows;
+  });
+
+  // The seller-side details a printed invoice needs (name, VAT number, CR
+  // number) that the company picker above deliberately doesn't return --
+  // that route runs before a company is even selected, this one requires
+  // X-Company-Id like every other authenticated route.
+  app.get("/companies/current", { preHandler: app.authenticate }, async (request) => {
+    const result = await pool.query(
+      `SELECT id, company_code, name_en, name_ar, vat_registration_number, cr_number, base_currency
+       FROM companies WHERE id = $1`,
+      [request.companyId],
+    );
+    if (result.rows.length === 0) throw new NotFoundError("company not found");
+    return result.rows[0];
   });
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Receipt, RotateCcw, Plus, Trash2, Tag, FileText, Wallet } from "lucide-react";
+import { Receipt, RotateCcw, Plus, Trash2, Tag, FileText, Wallet, Printer } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError, downloadFile } from "../lib/api";
@@ -8,6 +8,7 @@ import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
 import Tabs from "../components/Tabs";
+import { InvoicePrintArea } from "../components/InvoicePrint";
 import { Field, TextInput, SelectInput, FormActions } from "../components/FormField";
 import type { Column } from "../components/DataTable";
 
@@ -65,6 +66,13 @@ interface FullSalesInvoice {
   zatcaQr: string | null;
   zatcaQrError: string | null;
   creditedAmount: string;
+  company_name_en: string;
+  company_name_ar: string;
+  company_vat_number: string | null;
+  company_cr_number: string | null;
+  customer_name_en: string | null;
+  customer_name_ar: string | null;
+  customer_vat_number: string | null;
 }
 
 interface FullCreditNote {
@@ -239,6 +247,14 @@ function SalesInvoiceDetailModal({ invoiceId, onClose, onVoided }: { invoiceId: 
           </div>
           <ZatcaQrPanel status={detail.document_status} qr={detail.zatcaQr} qrError={detail.zatcaQrError} />
           <XmlDownloadButton status={detail.document_status} path={`/api/sales-invoices/${detail.id}/xml`} />
+          {detail.document_status === "posted" && (
+            <button
+              onClick={() => window.print()}
+              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              <Printer size={14} /> Print Invoice
+            </button>
+          )}
           {canVoid && !showVoid && (
             <button
               onClick={() => setShowVoid(true)}
@@ -255,6 +271,31 @@ function SalesInvoiceDetailModal({ invoiceId, onClose, onVoided }: { invoiceId: 
                 onVoided();
                 apiRequest<FullSalesInvoice>(`/api/sales-invoices/${invoiceId}`, { token, companyId }).then(setDetail);
               }}
+            />
+          )}
+          {detail.document_status === "posted" && (
+            <InvoicePrintArea
+              category={detail.zatca_invoice_category === "standard" ? "standard" : "simplified"}
+              documentNumber={detail.document_number}
+              invoiceDate={new Date(detail.invoice_date).toLocaleDateString()}
+              companyNameEn={detail.company_name_en}
+              companyNameAr={detail.company_name_ar}
+              companyVatNumber={detail.company_vat_number}
+              companyCrNumber={detail.company_cr_number}
+              customerNameEn={detail.customer_name_en}
+              customerVatNumber={detail.customer_vat_number}
+              lines={detail.lines.map((l) => ({
+                description: l.item_description,
+                qty: Number(l.qty),
+                unitPrice: Number(l.unit_price),
+                net: Number(l.net_amount),
+                vat: Number(l.vat_amount),
+                gross: Number(l.gross_amount),
+              }))}
+              netAmount={Number(detail.net_amount)}
+              vatAmount={Number(detail.vat_amount)}
+              grossAmount={Number(detail.gross_amount)}
+              qr={detail.zatcaQr}
             />
           )}
         </div>
