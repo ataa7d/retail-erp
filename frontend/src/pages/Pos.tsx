@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Plus, Minus, Trash2, WifiOff, Wifi, RefreshCw, LogOut, X, ShoppingCart, Wallet } from "lucide-react";
+import { Search, Plus, Minus, Trash2, WifiOff, Wifi, RefreshCw, LogOut, X, ShoppingCart, Wallet, PauseCircle } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -119,12 +119,21 @@ interface ZReport {
   variance: number | null;
 }
 
+interface HeldSale {
+  id: string;
+  heldAt: string; // ISO timestamp
+  customerId: string;
+  customerLabel: string;
+  cart: CartLine[];
+}
+
 const VAT_RATE = 15;
 // Must match src/sales/loyaltyService.ts's POINT_REDEMPTION_VALUE.
 const POINT_REDEMPTION_VALUE = 0.05;
 const DEVICE_KEY = "pos_terminal_device_id";
 const seqKey = (deviceId: string) => `pos_terminal_seq_${deviceId}`;
 const queueKey = (deviceId: string) => `pos_terminal_queue_${deviceId}`;
+const heldKey = (deviceId: string) => `pos_terminal_held_${deviceId}`;
 
 function loadSeq(deviceId: string, fallback: number): number {
   const raw = localStorage.getItem(seqKey(deviceId));
@@ -143,6 +152,17 @@ function loadQueue(deviceId: string): QueuedInvoicePayload[] {
 }
 function saveQueue(deviceId: string, queue: QueuedInvoicePayload[]) {
   localStorage.setItem(queueKey(deviceId), JSON.stringify(queue));
+}
+function loadHeld(deviceId: string): HeldSale[] {
+  try {
+    const raw = localStorage.getItem(heldKey(deviceId));
+    return raw ? (JSON.parse(raw) as HeldSale[]) : [];
+  } catch {
+    return [];
+  }
+}
+function saveHeld(deviceId: string, held: HeldSale[]) {
+  localStorage.setItem(heldKey(deviceId), JSON.stringify(held));
 }
 
 function useOnlineStatus() {
@@ -414,6 +434,8 @@ export default function Pos() {
   const [syncing, setSyncing] = useState(false);
   const [shiftId, setShiftId] = useState<string | null | undefined>(undefined); // undefined = not checked yet
   const [showCloseShift, setShowCloseShift] = useState(false);
+  const [held, setHeld] = useState<HeldSale[]>(() => (deviceId ? loadHeld(deviceId) : []));
+  const [showHeld, setShowHeld] = useState(false);
 
   useEffect(() => {
     if (!token || !companyId || !deviceId) {
@@ -467,12 +489,47 @@ export default function Pos() {
     localStorage.setItem(DEVICE_KEY, id);
     setDeviceId(id);
     setQueue(loadQueue(id));
+    setHeld(loadHeld(id));
   }
 
   function changeDevice() {
     localStorage.removeItem(DEVICE_KEY);
     setDeviceId(null);
     setCart([]);
+  }
+
+  function holdSale() {
+    if (!deviceId || cart.length === 0) return;
+    const entry: HeldSale = {
+      id: crypto.randomUUID(),
+      heldAt: new Date().toISOString(),
+      customerId,
+      customerLabel: customers?.find((c) => c.id === customerId)?.name_en ?? "Walk-in Customer",
+      cart,
+    };
+    const next = [...held, entry];
+    setHeld(next);
+    saveHeld(deviceId, next);
+    setCart([]);
+    setCustomerId("");
+  }
+
+  function resumeHeld(id: string) {
+    const entry = held.find((h) => h.id === id);
+    if (!entry || !deviceId) return;
+    setCart(entry.cart);
+    setCustomerId(entry.customerId);
+    const next = held.filter((h) => h.id !== id);
+    setHeld(next);
+    saveHeld(deviceId, next);
+    setShowHeld(false);
+  }
+
+  function deleteHeld(id: string) {
+    if (!deviceId) return;
+    const next = held.filter((h) => h.id !== id);
+    setHeld(next);
+    saveHeld(deviceId, next);
   }
 
   function addToCart(entry: GridEntry) {
@@ -697,6 +754,14 @@ export default function Pos() {
             className="flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-1 text-xs font-medium text-amber-300 hover:bg-amber-500/30 disabled:opacity-50"
           >
             <RefreshCw size={12} className={syncing ? "animate-spin" : ""} /> {queue.length} pending sync
+          </button>
+        )}
+        {held.length > 0 && (
+          <button
+            onClick={() => setShowHeld(true)}
+            className="flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white/20"
+          >
+            <PauseCircle size={12} /> {held.length} held
           </button>
         )}
         <div className="ms-auto flex items-center gap-3">
@@ -961,6 +1026,13 @@ export default function Pos() {
             >
               {charging ? "Charging..." : `Charge ${total.toFixed(2)}`}
             </button>
+            <button
+              onClick={holdSale}
+              disabled={cart.length === 0}
+              className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+            >
+              <PauseCircle size={13} /> Hold Sale
+            </button>
           </div>
         </div>
       </div>
@@ -1025,6 +1097,53 @@ export default function Pos() {
             setShiftId(null);
           }}
         />
+      )}
+
+      {showHeld && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-900">Held Sales</h2>
+              <button onClick={() => setShowHeld(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+            {cart.length > 0 && (
+              <p className="mb-2 rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-700">
+                Hold or complete the current sale before resuming another one.
+              </p>
+            )}
+            <div className="max-h-80 space-y-2 overflow-y-auto">
+              {held.length === 0 && <p className="text-sm text-slate-400">No held sales.</p>}
+              {held.map((h) => (
+                <div key={h.id} className="rounded-md border border-slate-200 p-2.5">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-sm font-medium text-slate-900">{h.customerLabel}</span>
+                    <span className="text-xs text-slate-400">{new Date(h.heldAt).toLocaleTimeString()}</span>
+                  </div>
+                  <div className="mb-2 text-xs text-slate-500">
+                    {h.cart.length} item{h.cart.length === 1 ? "" : "s"} · {h.cart.reduce((s, l) => s + l.qty * l.unitPrice, 0).toFixed(2)}
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => resumeHeld(h.id)}
+                      disabled={cart.length > 0}
+                      className="flex-1 rounded-md bg-brand-500 py-1 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-40"
+                    >
+                      Resume
+                    </button>
+                    <button
+                      onClick={() => deleteHeld(h.id)}
+                      className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
