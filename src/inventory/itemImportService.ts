@@ -70,7 +70,7 @@ function ean13CheckDigit(digits12: string): number {
  * sequence + check digit can never collide with a real manufacturer
  * UPC/EAN a supplier might also hand us for the same variant.
  */
-async function nextInternalBarcode(client: Client, companyId: string): Promise<string> {
+export async function nextInternalBarcode(client: Client, companyId: string): Promise<string> {
   await client.query(
     `INSERT INTO number_sequences (company_id, document_type, fiscal_year, prefix, padding)
      VALUES ($1, 'internal_barcode', 0, '20', 10)

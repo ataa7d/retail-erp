@@ -228,7 +228,7 @@ interface RequisitionDetail extends PurchaseRequisition {
 }
 
 function useVariantOptions() {
-  const { data: items } = useApiList<Item>("/api/items");
+  const { data: items, reload } = useApiList<Item>("/api/items");
   const options: Array<{ id: string; label: string }> = [];
   for (const item of items ?? []) {
     for (const v of item.variants) {
@@ -236,7 +236,152 @@ function useVariantOptions() {
       options.push({ id: v.id, label: `${item.name_en} — ${v.variant_code}${detail ? ` (${detail})` : ""}` });
     }
   }
-  return options;
+  return { options, reload };
+}
+
+interface UnitOfMeasure {
+  id: string;
+  code: string;
+  name_en: string;
+}
+
+interface Brand {
+  id: string;
+  code: string;
+  name_en: string;
+}
+
+interface Category {
+  id: string;
+  code: string;
+  name_en: string;
+}
+
+// Adding a brand-new item without leaving the PO screen: creates the item +
+// variant + an auto-generated internal barcode in one call (POST
+// /items/quick-add), then hands the new variant id back so the caller can
+// drop it straight into a PO line -- no separate trip to the Items screen.
+function QuickAddItemModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (variant: { id: string; label: string }) => void;
+}) {
+  const { token, companyId } = useAuth();
+  const { data: units } = useApiList<UnitOfMeasure>("/api/units-of-measure");
+  const { data: brands } = useApiList<Brand>("/api/brands");
+  const { data: categories } = useApiList<Category>("/api/categories");
+  const [itemCode, setItemCode] = useState("");
+  const [nameEn, setNameEn] = useState("");
+  const [nameAr, setNameAr] = useState("");
+  const [baseUnitOfMeasureId, setBaseUnitOfMeasureId] = useState("");
+  const [brandId, setBrandId] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [variantCode, setVariantCode] = useState("");
+  const [color, setColor] = useState("");
+  const [size, setSize] = useState("");
+  const [standardCost, setStandardCost] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const result = await apiRequest<{ itemId: string; variantId: string; internalBarcode: string }>("/api/items/quick-add", {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          itemCode,
+          nameEn,
+          nameAr,
+          baseUnitOfMeasureId,
+          brandId: brandId || null,
+          categoryId: categoryId || null,
+          variantCode,
+          color: color || null,
+          size: size || null,
+          standardCost: standardCost ? Number(standardCost) : null,
+        },
+      });
+      const detail = [color, size].filter(Boolean).join(" / ");
+      onCreated({ id: result.variantId, label: `${nameEn} — ${variantCode}${detail ? ` (${detail})` : ""}` });
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create item");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal title="New Item" onClose={onClose}>
+      <form onSubmit={handleSubmit}>
+        <Field label="Item Code" required>
+          <TextInput required value={itemCode} onChange={(e) => setItemCode(e.target.value)} />
+        </Field>
+        <Field label="Name (English)" required>
+          <TextInput required value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
+        </Field>
+        <Field label="Name (Arabic)" required>
+          <TextInput required dir="rtl" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
+        </Field>
+        <Field label="Base Unit" required>
+          <SelectInput required value={baseUnitOfMeasureId} onChange={(e) => setBaseUnitOfMeasureId(e.target.value)}>
+            <option value="">Select...</option>
+            {units?.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name_en} ({u.code})
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Brand">
+            <SelectInput value={brandId} onChange={(e) => setBrandId(e.target.value)}>
+              <option value="">None</option>
+              {brands?.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name_en}
+                </option>
+              ))}
+            </SelectInput>
+          </Field>
+          <Field label="Category">
+            <SelectInput value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+              <option value="">None</option>
+              {categories?.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name_en}
+                </option>
+              ))}
+            </SelectInput>
+          </Field>
+        </div>
+        <Field label="Variant Code" required>
+          <TextInput required value={variantCode} onChange={(e) => setVariantCode(e.target.value)} />
+        </Field>
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Color">
+            <TextInput value={color} onChange={(e) => setColor(e.target.value)} />
+          </Field>
+          <Field label="Size">
+            <TextInput value={size} onChange={(e) => setSize(e.target.value)} />
+          </Field>
+          <Field label="Standard Cost">
+            <TextInput type="number" min={0} step="0.01" value={standardCost} onChange={(e) => setStandardCost(e.target.value)} />
+          </Field>
+        </div>
+        <p className="mb-3 mt-2 text-xs text-slate-400">
+          An internal barcode is generated automatically — no need to enter one. This has no GL impact by itself.
+        </p>
+        <FormActions error={error} submitting={submitting} submitLabel="Create Item" />
+      </form>
+    </Modal>
+  );
 }
 
 function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
@@ -246,7 +391,8 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
   const { data: stores } = useApiList<Store>("/api/stores");
   const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
   const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
-  const variantOptions = useVariantOptions();
+  const { options: variantOptions, reload: reloadVariants } = useVariantOptions();
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
 
   const [supplierId, setSupplierId] = useState("");
   const [storeId, setStoreId] = useState("");
@@ -261,6 +407,8 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [supplierPrices, setSupplierPrices] = useState<SupplierItemPrice[] | null>(null);
+  const [extraVariantOptions, setExtraVariantOptions] = useState<Array<{ id: string; label: string }>>([]);
+  const allVariantOptions = [...variantOptions, ...extraVariantOptions.filter((e) => !variantOptions.some((v) => v.id === e.id))];
 
   useEffect(() => {
     if (!supplierId || !token || !companyId) {
@@ -354,6 +502,7 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit}>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Supplier" required>
@@ -409,7 +558,7 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
             <div className="mb-1.5 flex items-center gap-1.5">
               <SelectInput value={line.itemVariantId} onChange={(e) => updateLine(i, { itemVariantId: e.target.value })} className="min-w-0 flex-1">
                 <option value="">Item variant...</option>
-                {variantOptions.map((v) => (
+                {allVariantOptions.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.label}
                   </option>
@@ -433,10 +582,14 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
           </div>
         ))}
       </div>
-      <button type="button" onClick={addLine} className="mt-2 flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
-        <Plus size={14} /> Add line
-      </button>
-
+      <div className="mt-2 flex items-center gap-3">
+        <button type="button" onClick={addLine} className="flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
+          <Plus size={14} /> Add line
+        </button>
+        <button type="button" onClick={() => setShowQuickAdd(true)} className="flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
+          <Plus size={14} /> New item
+        </button>
+      </div>
       <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
         Estimated Total: {formatMoney(totalGross, currency)}
       </div>
@@ -447,6 +600,23 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Create & Approve PO" />
     </form>
+    {showQuickAdd && (
+      <QuickAddItemModal
+        onClose={() => setShowQuickAdd(false)}
+        onCreated={(variant) => {
+          setExtraVariantOptions((prev) => [...prev, variant]);
+          reloadVariants();
+          setLines((prev) => {
+            const emptyIndex = prev.findIndex((l) => !l.itemVariantId);
+            if (emptyIndex >= 0) {
+              return prev.map((l, i) => (i === emptyIndex ? { ...l, itemVariantId: variant.id } : l));
+            }
+            return [...prev, { itemVariantId: variant.id, qty: "1", unitPrice: "0", vatRate: "15", priceIncludesVat: false }];
+          });
+        }}
+      />
+    )}
+    </>
   );
 }
 
@@ -1094,7 +1264,7 @@ function PurchaseReturnsTab() {
 function NewRequisitionForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
-  const variantOptions = useVariantOptions();
+  const { options: variantOptions } = useVariantOptions();
 
   const [storeId, setStoreId] = useState("");
   const [requisitionDate, setRequisitionDate] = useState(new Date().toISOString().slice(0, 10));
@@ -1760,7 +1930,7 @@ function NewSupplierForm({ onClose, onCreated }: { onClose: () => void; onCreate
 function SupplierPriceCatalog({ supplier, onChanged }: { supplier: Supplier; onChanged: () => void }) {
   const { token, companyId } = useAuth();
   const { data: prices, reload } = useApiList<SupplierItemPrice>(`/api/supplier-item-prices?supplierId=${supplier.id}`);
-  const variantOptions = useVariantOptions();
+  const { options: variantOptions } = useVariantOptions();
   const [itemVariantId, setItemVariantId] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [leadTimeDays, setLeadTimeDays] = useState("");

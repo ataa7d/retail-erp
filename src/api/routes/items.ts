@@ -3,7 +3,7 @@ import { z } from "zod";
 import { parse } from "csv-parse/sync";
 import { pool, withTransaction } from "../db.js";
 import { NotFoundError, BusinessRuleError } from "../errors.js";
-import { importItemRow, type ItemImportRow } from "../../inventory/itemImportService.js";
+import { importItemRow, nextInternalBarcode, type ItemImportRow } from "../../inventory/itemImportService.js";
 
 const listQuerySchema = z.object({
   updatedSince: z.string().datetime().optional(),
@@ -64,6 +64,19 @@ const createSchema = z.object({
   reorderPoint: z.number().nonnegative().optional(),
   standardCost: z.number().nonnegative().nullable().optional(),
   weightKg: z.number().nonnegative().nullable().optional(),
+});
+
+const quickAddSchema = z.object({
+  itemCode: z.string().min(1),
+  nameEn: z.string().min(1),
+  nameAr: z.string().min(1),
+  baseUnitOfMeasureId: z.string().uuid(),
+  brandId: z.string().uuid().nullable().optional(),
+  categoryId: z.string().uuid().nullable().optional(),
+  variantCode: z.string().min(1),
+  color: z.string().nullable().optional(),
+  size: z.string().nullable().optional(),
+  standardCost: z.number().nonnegative().nullable().optional(),
 });
 
 const classifySchema = z.object({
@@ -151,6 +164,71 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
       }, request.authUser.id);
       reply.status(201);
       return { id: itemId };
+    },
+  );
+
+  // Lets a screen that isn't the Items catalog (e.g. adding a brand-new
+  // item to a purchase order) create an item + variant + auto-generated
+  // internal barcode in one call, without leaving that screen. Reuses the
+  // same barcode sequence as the bulk-import path (itemImportService.ts)
+  // so codes never collide between the two entry points. No prices or
+  // opening stock here -- this is just "the item now exists and is
+  // barcoded", same scope as the plain POST /items create.
+  app.post(
+    "/items/quick-add",
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    async (request, reply) => {
+      const body = quickAddSchema.parse(request.body);
+      const result = await withTransaction(async (client) => {
+        const existingItem = await client.query<{ id: string }>(
+          `SELECT id FROM items WHERE company_id = $1 AND item_code = $2`,
+          [request.companyId, body.itemCode],
+        );
+        let itemId: string;
+        if (existingItem.rows.length > 0) {
+          itemId = existingItem.rows[0]!.id;
+        } else {
+          const item = await client.query<{ id: string }>(
+            `INSERT INTO items (company_id, item_code, name_en, name_ar, brand_id, category_id)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+            [request.companyId, body.itemCode, body.nameEn, body.nameAr, body.brandId ?? null, body.categoryId ?? null],
+          );
+          itemId = item.rows[0]!.id;
+          await client.query(
+            `INSERT INTO item_units (item_id, unit_of_measure_id, conversion_factor, is_base) VALUES ($1, $2, 1, true)`,
+            [itemId, body.baseUnitOfMeasureId],
+          );
+        }
+
+        const existingVariant = await client.query(`SELECT id FROM item_variants WHERE company_id = $1 AND variant_code = $2`, [
+          request.companyId,
+          body.variantCode,
+        ]);
+        if (existingVariant.rows.length > 0) throw new BusinessRuleError(`variant code "${body.variantCode}" already exists`);
+
+        const variant = await client.query<{ id: string }>(
+          `INSERT INTO item_variants (company_id, item_id, variant_code, color, size, standard_cost)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+          [request.companyId, itemId, body.variantCode, body.color ?? null, body.size ?? null, body.standardCost ?? null],
+        );
+        const variantId = variant.rows[0]!.id;
+
+        const baseUnit = await client.query<{ unit_of_measure_id: string }>(
+          `SELECT unit_of_measure_id FROM item_units WHERE item_id = $1 AND is_base = true`,
+          [itemId],
+        );
+        const baseUnitId = baseUnit.rows[0]!.unit_of_measure_id;
+
+        const internalBarcode = await nextInternalBarcode(client, request.companyId);
+        await client.query(
+          `INSERT INTO item_barcodes (company_id, item_variant_id, unit_of_measure_id, barcode, is_primary) VALUES ($1, $2, $3, $4, true)`,
+          [request.companyId, variantId, baseUnitId, internalBarcode],
+        );
+
+        return { itemId, variantId, internalBarcode };
+      }, request.authUser.id);
+      reply.status(201);
+      return result;
     },
   );
 
