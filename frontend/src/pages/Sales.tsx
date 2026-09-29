@@ -11,6 +11,7 @@ import Tabs from "../components/Tabs";
 import { InvoicePrintArea } from "../components/InvoicePrint";
 import { Field, TextInput, SelectInput, FormActions } from "../components/FormField";
 import type { Column } from "../components/DataTable";
+import { formatMoney } from "../lib/currency";
 
 interface SalesInvoice {
   id: string;
@@ -375,6 +376,12 @@ interface Customer {
   id: string;
   name_en: string;
   default_price_list_id: string | null;
+  credit_limit: string | null;
+}
+
+interface ArAgeingRow {
+  customer_id: string;
+  open_amount: string;
 }
 
 interface FiscalPeriod {
@@ -443,6 +450,7 @@ function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => void; onCr
   const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
   const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
   const { data: taxCodes } = useApiList<TaxCodeOption>("/api/tax-codes");
+  const { data: arAgeing } = useApiList<ArAgeingRow>("/api/ar-ageing");
   const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
   const variantOptions = useVariantOptions();
 
@@ -619,6 +627,25 @@ function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => void; onCr
               </option>
             ))}
           </SelectInput>
+          {invoiceChannel === "wholesale" &&
+            customerId &&
+            (() => {
+              const customer = customers?.find((c) => c.id === customerId);
+              if (!customer?.credit_limit) return null;
+              const outstanding = (arAgeing ?? [])
+                .filter((r) => r.customer_id === customerId)
+                .reduce((s, r) => s + Number(r.open_amount), 0);
+              const limit = Number(customer.credit_limit);
+              const projected = outstanding + totalGross;
+              const over = projected > limit;
+              return (
+                <p className={`mt-1 text-xs ${over ? "text-red-600" : "text-slate-400"}`}>
+                  {over ? "Over credit limit: " : "Available credit: "}
+                  {formatMoney(Math.max(0, limit - outstanding), "SAR")} of {formatMoney(limit, "SAR")}
+                  {totalGross > 0 && ` — this invoice would leave ${formatMoney(limit - projected, "SAR")}`}
+                </p>
+              );
+            })()}
         </Field>
         <Field label="Price List">
           <SelectInput value={priceListId} onChange={(e) => setPriceListId(e.target.value)}>

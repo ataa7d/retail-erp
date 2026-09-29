@@ -19,6 +19,7 @@ import { recordStockMovement } from "../inventory/inventoryService.js";
 import { redeemGiftCard } from "./giftCardService.js";
 import { earnLoyaltyPoints, redeemLoyaltyPoints } from "./loyaltyService.js";
 import { applyCustomerDeposit } from "./customerDepositService.js";
+import { BusinessRuleError } from "../api/errors.js";
 
 export interface SalesInvoiceLineRequest extends LineInput {
   itemVariantId: string | null;
@@ -154,6 +155,46 @@ export async function postSalesInvoice(client: Client, invoiceId: string, posted
   );
   if (invoiceResult.rows.length === 0) throw new Error(`sales invoice ${invoiceId} not found`);
   const invoice = invoiceResult.rows[0]!;
+
+  // Credit-limit check, before anything else mutates -- how much of this
+  // invoice will land on the customer's AR balance: the full amount for a
+  // wholesale invoice (always on credit, see ar_ageing/0040), or whatever
+  // portion of a POS sale was tendered as 'credit' (cash/card/gift_card/
+  // points/deposit all settle at the till and never touch AR). Compared
+  // against what's already open on ar_ageing plus a customer_limit that's
+  // NULL by default (the seed/admin-UI default) -- an unconfigured limit
+  // never blocks anyone, this only fires for a customer an admin actually
+  // gave one to.
+  const arExposedAmount =
+    invoice.invoice_channel === "wholesale"
+      ? Number(invoice.gross_amount)
+      : Number(
+          (
+            await client.query<{ total: string }>(
+              `SELECT COALESCE(SUM(amount), 0) AS total FROM sales_invoice_payments WHERE invoice_id = $1 AND payment_method = 'credit'`,
+              [invoiceId],
+            )
+          ).rows[0]!.total,
+        );
+  if (arExposedAmount > 0 && invoice.customer_id) {
+    const customer = await client.query<{ credit_limit: string | null; name_en: string }>(
+      `SELECT credit_limit, name_en FROM customers WHERE id = $1`,
+      [invoice.customer_id],
+    );
+    const creditLimit = customer.rows[0]?.credit_limit;
+    if (creditLimit !== null && creditLimit !== undefined) {
+      const outstanding = await client.query<{ total: string }>(
+        `SELECT COALESCE(SUM(open_amount), 0) AS total FROM ar_ageing WHERE customer_id = $1`,
+        [invoice.customer_id],
+      );
+      const projected = Number(outstanding.rows[0]!.total) + arExposedAmount;
+      if (projected > Number(creditLimit)) {
+        throw new BusinessRuleError(
+          `posting this invoice would put ${customer.rows[0]!.name_en} at ${projected.toFixed(2)} outstanding, over their credit limit of ${Number(creditLimit).toFixed(2)}`,
+        );
+      }
+    }
+  }
 
   if (invoice.invoice_channel === "pos") {
     const paid = await client.query<{ total: string }>(
