@@ -2030,6 +2030,102 @@ function NewSupplierForm({ onClose, onCreated }: { onClose: () => void; onCreate
   );
 }
 
+function EditSupplierForm({ supplier, onClose, onSaved }: { supplier: Supplier; onClose: () => void; onSaved: () => void }) {
+  const { token, companyId } = useAuth();
+  const [nameEn, setNameEn] = useState(supplier.name_en);
+  const [nameAr, setNameAr] = useState(supplier.name_ar);
+  const [crNumber, setCrNumber] = useState(supplier.cr_number ?? "");
+  const [vatRegistrationNumber, setVatRegistrationNumber] = useState(supplier.vat_registration_number ?? "");
+  const [address, setAddress] = useState(supplier.address ?? "");
+  const [city, setCity] = useState(supplier.city ?? "");
+  const [country, setCountry] = useState(supplier.country ?? "");
+  const [phone, setPhone] = useState(supplier.phone ?? "");
+  const [email, setEmail] = useState(supplier.email ?? "");
+  const [paymentTermsDays, setPaymentTermsDays] = useState(supplier.payment_terms_days);
+  const [leadTimeDays, setLeadTimeDays] = useState(supplier.lead_time_days != null ? String(supplier.lead_time_days) : "");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest(`/api/suppliers/${supplier.id}`, {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          nameEn,
+          nameAr,
+          crNumber: crNumber || null,
+          vatRegistrationNumber: vatRegistrationNumber || null,
+          address: address || null,
+          city: city || null,
+          country: country || null,
+          phone: phone || null,
+          email: email || null,
+          paymentTermsDays,
+          leadTimeDays: leadTimeDays ? Number(leadTimeDays) : null,
+        },
+      });
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save supplier");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
+        <span className="font-mono">{supplier.supplier_code}</span>
+        <span>{supplier.currency} — code and currency can't be changed here</span>
+      </div>
+      <Field label="Name (English)" required>
+        <TextInput required value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
+      </Field>
+      <Field label="Name (Arabic)" required>
+        <TextInput required dir="rtl" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="CR Number">
+          <TextInput value={crNumber} onChange={(e) => setCrNumber(e.target.value)} />
+        </Field>
+        <Field label="VAT Registration #">
+          <TextInput value={vatRegistrationNumber} onChange={(e) => setVatRegistrationNumber(e.target.value)} />
+        </Field>
+        <Field label="City">
+          <TextInput value={city} onChange={(e) => setCity(e.target.value)} />
+        </Field>
+        <Field label="Country">
+          <TextInput value={country} onChange={(e) => setCountry(e.target.value)} />
+        </Field>
+        <Field label="Phone">
+          <TextInput value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </Field>
+        <Field label="Email">
+          <TextInput type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </Field>
+      </div>
+      <Field label="Address">
+        <TextInput value={address} onChange={(e) => setAddress(e.target.value)} />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Payment Terms (days)">
+          <TextInput type="number" min={0} value={paymentTermsDays} onChange={(e) => setPaymentTermsDays(Number(e.target.value))} />
+        </Field>
+        <Field label="Lead Time (days)">
+          <TextInput type="number" min={0} value={leadTimeDays} onChange={(e) => setLeadTimeDays(e.target.value)} />
+        </Field>
+      </div>
+      <FormActions error={error} submitting={submitting} submitLabel="Save Supplier" />
+    </form>
+  );
+}
+
 function SupplierPriceCatalog({ supplier, onChanged }: { supplier: Supplier; onChanged: () => void }) {
   const { token, companyId } = useAuth();
   const { data: prices, reload } = useApiList<SupplierItemPrice>(`/api/supplier-item-prices?supplierId=${supplier.id}`);
@@ -2157,6 +2253,7 @@ function SuppliersTab() {
   const [showNew, setShowNew] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   async function toggleActive(supplier: Supplier) {
     setBusyId(supplier.id);
@@ -2215,7 +2312,10 @@ function SuppliersTab() {
         searchPlaceholder="Search suppliers..."
         actionLabel="New Supplier"
         onAction={() => setShowNew(true)}
-        onRowClick={(r) => setDetailId(r.id)}
+        onRowClick={(r) => {
+          setEditing(false);
+          setDetailId(r.id);
+        }}
       />
       {showNew && (
         <Modal title="New Supplier" onClose={() => setShowNew(false)}>
@@ -2223,7 +2323,22 @@ function SuppliersTab() {
         </Modal>
       )}
       {detailSupplier && (
-        <Modal title={`${detailSupplier.name_en} — Cost Catalog`} onClose={() => setDetailId(null)}>
+        <Modal title={detailSupplier.name_en} onClose={() => setDetailId(null)}>
+          {editing ? (
+            <EditSupplierForm
+              supplier={detailSupplier}
+              onClose={() => setEditing(false)}
+              onSaved={reload}
+            />
+          ) : (
+            <button
+              onClick={() => setEditing(true)}
+              className="mb-4 text-sm font-medium text-brand-600 hover:text-brand-700"
+            >
+              Edit supplier details
+            </button>
+          )}
+          <div className="mb-2 text-sm font-medium text-slate-700">Cost Catalog</div>
           <SupplierPriceCatalog supplier={detailSupplier} onChanged={reload} />
         </Modal>
       )}

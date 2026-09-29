@@ -140,6 +140,8 @@ const createSupplierSchema = z.object({
   currency: currencyCode.optional(),
 });
 
+const updateSupplierSchema = createSupplierSchema.omit({ supplierCode: true, currency: true });
+
 const setSupplierPriceSchema = z.object({
   itemVariantId: z.string().uuid(),
   unitCost: z.number().nonnegative(),
@@ -461,6 +463,47 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
       );
       reply.status(201);
       return { id: result.rows[0]!.id };
+    },
+  );
+
+  // Supplier code and currency are locked in at creation (currency is the
+  // default new POs are suggested in, not something existing POs/invoices
+  // depend on structurally, but changing it after the fact invites the
+  // same kind of quiet drift the Chart of Accounts update route was kept
+  // narrow to avoid) -- everything else (contact/commercial details) is
+  // exactly the kind of thing that changes over a supplier relationship's
+  // life and previously had no way to be corrected short of deactivating
+  // and recreating the supplier, which orphans its PO/GRN/invoice history.
+  app.post<{ Params: { id: string } }>(
+    "/suppliers/:id",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.manage")] },
+    async (request) => {
+      const body = updateSupplierSchema.parse(request.body);
+      const existing = await pool.query(`SELECT id FROM suppliers WHERE id = $1 AND company_id = $2`, [
+        request.params.id,
+        request.companyId,
+      ]);
+      if (existing.rows.length === 0) throw new NotFoundError("supplier not found");
+      await pool.query(
+        `UPDATE suppliers SET name_en = $1, name_ar = $2, cr_number = $3, vat_registration_number = $4, address = $5,
+                              city = $6, country = $7, phone = $8, email = $9, payment_terms_days = $10, lead_time_days = $11
+         WHERE id = $12`,
+        [
+          body.nameEn,
+          body.nameAr,
+          body.crNumber ?? null,
+          body.vatRegistrationNumber ?? null,
+          body.address ?? null,
+          body.city ?? null,
+          body.country ?? null,
+          body.phone ?? null,
+          body.email ?? null,
+          body.paymentTermsDays,
+          body.leadTimeDays ?? null,
+          request.params.id,
+        ],
+      );
+      return { id: request.params.id };
     },
   );
 
