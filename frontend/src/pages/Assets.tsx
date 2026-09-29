@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Building2, CalendarClock } from "lucide-react";
+import { Building2, CalendarClock, Trash2 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -173,10 +173,127 @@ function NewDepreciationRunForm({ onClose, onCreated }: { onClose: () => void; o
   );
 }
 
+function DisposeAssetForm({ asset, onClose, onDisposed }: { asset: FixedAsset; onClose: () => void; onDisposed: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
+  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
+  const [disposalDate, setDisposalDate] = useState(new Date().toISOString().slice(0, 10));
+  const [proceeds, setProceeds] = useState(0);
+  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const bookValue = Number(asset.acquisition_cost) - Number(asset.accumulated_depreciation);
+  const gainLoss = proceeds - bookValue;
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest(`/api/fixed-assets/${asset.id}/dispose`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { disposalDate, proceeds, fiscalPeriodId },
+      });
+      onDisposed();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to dispose asset");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="mb-3 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
+        Book value: {bookValue.toFixed(2)} (cost {Number(asset.acquisition_cost).toFixed(2)} − accum. depreciation{" "}
+        {Number(asset.accumulated_depreciation).toFixed(2)})
+      </div>
+      <Field label="Disposal Date" required>
+        <TextInput type="date" required value={disposalDate} onChange={(e) => setDisposalDate(e.target.value)} />
+      </Field>
+      <Field label="Proceeds" required>
+        <TextInput type="number" min={0} step="0.01" required value={proceeds} onChange={(e) => setProceeds(Number(e.target.value))} />
+      </Field>
+      <Field label="Fiscal Period" required>
+        <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
+          <option value="">Select a period...</option>
+          {openPeriods.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.year_name} — Period {p.period_number}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      <p className={`mb-3 text-xs ${gainLoss === 0 ? "text-slate-400" : gainLoss > 0 ? "text-emerald-600" : "text-red-600"}`}>
+        {gainLoss === 0
+          ? "Proceeds exactly match book value — no gain or loss."
+          : `${gainLoss > 0 ? "Gain" : "Loss"} on disposal: ${Math.abs(gainLoss).toFixed(2)}`}
+      </p>
+      <p className="mb-3 text-xs text-slate-400">Removes accumulated depreciation, books proceeds, and posts the resulting gain/loss. Cannot be undone.</p>
+      <FormActions error={error} submitting={submitting} submitLabel="Dispose Asset" />
+    </form>
+  );
+}
+
+function AssetDetailModal({ asset, onClose, onDisposed }: { asset: FixedAsset; onClose: () => void; onDisposed: () => void }) {
+  const { i18n } = useTranslation();
+  const [showDispose, setShowDispose] = useState(false);
+  const bookValue = Number(asset.acquisition_cost) - Number(asset.accumulated_depreciation);
+
+  return (
+    <Modal title={i18n.language.startsWith("ar") ? asset.name_ar : asset.name_en} onClose={onClose}>
+      <div className="mb-3 flex items-center justify-between text-sm">
+        <span className="font-mono text-xs text-slate-500">{asset.asset_code}</span>
+        <StatusBadge status={asset.status} />
+      </div>
+      <div className="space-y-1 text-sm">
+        <div className="flex justify-between text-slate-500">
+          <span>Acquisition Cost</span>
+          <span className="tabular-nums">{Number(asset.acquisition_cost).toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between text-slate-500">
+          <span>Accumulated Depreciation</span>
+          <span className="tabular-nums">{Number(asset.accumulated_depreciation).toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between text-base font-semibold text-slate-900">
+          <span>Book Value</span>
+          <span className="tabular-nums">{bookValue.toFixed(2)}</span>
+        </div>
+      </div>
+      {asset.status === "active" && !showDispose && (
+        <button
+          onClick={() => setShowDispose(true)}
+          className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
+        >
+          <Trash2 size={14} /> Dispose Asset
+        </button>
+      )}
+      {asset.status !== "active" && <p className="mt-4 text-xs text-slate-400">This asset has already been disposed.</p>}
+      {showDispose && (
+        <div className="mt-4 border-t border-slate-200 pt-4">
+          <DisposeAssetForm
+            asset={asset}
+            onClose={() => setShowDispose(false)}
+            onDisposed={() => {
+              onDisposed();
+              onClose();
+            }}
+          />
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function AssetsTab() {
   const { i18n } = useTranslation();
   const { data, error, reload } = useApiList<FixedAsset>("/api/fixed-assets");
   const [showNew, setShowNew] = useState(false);
+  const [selected, setSelected] = useState<FixedAsset | null>(null);
 
   const columns: Column<FixedAsset>[] = [
     { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.asset_code}</span> },
@@ -205,12 +322,14 @@ function AssetsTab() {
         searchPlaceholder="Search assets..."
         actionLabel="Acquire Asset"
         onAction={() => setShowNew(true)}
+        onRowClick={setSelected}
       />
       {showNew && (
         <Modal title="Acquire Fixed Asset" onClose={() => setShowNew(false)}>
           <AcquireAssetForm onClose={() => setShowNew(false)} onCreated={reload} />
         </Modal>
       )}
+      {selected && <AssetDetailModal asset={selected} onClose={() => setSelected(null)} onDisposed={reload} />}
     </>
   );
 }

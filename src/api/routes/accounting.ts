@@ -15,6 +15,22 @@ import {
 } from "../../accounting/accountingService.js";
 import { NotFoundError, BusinessRuleError } from "../errors.js";
 
+const coaCreateSchema = z.object({
+  accountCode: z.string().min(1),
+  nameEn: z.string().min(1),
+  nameAr: z.string().min(1),
+  accountType: z.enum(["asset", "liability", "equity", "revenue", "expense"]),
+  normalBalance: z.enum(["debit", "credit"]),
+  parentId: z.string().uuid().nullable().optional(),
+  isHeader: z.boolean().default(false),
+});
+
+const coaUpdateSchema = z.object({
+  nameEn: z.string().min(1),
+  nameAr: z.string().min(1),
+  isActive: z.boolean(),
+});
+
 const journalLineSchema = z.object({
   accountId: z.string().uuid(),
   debitAmount: z.number().nonnegative().default(0),
@@ -81,6 +97,69 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
     );
     return result.rows;
   });
+
+  app.post(
+    "/chart-of-accounts",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.coa.manage")] },
+    async (request, reply) => {
+      const body = coaCreateSchema.parse(request.body);
+      const accountId = await withTransaction(async (client) => {
+        if (body.parentId) {
+          const parent = await client.query(`SELECT id FROM chart_of_accounts WHERE id = $1 AND company_id = $2`, [
+            body.parentId,
+            request.companyId,
+          ]);
+          if (parent.rows.length === 0) throw new NotFoundError("parent account not found");
+        }
+        const result = await client.query<{ id: string }>(
+          `INSERT INTO chart_of_accounts (company_id, parent_id, account_code, name_en, name_ar, account_type, normal_balance, is_header)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+          [
+            request.companyId,
+            body.parentId ?? null,
+            body.accountCode,
+            body.nameEn,
+            body.nameAr,
+            body.accountType,
+            body.normalBalance,
+            body.isHeader,
+          ],
+        );
+        return result.rows[0]!.id;
+      }, request.authUser.id);
+      reply.status(201);
+      return { id: accountId };
+    },
+  );
+
+  // Deliberately narrow: only the name and active flag can change once an
+  // account exists. account_type/normal_balance/parent_id/account_code are
+  // baked into every historical journal_line and every report that groups
+  // by them (fn_trial_balance, fn_income_statement, ...) -- changing any of
+  // those after the fact would silently reclassify past postings. Retiring
+  // an account (is_active = false) is the correct way to stop using one,
+  // not deleting or restructuring it.
+  app.post<{ Params: { id: string } }>(
+    "/chart-of-accounts/:id",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.coa.manage")] },
+    async (request) => {
+      const body = coaUpdateSchema.parse(request.body);
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM chart_of_accounts WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("account not found");
+        await client.query(`UPDATE chart_of_accounts SET name_en = $1, name_ar = $2, is_active = $3 WHERE id = $4`, [
+          body.nameEn,
+          body.nameAr,
+          body.isActive,
+          request.params.id,
+        ]);
+      }, request.authUser.id);
+      return { id: request.params.id };
+    },
+  );
 
   app.get("/fiscal-periods", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(

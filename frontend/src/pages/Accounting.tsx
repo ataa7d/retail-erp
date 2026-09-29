@@ -15,11 +15,14 @@ import type { Column } from "../components/DataTable";
 
 interface Account {
   id: string;
+  parent_id: string | null;
   account_code: string;
   name_en: string;
   name_ar: string;
   account_type: string;
+  normal_balance: string;
   is_header: boolean;
+  is_active: boolean;
 }
 
 interface FiscalPeriod {
@@ -152,25 +155,189 @@ function useOpenPeriods() {
 
 // ---- Chart of Accounts ----
 
+function NewAccountForm({ accounts, onClose, onCreated }: { accounts: Account[]; onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const [accountCode, setAccountCode] = useState("");
+  const [nameEn, setNameEn] = useState("");
+  const [nameAr, setNameAr] = useState("");
+  const [accountType, setAccountType] = useState<"asset" | "liability" | "equity" | "revenue" | "expense">("expense");
+  const [normalBalance, setNormalBalance] = useState<"debit" | "credit">("debit");
+  const [parentId, setParentId] = useState("");
+  const [isHeader, setIsHeader] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const headerAccounts = accounts.filter((a) => a.is_header);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/chart-of-accounts", {
+        method: "POST",
+        token,
+        companyId,
+        body: { accountCode, nameEn, nameAr, accountType, normalBalance, parentId: parentId || null, isHeader },
+      });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create account");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Field label="Account Code" required>
+        <TextInput required value={accountCode} onChange={(e) => setAccountCode(e.target.value)} placeholder="e.g. 1160" />
+      </Field>
+      <Field label="Name (English)" required>
+        <TextInput required value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
+      </Field>
+      <Field label="Name (Arabic)" required>
+        <TextInput required dir="rtl" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Account Type" required>
+          <SelectInput required value={accountType} onChange={(e) => setAccountType(e.target.value as typeof accountType)}>
+            <option value="asset">Asset</option>
+            <option value="liability">Liability</option>
+            <option value="equity">Equity</option>
+            <option value="revenue">Revenue</option>
+            <option value="expense">Expense</option>
+          </SelectInput>
+        </Field>
+        <Field label="Normal Balance" required>
+          <SelectInput required value={normalBalance} onChange={(e) => setNormalBalance(e.target.value as typeof normalBalance)}>
+            <option value="debit">Debit</option>
+            <option value="credit">Credit</option>
+          </SelectInput>
+        </Field>
+      </div>
+      <Field label="Parent (Group) Account">
+        <SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)}>
+          <option value="">None — top level</option>
+          {headerAccounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.account_code} — {a.name_en}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      <label className="mb-3 flex items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" checked={isHeader} onChange={(e) => setIsHeader(e.target.checked)} />
+        This is a header/group account (organizes other accounts, never posted to directly)
+      </label>
+      <p className="mb-3 text-xs text-slate-400">
+        Type, normal balance, and code can't be changed after creation — every journal line and report groups by them.
+      </p>
+      <FormActions error={error} submitting={submitting} submitLabel="Create Account" />
+    </form>
+  );
+}
+
+function EditAccountForm({ account, onClose, onSaved }: { account: Account; onClose: () => void; onSaved: () => void }) {
+  const { token, companyId } = useAuth();
+  const [nameEn, setNameEn] = useState(account.name_en);
+  const [nameAr, setNameAr] = useState(account.name_ar);
+  const [isActive, setIsActive] = useState(account.is_active);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest(`/api/chart-of-accounts/${account.id}`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { nameEn, nameAr, isActive },
+      });
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save account");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="mb-3 flex items-center justify-between text-sm text-slate-500">
+        <span className="font-mono text-xs">{account.account_code}</span>
+        <span className="capitalize">
+          {account.account_type} · {account.normal_balance}
+        </span>
+      </div>
+      <Field label="Name (English)" required>
+        <TextInput required value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
+      </Field>
+      <Field label="Name (Arabic)" required>
+        <TextInput required dir="rtl" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
+      </Field>
+      <label className="mb-3 flex items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+        Active
+      </label>
+      <p className="mb-3 text-xs text-slate-400">
+        Retire an account no longer used by unchecking Active instead of deleting it — its history stays intact.
+      </p>
+      <FormActions error={error} submitting={submitting} submitLabel="Save Account" />
+    </form>
+  );
+}
+
 function ChartOfAccountsTab() {
-  const { data, error } = useApiList<Account>("/api/chart-of-accounts");
+  const { data, error, reload } = useApiList<Account>("/api/chart-of-accounts");
+  const [showNew, setShowNew] = useState(false);
+  const [editing, setEditing] = useState<Account | null>(null);
   const columns: Column<Account>[] = [
     { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.account_code}</span> },
-    { key: "name", header: "Name", render: (r) => <span className={r.is_header ? "font-semibold text-slate-900" : "ps-4 text-slate-700"}>{r.name_en}</span> },
+    {
+      key: "name",
+      header: "Name",
+      render: (r) => (
+        <span className={`${r.is_header ? "font-semibold text-slate-900" : "ps-4 text-slate-700"} ${r.is_active ? "" : "text-slate-400"}`}>
+          {r.name_en}
+          {!r.is_active && " (inactive)"}
+        </span>
+      ),
+    },
     { key: "type", header: "Type", render: (r) => <span className="capitalize">{r.account_type}</span> },
   ];
   return (
-    <ListPage
-      title=""
-      data={data}
-      error={error}
-      columns={columns}
-      getRowKey={(r) => r.id}
-      getSearchText={(r) => `${r.account_code} ${r.name_en}`}
-      emptyIcon={BookOpen}
-      emptyText="No accounts found."
-      searchPlaceholder="Search accounts..."
-    />
+    <>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => `${r.account_code} ${r.name_en}`}
+        emptyIcon={BookOpen}
+        emptyText="No accounts found."
+        searchPlaceholder="Search accounts..."
+        actionLabel="New Account"
+        onAction={() => setShowNew(true)}
+        onRowClick={setEditing}
+      />
+      {showNew && (
+        <Modal title="New Account" onClose={() => setShowNew(false)}>
+          <NewAccountForm accounts={data ?? []} onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+      {editing && (
+        <Modal title={`Edit ${editing.account_code}`} onClose={() => setEditing(null)}>
+          <EditAccountForm account={editing} onClose={() => setEditing(null)} onSaved={reload} />
+        </Modal>
+      )}
+    </>
   );
 }
 
