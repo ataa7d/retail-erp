@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { UserCog, Wallet } from "lucide-react";
+import { UserCog, Wallet, Printer } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -10,6 +10,7 @@ import Modal from "../components/Modal";
 import Tabs from "../components/Tabs";
 import { Field, TextInput, SelectInput, FormActions } from "../components/FormField";
 import type { Column } from "../components/DataTable";
+import { PayslipPrintArea } from "../components/PayslipPrint";
 
 interface Employee {
   id: string;
@@ -49,6 +50,29 @@ interface PayrollRun {
   pay_period_end: string;
   run_date: string;
   document_status: string;
+}
+
+interface PayrollRunLine {
+  id: string;
+  employee_id: string;
+  employee_code: string;
+  full_name_en: string;
+  full_name_ar: string;
+  basic_salary: string;
+  housing_allowance: string;
+  other_allowances: string;
+  gross_pay: string;
+  gosi_employee_amount: string;
+  net_pay: string;
+}
+
+interface PayrollRunDetail extends PayrollRun {
+  lines: PayrollRunLine[];
+}
+
+interface CompanyInfo {
+  name_en: string;
+  name_ar: string;
 }
 
 function NewEmployeeForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
@@ -240,9 +264,92 @@ function EmployeesTab() {
   );
 }
 
+function PayslipRow({ line, run, company }: { line: PayrollRunLine; run: PayrollRunDetail; company: CompanyInfo | null }) {
+  return (
+    <div className="flex items-center justify-between gap-2 border-t border-slate-100 py-2 text-sm first:border-t-0">
+      <div className="min-w-0">
+        <div className="truncate font-medium text-slate-900">{line.full_name_en}</div>
+        <div className="text-xs text-slate-400">{line.employee_code}</div>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="tabular-nums text-slate-600">{Number(line.net_pay).toFixed(2)}</span>
+        <button
+          onClick={() => window.print()}
+          disabled={!company}
+          title={company ? "Print payslip" : "Loading company details..."}
+          className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 disabled:opacity-40"
+        >
+          <Printer size={14} />
+        </button>
+        {company && (
+          <PayslipPrintArea
+            companyNameEn={company.name_en}
+            companyNameAr={company.name_ar}
+            documentNumber={`${run.document_number} / ${line.employee_code}`}
+            payPeriodStart={new Date(run.pay_period_start).toLocaleDateString()}
+            payPeriodEnd={new Date(run.pay_period_end).toLocaleDateString()}
+            employeeCode={line.employee_code}
+            employeeNameEn={line.full_name_en}
+            employeeNameAr={line.full_name_ar}
+            basicSalary={Number(line.basic_salary)}
+            housingAllowance={Number(line.housing_allowance)}
+            otherAllowances={Number(line.other_allowances)}
+            grossPay={Number(line.gross_pay)}
+            gosiEmployeeAmount={Number(line.gosi_employee_amount)}
+            netPay={Number(line.net_pay)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Each employee row renders its own PayslipPrintArea, all sharing the
+// single #payslip-print-area id -- @media print only ever shows one
+// visible payslip anyway, since Print is clicked per-row, so there's no
+// conflict, and it keeps each row self-contained rather than lifting a
+// "which employee is selected" state up just for printing.
+function PayrollRunDetailModal({ runId, onClose }: { runId: string; onClose: () => void }) {
+  const { token, companyId } = useAuth();
+  const [run, setRun] = useState<PayrollRunDetail | null>(null);
+  const [company, setCompany] = useState<CompanyInfo | null>(null);
+
+  useEffect(() => {
+    apiRequest<PayrollRunDetail>(`/api/payroll-runs/${runId}`, { token, companyId }).then(setRun);
+    apiRequest<CompanyInfo>("/api/companies/current", { token, companyId }).then(setCompany);
+  }, [runId, token, companyId]);
+
+  return (
+    <Modal title={run?.document_number ?? "Payroll Run"} onClose={onClose}>
+      {!run ? (
+        <p className="text-sm text-slate-400">Loading...</p>
+      ) : (
+        <div>
+          <div className="mb-3 flex items-center justify-between text-sm">
+            <span className="text-slate-500">
+              {new Date(run.pay_period_start).toLocaleDateString()} – {new Date(run.pay_period_end).toLocaleDateString()}
+            </span>
+            <StatusBadge status={run.document_status} />
+          </div>
+          {run.lines.length === 0 ? (
+            <p className="text-sm text-slate-400">No employees were eligible for this pay period.</p>
+          ) : (
+            <div>
+              {run.lines.map((line) => (
+                <PayslipRow key={line.id} line={line} run={run} company={company} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function PayrollRunsTab() {
   const { data, error, reload } = useApiList<PayrollRun>("/api/payroll-runs");
   const [showNew, setShowNew] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const columns: Column<PayrollRun>[] = [
     { key: "number", header: "Run #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
@@ -265,12 +372,14 @@ function PayrollRunsTab() {
         searchPlaceholder="Search payroll runs..."
         actionLabel="New Payroll Run"
         onAction={() => setShowNew(true)}
+        onRowClick={(r) => setSelectedId(r.id)}
       />
       {showNew && (
         <Modal title="New Payroll Run" onClose={() => setShowNew(false)}>
           <NewPayrollRunForm onClose={() => setShowNew(false)} onCreated={reload} />
         </Modal>
       )}
+      {selectedId && <PayrollRunDetailModal runId={selectedId} onClose={() => setSelectedId(null)} />}
     </>
   );
 }

@@ -49,7 +49,17 @@ export async function payrollRoutes(app: FastifyInstance): Promise<void> {
       request.companyId,
     ]);
     if (header.rows.length === 0) throw new NotFoundError("payroll run not found");
-    const lines = await pool.query(`SELECT * FROM payroll_run_lines WHERE payroll_run_id = $1`, [request.params.id]);
+    // Joined with the employee for display/payslip purposes -- the raw
+    // line itself only carries employee_id, everything else here is what a
+    // payslip or a review screen needs to actually show who this is.
+    const lines = await pool.query(
+      `SELECT prl.*, e.employee_code, e.full_name_en, e.full_name_ar, e.national_id
+       FROM payroll_run_lines prl
+       JOIN employees e ON e.id = prl.employee_id
+       WHERE prl.payroll_run_id = $1
+       ORDER BY e.employee_code`,
+      [request.params.id],
+    );
     return { ...header.rows[0], lines: lines.rows };
   });
 
