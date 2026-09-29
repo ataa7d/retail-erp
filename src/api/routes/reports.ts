@@ -144,4 +144,17 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
       return { budgetId: query.budgetId, startDate: query.startDate, endDate: query.endDate, rows: result.rows };
     },
   );
+
+  app.get(
+    "/reports/vat-summary",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.view")] },
+    async (request) => {
+      const query = rangeSchema.parse(request.query);
+      const result = await pool.query<{ direction: "output" | "input"; vat_rate: string; net_amount: string; vat_amount: string }>(
+        `SELECT * FROM fn_vat_summary($1, $2, $3)`,
+        [request.companyId, query.startDate, query.endDate],
+      );
+      return { startDate: query.startDate, endDate: query.endDate, rows: result.rows };
+    },
+  );
 }

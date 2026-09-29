@@ -640,6 +640,109 @@ function BudgetVsActualTab() {
   );
 }
 
+interface VatSummaryRow {
+  direction: "output" | "input";
+  vat_rate: string;
+  net_amount: string;
+  vat_amount: string;
+}
+
+// Grouped by direction and rate -- the same shape fn_vat_summary returns,
+// not re-derived here, so this can never disagree with what the backend
+// computed from posted documents.
+function VatSummaryTab() {
+  const { token, companyId } = useAuth();
+  const [startDate, setStartDate] = useState(yearStartISO());
+  const [endDate, setEndDate] = useState(todayISO());
+  const [rows, setRows] = useState<VatSummaryRow[] | null>(null);
+
+  useEffect(() => {
+    if (!token || !companyId) return;
+    setRows(null);
+    apiRequest<{ rows: VatSummaryRow[] }>(`/api/reports/vat-summary?startDate=${startDate}&endDate=${endDate}`, {
+      token,
+      companyId,
+    }).then((r) => setRows(r.rows));
+  }, [token, companyId, startDate, endDate]);
+
+  const outputRows = rows?.filter((r) => r.direction === "output") ?? [];
+  const inputRows = rows?.filter((r) => r.direction === "input") ?? [];
+  const outputVat = outputRows.reduce((s, r) => s + Number(r.vat_amount), 0);
+  const inputVat = inputRows.reduce((s, r) => s + Number(r.vat_amount), 0);
+  const netVat = outputVat - inputVat;
+
+  function Section({ title, sectionRows }: { title: string; sectionRows: VatSummaryRow[] }) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">{title}</div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-start text-xs text-slate-500">
+              <th className="px-4 py-2 text-start font-medium">VAT Rate</th>
+              <th className="px-4 py-2 text-end font-medium">Net Amount</th>
+              <th className="px-4 py-2 text-end font-medium">VAT Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sectionRows.length === 0 && (
+              <tr>
+                <td colSpan={3} className="px-4 py-4 text-center text-sm text-slate-400">
+                  No activity in this range.
+                </td>
+              </tr>
+            )}
+            {sectionRows.map((r) => (
+              <tr key={r.vat_rate} className="border-t border-slate-100">
+                <td className="px-4 py-2">{Number(r.vat_rate) === 0 ? "Zero-rated / Exempt" : `${Number(r.vat_rate)}%`}</td>
+                <td className="px-4 py-2 text-end tabular-nums">{Number(r.net_amount).toFixed(2)}</td>
+                <td className="px-4 py-2 text-end tabular-nums">{Number(r.vat_amount).toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <label className="text-sm text-slate-600">From</label>
+        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm" />
+        <label className="text-sm text-slate-600">To</label>
+        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm" />
+      </div>
+      <p className="mb-3 text-xs text-slate-400">
+        A working summary to support filing the periodic VAT return, not an official ZATCA form replica — it doesn't distinguish GCC
+        sales, exports, or customs-cleared imports from domestic activity, since this app's schema doesn't capture those separately.
+        Zero-rated and exempt supplies are also combined (both show as 0% here).
+      </p>
+      {rows === null ? (
+        <p className="p-6 text-sm text-slate-400">Loading...</p>
+      ) : (
+        <div className="space-y-4">
+          <Section title="Output VAT (Sales)" sectionRows={outputRows} />
+          <Section title="Input VAT (Purchases)" sectionRows={inputRows} />
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+            <div className="flex justify-between">
+              <span className="text-slate-600">Total Output VAT</span>
+              <span className="tabular-nums font-medium text-slate-900">{outputVat.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-600">Total Input VAT</span>
+              <span className="tabular-nums font-medium text-slate-900">{inputVat.toFixed(2)}</span>
+            </div>
+            <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
+              <span>{netVat >= 0 ? "Net VAT Due" : "Net VAT Refundable"}</span>
+              <span className="tabular-nums">{Math.abs(netVat).toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Reports() {
   const { t } = useTranslation();
   return (
@@ -654,6 +757,7 @@ export default function Reports() {
           { key: "sv", label: "Stock Valuation", content: <StockValuationTab /> },
           { key: "cs2", label: "Cash Shifts", content: <CashShiftsTab /> },
           { key: "bva", label: "Budget vs Actual", content: <BudgetVsActualTab /> },
+          { key: "vat", label: "VAT Summary", content: <VatSummaryTab /> },
         ]}
       />
     </div>
