@@ -25,6 +25,23 @@ const coaCreateSchema = z.object({
   isHeader: z.boolean().default(false),
 });
 
+const bankAccountCreateSchema = z.object({
+  bankName: z.string().min(1),
+  accountName: z.string().min(1),
+  accountNumber: z.string().nullable().optional(),
+  iban: z.string().nullable().optional(),
+  currency: z.string().regex(/^[A-Z]{3}$/).default("SAR"),
+  glAccountId: z.string().uuid(),
+});
+
+const bankAccountUpdateSchema = z.object({
+  bankName: z.string().min(1),
+  accountName: z.string().min(1),
+  accountNumber: z.string().nullable().optional(),
+  iban: z.string().nullable().optional(),
+  isActive: z.boolean(),
+});
+
 const coaUpdateSchema = z.object({
   nameEn: z.string().min(1),
   nameAr: z.string().min(1),
@@ -238,12 +255,57 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/bank-accounts", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
-      `SELECT id, bank_name, account_name, account_number, iban, currency, is_active
+      `SELECT id, bank_name, account_name, account_number, iban, currency, gl_account_id, is_active
        FROM bank_accounts WHERE company_id = $1 ORDER BY bank_name`,
       [request.companyId],
     );
     return result.rows;
   });
+
+  // Bank reconciliation (statement lines, matching, reconciliation runs)
+  // was a complete feature with no way to add the bank account itself --
+  // it could only exist via a direct database insert. gl_account_id is
+  // locked after creation (like currency): it's UNIQUE per bank account
+  // and everything reconciliation matches against ties back to that one
+  // GL account, so repointing it later would silently strand whatever was
+  // already reconciled under the old one.
+  app.post(
+    "/bank-accounts",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.coa.manage")] },
+    async (request, reply) => {
+      const body = bankAccountCreateSchema.parse(request.body);
+      const glAccount = await pool.query(`SELECT id FROM chart_of_accounts WHERE id = $1 AND company_id = $2`, [
+        body.glAccountId,
+        request.companyId,
+      ]);
+      if (glAccount.rows.length === 0) throw new NotFoundError("GL account not found");
+      const result = await pool.query<{ id: string }>(
+        `INSERT INTO bank_accounts (company_id, gl_account_id, bank_name, account_name, account_number, iban, currency)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+        [request.companyId, body.glAccountId, body.bankName, body.accountName, body.accountNumber ?? null, body.iban ?? null, body.currency],
+      );
+      reply.status(201);
+      return { id: result.rows[0]!.id };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/bank-accounts/:id",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.coa.manage")] },
+    async (request) => {
+      const body = bankAccountUpdateSchema.parse(request.body);
+      const existing = await pool.query(`SELECT id FROM bank_accounts WHERE id = $1 AND company_id = $2`, [
+        request.params.id,
+        request.companyId,
+      ]);
+      if (existing.rows.length === 0) throw new NotFoundError("bank account not found");
+      await pool.query(
+        `UPDATE bank_accounts SET bank_name = $1, account_name = $2, account_number = $3, iban = $4, is_active = $5 WHERE id = $6`,
+        [body.bankName, body.accountName, body.accountNumber ?? null, body.iban ?? null, body.isActive, request.params.id],
+      );
+      return { id: request.params.id };
+    },
+  );
 
   // ---- Journals (general ledger) ----
 

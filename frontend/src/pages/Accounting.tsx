@@ -118,6 +118,11 @@ interface FullBankAccount {
   id: string;
   bank_name: string;
   account_name: string;
+  account_number: string | null;
+  iban: string | null;
+  currency: string;
+  gl_account_id: string;
+  is_active: boolean;
 }
 
 interface StatementLine {
@@ -1440,9 +1445,197 @@ function NewReconciliationForm({ bankAccountId, onClose, onCreated }: { bankAcco
   );
 }
 
+function NewBankAccountForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const { data: accounts } = useApiList<Account>("/api/chart-of-accounts");
+  const [bankName, setBankName] = useState("");
+  const [accountName, setAccountName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [iban, setIban] = useState("");
+  const [currency, setCurrency] = useState("SAR");
+  const [glAccountId, setGlAccountId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Any non-header leaf account can be linked -- usually an asset account
+  // under Cash & Bank, but this app doesn't force a specific sub-tree, so
+  // the picker shows every leaf account rather than guessing which ones
+  // are "bank-shaped".
+  const leafAccounts = (accounts ?? []).filter((a) => !a.is_header);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/bank-accounts", {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          bankName,
+          accountName,
+          accountNumber: accountNumber || null,
+          iban: iban || null,
+          currency,
+          glAccountId,
+        },
+      });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create bank account");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Field label="Bank Name" required>
+        <TextInput required value={bankName} onChange={(e) => setBankName(e.target.value)} />
+      </Field>
+      <Field label="Account Name" required>
+        <TextInput required value={accountName} onChange={(e) => setAccountName(e.target.value)} />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Account Number">
+          <TextInput value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} />
+        </Field>
+        <Field label="IBAN">
+          <TextInput value={iban} onChange={(e) => setIban(e.target.value)} />
+        </Field>
+      </div>
+      <Field label="Currency" required>
+        <TextInput required value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={3} />
+      </Field>
+      <Field label="GL Account" required>
+        <SelectInput required value={glAccountId} onChange={(e) => setGlAccountId(e.target.value)}>
+          <option value="">Select...</option>
+          {leafAccounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.account_code} — {a.name_en}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      <p className="mb-3 text-xs text-slate-400">
+        The GL account and currency can't be changed after creation — reconciliations tie back to this specific account.
+      </p>
+      <FormActions error={error} submitting={submitting} submitLabel="Create Bank Account" />
+    </form>
+  );
+}
+
+function EditBankAccountForm({ account, onClose, onSaved }: { account: FullBankAccount; onClose: () => void; onSaved: () => void }) {
+  const { token, companyId } = useAuth();
+  const [bankName, setBankName] = useState(account.bank_name);
+  const [accountName, setAccountName] = useState(account.account_name);
+  const [accountNumber, setAccountNumber] = useState(account.account_number ?? "");
+  const [iban, setIban] = useState(account.iban ?? "");
+  const [isActive, setIsActive] = useState(account.is_active);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest(`/api/bank-accounts/${account.id}`, {
+        method: "POST",
+        token,
+        companyId,
+        body: { bankName, accountName, accountNumber: accountNumber || null, iban: iban || null, isActive },
+      });
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save bank account");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-2 text-xs text-slate-500">Currency {account.currency} — GL account and currency can't be changed here.</div>
+      <Field label="Bank Name" required>
+        <TextInput required value={bankName} onChange={(e) => setBankName(e.target.value)} />
+      </Field>
+      <Field label="Account Name" required>
+        <TextInput required value={accountName} onChange={(e) => setAccountName(e.target.value)} />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Account Number">
+          <TextInput value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} />
+        </Field>
+        <Field label="IBAN">
+          <TextInput value={iban} onChange={(e) => setIban(e.target.value)} />
+        </Field>
+      </div>
+      <label className="mb-3 flex items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+        Active
+      </label>
+      <FormActions error={error} submitting={submitting} submitLabel="Save Bank Account" />
+    </form>
+  );
+}
+
+function BankAccountsModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
+  const { data: accounts, reload } = useApiList<FullBankAccount>("/api/bank-accounts");
+  const [showNew, setShowNew] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  function refresh() {
+    reload();
+    onChanged();
+  }
+
+  return (
+    <Modal title="Bank Accounts" onClose={onClose}>
+      {!showNew ? (
+        <button onClick={() => setShowNew(true)} className="mb-4 flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700">
+          <Plus size={14} /> New Bank Account
+        </button>
+      ) : (
+        <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+          <NewBankAccountForm onClose={() => setShowNew(false)} onCreated={refresh} />
+        </div>
+      )}
+      <div className="space-y-2">
+        {accounts?.map((a) =>
+          editingId === a.id ? (
+            <EditBankAccountForm key={a.id} account={a} onClose={() => setEditingId(null)} onSaved={refresh} />
+          ) : (
+            <div key={a.id} className="flex items-center justify-between rounded-md border border-slate-100 px-3 py-2 text-sm">
+              <div>
+                <div className="font-medium text-slate-900">
+                  {a.bank_name} — {a.account_name}
+                </div>
+                <div className="text-xs text-slate-400">
+                  {a.currency}
+                  {a.account_number ? ` · ${a.account_number}` : ""}
+                  {!a.is_active ? " · inactive" : ""}
+                </div>
+              </div>
+              <button onClick={() => setEditingId(a.id)} className="text-xs font-medium text-brand-600 hover:text-brand-700">
+                Edit
+              </button>
+            </div>
+          ),
+        )}
+        {accounts?.length === 0 && !showNew && <p className="text-sm text-slate-400">No bank accounts yet.</p>}
+      </div>
+    </Modal>
+  );
+}
+
 function BankReconciliationTab() {
-  const { data: bankAccounts } = useApiList<FullBankAccount>("/api/bank-accounts");
+  const { data: bankAccounts, reload: reloadBankAccounts } = useApiList<FullBankAccount>("/api/bank-accounts");
   const [bankAccountId, setBankAccountId] = useState("");
+  const [showManageAccounts, setShowManageAccounts] = useState(false);
   useEffect(() => {
     if (bankAccounts && bankAccounts.length > 0 && !bankAccountId) setBankAccountId(bankAccounts[0]!.id);
   }, [bankAccounts, bankAccountId]);
@@ -1464,7 +1657,20 @@ function BankReconciliationTab() {
   }
 
   if (!bankAccounts || bankAccounts.length === 0) {
-    return <p className="text-sm text-slate-400">No bank accounts set up yet.</p>;
+    return (
+      <div>
+        <p className="mb-3 text-sm text-slate-400">No bank accounts set up yet.</p>
+        <button
+          onClick={() => setShowManageAccounts(true)}
+          className="flex items-center gap-1.5 rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600"
+        >
+          <Plus size={15} /> New Bank Account
+        </button>
+        {showManageAccounts && (
+          <BankAccountsModal onClose={() => setShowManageAccounts(false)} onChanged={reloadBankAccounts} />
+        )}
+      </div>
+    );
   }
 
   return (
@@ -1478,6 +1684,9 @@ function BankReconciliationTab() {
           ))}
         </SelectInput>
         <div className="flex gap-2">
+          <button onClick={() => setShowManageAccounts(true)} className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            Manage Accounts
+          </button>
           <button onClick={() => setShowAddLine(true)} className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
             <Plus size={15} /> Statement Line
           </button>
@@ -1571,6 +1780,9 @@ function BankReconciliationTab() {
         <Modal title="New Bank Reconciliation" onClose={() => setShowReconcile(false)}>
           <NewReconciliationForm bankAccountId={bankAccountId} onClose={() => setShowReconcile(false)} onCreated={reloadAll} />
         </Modal>
+      )}
+      {showManageAccounts && (
+        <BankAccountsModal onClose={() => setShowManageAccounts(false)} onChanged={reloadBankAccounts} />
       )}
     </div>
   );
