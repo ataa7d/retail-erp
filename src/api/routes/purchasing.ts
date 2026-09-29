@@ -492,6 +492,53 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ---- Reorder suggestions ----
+  // Turns the dashboard's passive low-stock alert into something
+  // actionable: for one store, every item below its reorder point,
+  // matched to whichever active supplier quotes it cheapest in
+  // supplier_item_prices (the cost catalog every PO already upserts into,
+  // see purchasingService.createPurchaseOrder). Grouped by supplier
+  // client-side, since a PO can only have one. An item nobody has ever
+  // quoted a price for comes back with supplier_id null -- the caller
+  // shows it as "needs a supplier price first" rather than silently
+  // dropping it.
+  app.get("/reorder-suggestions", { preHandler: app.authenticate }, async (request) => {
+    const query = z.object({ storeId: z.string().uuid() }).parse(request.query);
+    const store = await pool.query(`SELECT id FROM stores WHERE id = $1 AND company_id = $2`, [query.storeId, request.companyId]);
+    if (store.rows.length === 0) throw new NotFoundError("store not found");
+
+    const result = await pool.query(
+      `WITH low_stock AS (
+         SELECT iv.id AS item_variant_id, iv.variant_code, iv.color, iv.size, iv.reorder_point,
+                i.name_en AS item_name_en, i.name_ar AS item_name_ar,
+                COALESCE(sb.qty_on_hand, 0) AS qty_on_hand
+         FROM item_variants iv
+         JOIN items i ON i.id = iv.item_id
+         LEFT JOIN stock_balances sb ON sb.item_variant_id = iv.id AND sb.store_id = $2
+         WHERE iv.company_id = $1 AND iv.is_active = true AND iv.reorder_point > 0
+           AND COALESCE(sb.qty_on_hand, 0) < iv.reorder_point
+       ),
+       best_price AS (
+         SELECT DISTINCT ON (sip.item_variant_id)
+                sip.item_variant_id, sip.supplier_id, sip.unit_cost, sip.currency, sip.moq,
+                s.name_en AS supplier_name_en
+         FROM supplier_item_prices sip
+         JOIN suppliers s ON s.id = sip.supplier_id
+         WHERE sip.company_id = $1 AND sip.is_active = true
+         ORDER BY sip.item_variant_id, sip.unit_cost ASC
+       )
+       SELECT ls.item_variant_id, ls.variant_code, ls.color, ls.size, ls.reorder_point, ls.qty_on_hand,
+              ls.item_name_en, ls.item_name_ar,
+              bp.supplier_id, bp.supplier_name_en, bp.unit_cost, bp.currency, bp.moq,
+              GREATEST(ls.reorder_point - ls.qty_on_hand, COALESCE(bp.moq, 0)) AS suggested_qty
+       FROM low_stock ls
+       LEFT JOIN best_price bp ON bp.item_variant_id = ls.item_variant_id
+       ORDER BY ls.item_name_en`,
+      [request.companyId, query.storeId],
+    );
+    return result.rows;
+  });
+
   // ---- Supplier item prices (cost catalog) ----
   // Every purchase order also upserts this catalog (see
   // purchasingService.createPurchaseOrder) so it stays current with what

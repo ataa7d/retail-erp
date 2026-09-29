@@ -403,7 +403,21 @@ function QuickAddItemModal({
   );
 }
 
-function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+interface PoFormInitial {
+  supplierId: string;
+  storeId: string;
+  lines: PoLineDraft[];
+}
+
+function NewPurchaseOrderForm({
+  onClose,
+  onCreated,
+  initial,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+  initial?: PoFormInitial;
+}) {
   const { token, companyId } = useAuth();
   const baseCurrency = useBaseCurrency();
   const { data: suppliers } = useApiList<Supplier>("/api/suppliers");
@@ -413,16 +427,16 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
   const { options: variantOptions, reload: reloadVariants } = useVariantOptions();
   const [showQuickAdd, setShowQuickAdd] = useState(false);
 
-  const [supplierId, setSupplierId] = useState("");
-  const [storeId, setStoreId] = useState("");
+  const [supplierId, setSupplierId] = useState(initial?.supplierId ?? "");
+  const [storeId, setStoreId] = useState(initial?.storeId ?? "");
   const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [orderDate, setOrderDate] = useState(new Date().toISOString().slice(0, 10));
   const [expectedDate, setExpectedDate] = useState("");
   const [currency, setCurrency] = useState(baseCurrency);
   const [exchangeRate, setExchangeRate] = useState("1");
-  const [lines, setLines] = useState<PoLineDraft[]>([
-    { itemVariantId: "", qty: "1", unitPrice: "0", vatRate: "15", priceIncludesVat: false },
-  ]);
+  const [lines, setLines] = useState<PoLineDraft[]>(
+    initial?.lines ?? [{ itemVariantId: "", qty: "1", unitPrice: "0", vatRate: "15", priceIncludesVat: false }],
+  );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [supplierPrices, setSupplierPrices] = useState<SupplierItemPrice[] | null>(null);
@@ -436,6 +450,16 @@ function NewPurchaseOrderForm({ onClose, onCreated }: { onClose: () => void; onC
     }
     apiRequest<SupplierItemPrice[]>(`/api/supplier-item-prices?supplierId=${supplierId}`, { token, companyId }).then(setSupplierPrices);
   }, [supplierId, token, companyId]);
+
+  // Pre-filled from reorder suggestions: the supplier picker's own
+  // onChange (selectSupplier) never fires for an initial value, so its
+  // currency default has to be applied separately once the supplier list
+  // has loaded.
+  useEffect(() => {
+    if (!initial?.supplierId || !suppliers) return;
+    const supplier = suppliers.find((s) => s.id === initial.supplierId);
+    if (supplier) setCurrency(supplier.currency);
+  }, [suppliers]);
 
   function selectSupplier(id: string) {
     setSupplierId(id);
@@ -2207,6 +2231,156 @@ function SuppliersTab() {
   );
 }
 
+interface ReorderSuggestion {
+  item_variant_id: string;
+  variant_code: string;
+  color: string | null;
+  size: string | null;
+  reorder_point: string;
+  qty_on_hand: string;
+  item_name_en: string;
+  item_name_ar: string;
+  supplier_id: string | null;
+  supplier_name_en: string | null;
+  unit_cost: string | null;
+  currency: string | null;
+  moq: string | null;
+  suggested_qty: string;
+}
+
+function ReorderSuggestionsTab() {
+  const { token, companyId } = useAuth();
+  const { data: stores } = useApiList<Store>("/api/stores");
+  const [storeId, setStoreId] = useState("");
+  const [suggestions, setSuggestions] = useState<ReorderSuggestion[] | null>(null);
+  const [qtyOverrides, setQtyOverrides] = useState<Record<string, string>>({});
+  const [poInitial, setPoInitial] = useState<PoFormInitial | null>(null);
+
+  function load() {
+    if (!storeId || !token || !companyId) {
+      setSuggestions(null);
+      return;
+    }
+    apiRequest<ReorderSuggestion[]>(`/api/reorder-suggestions?storeId=${storeId}`, { token, companyId }).then((rows) => {
+      setSuggestions(rows);
+      setQtyOverrides(Object.fromEntries(rows.map((r) => [r.item_variant_id, r.suggested_qty])));
+    });
+  }
+
+  useEffect(load, [storeId, token, companyId]);
+
+  const withSupplier = (suggestions ?? []).filter((s) => s.supplier_id);
+  const withoutSupplier = (suggestions ?? []).filter((s) => !s.supplier_id);
+  const groups = new Map<string, { supplierId: string; supplierName: string; rows: ReorderSuggestion[] }>();
+  for (const row of withSupplier) {
+    const key = row.supplier_id!;
+    if (!groups.has(key)) groups.set(key, { supplierId: key, supplierName: row.supplier_name_en!, rows: [] });
+    groups.get(key)!.rows.push(row);
+  }
+
+  function openPoForGroup(group: { supplierId: string; rows: ReorderSuggestion[] }) {
+    setPoInitial({
+      supplierId: group.supplierId,
+      storeId,
+      lines: group.rows.map((r) => ({
+        itemVariantId: r.item_variant_id,
+        qty: qtyOverrides[r.item_variant_id] ?? r.suggested_qty,
+        unitPrice: r.unit_cost ?? "0",
+        vatRate: "15",
+        priceIncludesVat: false,
+      })),
+    });
+  }
+
+  return (
+    <div>
+      <Field label="Store">
+        <SelectInput value={storeId} onChange={(e) => setStoreId(e.target.value)} className="max-w-xs">
+          <option value="">Select a store...</option>
+          {stores?.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name_en}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+
+      {!storeId && <p className="mt-4 text-sm text-slate-400">Select a store to see what's below its reorder point there.</p>}
+
+      {storeId && suggestions && suggestions.length === 0 && (
+        <p className="mt-4 text-sm text-slate-400">Nothing at this store is below its reorder point right now.</p>
+      )}
+
+      {storeId &&
+        [...groups.values()].map((group) => (
+          <div key={group.supplierId} className="mt-4 rounded-lg border border-slate-200 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-sm font-medium text-slate-700">{group.supplierName}</div>
+              <button
+                onClick={() => openPoForGroup(group)}
+                className="rounded-md bg-brand-500 px-3 py-1 text-xs font-medium text-white hover:bg-brand-600"
+              >
+                Create PO ({group.rows.length} item{group.rows.length === 1 ? "" : "s"})
+              </button>
+            </div>
+            <div className="space-y-1.5">
+              {group.rows.map((r) => (
+                <div key={r.item_variant_id} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="min-w-0 truncate text-slate-600">
+                    {r.item_name_en} — {r.variant_code}
+                    <span className="text-xs text-slate-400">
+                      {" "}
+                      (on hand {r.qty_on_hand}, reorder point {r.reorder_point}, {r.unit_cost} {r.currency}/unit
+                      {r.moq && Number(r.moq) > 0 ? `, MOQ ${r.moq}` : ""})
+                    </span>
+                  </span>
+                  <div className="w-20 flex-none">
+                    <TextInput
+                      type="number"
+                      min={0.001}
+                      step="0.001"
+                      value={qtyOverrides[r.item_variant_id] ?? r.suggested_qty}
+                      onChange={(e) => setQtyOverrides((prev) => ({ ...prev, [r.item_variant_id]: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+      {storeId && withoutSupplier.length > 0 && (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <div className="mb-1 text-sm font-medium text-amber-800">No supplier price on file — can't be auto-added to a PO</div>
+          <p className="mb-2 text-xs text-amber-700">
+            Add one under Purchasing → Suppliers → cost catalog, or add this item to a PO manually.
+          </p>
+          <div className="space-y-1 text-sm text-amber-900">
+            {withoutSupplier.map((r) => (
+              <div key={r.item_variant_id}>
+                {r.item_name_en} — {r.variant_code} (on hand {r.qty_on_hand}, reorder point {r.reorder_point})
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {poInitial && (
+        <Modal title="New Purchase Order" onClose={() => setPoInitial(null)}>
+          <NewPurchaseOrderForm
+            initial={poInitial}
+            onClose={() => setPoInitial(null)}
+            onCreated={() => {
+              setPoInitial(null);
+              load();
+            }}
+          />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 export default function Purchasing() {
   const { t } = useTranslation();
   return (
@@ -2215,6 +2389,7 @@ export default function Purchasing() {
       <Tabs
         tabs={[
           { key: "requisitions", label: "Requisitions", content: <RequisitionsTab /> },
+          { key: "reorder", label: "Reorder Suggestions", content: <ReorderSuggestionsTab /> },
           { key: "pos", label: "Purchase Orders", content: <PurchaseOrdersTab /> },
           { key: "receipts", label: "Goods Receipts", content: <GoodsReceiptsTab /> },
           { key: "invoices", label: "Supplier Invoices", content: <SupplierInvoicesTab /> },
