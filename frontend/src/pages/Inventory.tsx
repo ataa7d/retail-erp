@@ -788,6 +788,10 @@ function CountStocktakeForm({ stocktakeId, onClose, onPosted }: { stocktakeId: s
   const [counts, setCounts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const barcodeMap = useBarcodeMap();
+  const [scanValue, setScanValue] = useState("");
+  const [hasScanned, setHasScanned] = useState(false);
+  const [scanMessage, setScanMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     if (!token || !companyId) return;
@@ -798,6 +802,36 @@ function CountStocktakeForm({ stocktakeId, onClose, onPosted }: { stocktakeId: s
       setCounts(init);
     });
   }, [stocktakeId, token, companyId]);
+
+  // Same zero-then-count-up behavior as goods-receipt scanning: the
+  // default counts assume nothing changed (counted = system qty), which is
+  // exactly backwards once you're physically walking the aisle scanning
+  // every unit -- so the first scan on this stocktake zeroes every line
+  // and counts up from there. A barcode that isn't one of this stocktake's
+  // lines is rejected rather than silently ignored, since a stocktake only
+  // ever counts the specific items it was created against.
+  function handleScan(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== "Enter" || !detail) return;
+    const trimmed = scanValue.trim();
+    if (!trimmed) return;
+    setScanValue("");
+
+    const found = barcodeMap.get(trimmed);
+    if (!found) {
+      setScanMessage({ type: "error", text: `Barcode "${trimmed}" is not recognized.` });
+      return;
+    }
+    const line = detail.lines.find((l) => l.item_variant_id === found.variantId);
+    if (!line) {
+      setScanMessage({ type: "error", text: `${found.label} is not part of this stocktake.` });
+      return;
+    }
+    const base = hasScanned ? counts : Object.fromEntries(detail.lines.map((l) => [l.id, "0"]));
+    const current = Number(base[line.id] ?? "0");
+    setCounts({ ...base, [line.id]: String(current + 1) });
+    setHasScanned(true);
+    setScanMessage({ type: "success", text: `${found.label}: ${current + 1}` });
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -827,6 +861,20 @@ function CountStocktakeForm({ stocktakeId, onClose, onPosted }: { stocktakeId: s
 
   return (
     <form onSubmit={handleSubmit}>
+      <Field label="Scan to count">
+        <input
+          type="text"
+          value={scanValue}
+          onChange={(e) => setScanValue(e.target.value)}
+          onKeyDown={handleScan}
+          placeholder="Scan barcode, then Enter..."
+          className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+        />
+      </Field>
+      {scanMessage && (
+        <p className={`-mt-2 mb-2 text-xs ${scanMessage.type === "error" ? "text-red-600" : "text-emerald-600"}`}>{scanMessage.text}</p>
+      )}
+      <p className="-mt-1 mb-3 text-xs text-slate-400">The first scan resets every count below to zero and counts up as you scan.</p>
       <div className="mb-3 space-y-2">
         {detail.lines.map((line) => {
           const counted = Number(counts[line.id] ?? 0);
