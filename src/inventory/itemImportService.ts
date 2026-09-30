@@ -168,12 +168,18 @@ export async function importItemRow(client: Client, p: ImportItemRowParams): Pro
     itemId = existingItem.rows[0]!.id;
     itemCode = row.itemCode!;
   } else {
-    if (!row.nameEn || !row.nameAr) {
-      throw new Error(`item "${row.itemCode ?? row.variantCode}" does not exist yet and needs name_en and name_ar to be created`);
+    if (!row.nameEn) {
+      throw new Error(`item "${row.itemCode ?? row.variantCode}" does not exist yet and needs name_en to be created`);
     }
     if (!row.baseUnitCode) {
       throw new Error(`item "${row.itemCode ?? row.variantCode}" does not exist yet and needs base_unit_code to be created`);
     }
+    // name_ar falls back to name_en when a bulk sheet leaves it blank --
+    // an Arabic name is still required on the items table (ZATCA invoices
+    // are bilingual), so a row can't be created with no Arabic name at
+    // all, but a sheet that hasn't been translated yet shouldn't be
+    // blocked on that alone.
+    const nameAr = row.nameAr || row.nameEn;
     itemCode = row.itemCode ?? (await nextInternalItemCode(client, companyId));
     const baseUnitId = await lookupIdByCode(client, "units_of_measure", companyId, row.baseUnitCode, "unit of measure");
     const brandId = row.brandCode ? await lookupIdByCode(client, "brands", companyId, row.brandCode, "brand") : null;
@@ -186,7 +192,7 @@ export async function importItemRow(client: Client, p: ImportItemRowParams): Pro
                           default_tax_code_id, material, country_of_origin, supplier_style_number)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
       [
-        companyId, itemCode, row.nameEn, row.nameAr, brandId, categoryId, seasonId, row.itemYear ?? null,
+        companyId, itemCode, row.nameEn, nameAr, brandId, categoryId, seasonId, row.itemYear ?? null,
         taxCodeId, row.material ?? null, row.countryOfOrigin ?? null, row.supplierStyleNumber ?? null,
       ],
     );

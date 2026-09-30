@@ -570,8 +570,9 @@ function BulkUploadItemsModal({
     <Modal title="Bulk Upload New Items" onClose={onClose}>
       <p className="mb-3 text-sm text-slate-600">
         Upload a CSV of new items to create them and add each one straight into this PO's lines, using the file's own
-        order_qty and standard_cost. Leave item_code and barcode blank and the system generates both — variant_code is
-        still required.
+        order_qty and standard_cost. Leave item_code and barcode blank and the system generates both — variant_code and
+        name_en are still required; a blank name_ar falls back to name_en so a sheet that hasn't been translated yet
+        isn't blocked.
       </p>
       <button
         type="button"

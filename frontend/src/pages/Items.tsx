@@ -773,7 +773,8 @@ function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImpor
       <p className="mb-3 text-sm text-slate-600">
         Upload a CSV to create many items/variants at once. Each row creates a new item the first time its item_code is
         seen (or adds a variant to an existing one). Leave item_code blank to have one generated automatically — an
-        internal barcode is always generated automatically for every new variant. variant_code is still required.
+        internal barcode is always generated automatically for every new variant. variant_code and name_en are still
+        required; a blank name_ar falls back to name_en so a sheet that hasn't been translated yet isn't blocked.
       </p>
       <button
         type="button"

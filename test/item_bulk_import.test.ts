@@ -157,6 +157,22 @@ describe("bulk item import", () => {
     );
   });
 
+  it("rejects creating a new item without name_en", async () => {
+    const row = baseRow({ nameEn: undefined });
+    await expect(withTransaction((c) => importItemRow(c, { companyId, createdBy: userId, row }), userId)).rejects.toThrow(
+      /name_en/,
+    );
+  });
+
+  it("falls back name_ar to name_en when a row leaves it blank", async () => {
+    const row = baseRow({ nameEn: "Untranslated Item", nameAr: undefined });
+    const result = await withTransaction((c) => importItemRow(c, { companyId, createdBy: userId, row }), userId);
+
+    const item = await client.query(`SELECT name_en, name_ar FROM items WHERE id = $1`, [result.itemId]);
+    expect(item.rows[0].name_en).toBe("Untranslated Item");
+    expect(item.rows[0].name_ar).toBe("Untranslated Item");
+  });
+
   it("sets prices across multiple price levels and books opening stock", async () => {
     const row = baseRow({ standardCost: 10, retailPrice: 25, wholesalePrice: 18, storeCode: "S1", openingQty: 40 });
     const result = await withTransaction((c) => importItemRow(c, { companyId, createdBy: userId, row }), userId);
