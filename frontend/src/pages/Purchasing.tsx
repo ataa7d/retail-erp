@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { ShoppingCart, Truck, Plus, Trash2, PackageCheck, ReceiptText, ClipboardList, Undo2 } from "lucide-react";
+import { ShoppingCart, Truck, Plus, Trash2, PackageCheck, ReceiptText, ClipboardList, Undo2, Download, Upload } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
-import { apiRequest, ApiError } from "../lib/api";
+import { apiRequest, ApiError, uploadFile } from "../lib/api";
 import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
@@ -409,6 +409,215 @@ interface PoFormInitial {
   lines: PoLineDraft[];
 }
 
+// Minimal RFC4180-ish parser (quoted fields, escaped "" inside quotes) --
+// good enough for a spreadsheet export, no dependency needed for something
+// this small. Used only to recover the two PO-specific columns
+// (order_qty, order_vat_rate) that POST /items/bulk-import has no reason
+// to know about, since item creation and "how much of this to order" are
+// different concerns -- the same file is parsed here purely to read those
+// two extra columns back out, keyed by item_code + variant_code so they
+// can be matched against the item-creation endpoint's own per-row results.
+function parseCsv(text: string): Array<Record<string, string>> {
+  const rows: string[][] = [];
+  let field = "";
+  let row: string[] = [];
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += c;
+      }
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ",") {
+      row.push(field);
+      field = "";
+    } else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(field);
+      field = "";
+      if (row.some((v) => v !== "")) rows.push(row);
+      row = [];
+    } else {
+      field += c;
+    }
+  }
+  if (field !== "" || row.length > 0) {
+    row.push(field);
+    if (row.some((v) => v !== "")) rows.push(row);
+  }
+  if (rows.length === 0) return [];
+  const header = rows[0]!.map((h) => h.trim());
+  return rows.slice(1).map((r) => Object.fromEntries(header.map((h, i) => [h, (r[i] ?? "").trim()])));
+}
+
+const PO_UPLOAD_TEMPLATE_HEADER = [
+  "item_code", "name_en", "name_ar", "brand_code", "category_code", "season_code", "item_year",
+  "material", "country_of_origin", "supplier_style_number", "base_unit_code", "default_tax_code",
+  "variant_code", "color", "size", "barcode", "standard_cost", "weight_kg", "reorder_point",
+  "order_qty", "order_vat_rate",
+];
+
+const PO_UPLOAD_TEMPLATE_EXAMPLE = [
+  "IT-1001", "Basic Tee", "تيشيرت أساسي", "GEN", "APPAREL", "SS26", "2026",
+  "100% Cotton", "Bangladesh", "SUP-001", "PC", "VAT15",
+  "IT-1001-BLK-M", "Black", "M", "", "15.00", "0.200", "10",
+  "100", "15",
+];
+
+function downloadPoUploadTemplate() {
+  const csv = `${PO_UPLOAD_TEMPLATE_HEADER.join(",")}\n${PO_UPLOAD_TEMPLATE_EXAMPLE.join(",")}\n`;
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "po_new_items_template.csv";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+interface PoUploadRowResult {
+  row: number;
+  itemCode: string;
+  variantCode: string;
+  status: "created" | "error";
+  message?: string;
+  internalBarcode?: string;
+  variantId?: string;
+}
+
+// Creates every new item/variant in the file (reusing the exact same
+// POST /items/bulk-import the Items screen's own bulk import uses -- same
+// validation, same auto-barcode generation, same "adds a variant to an
+// existing item_code instead of erroring" behavior), then turns every row
+// that succeeded straight into a PO line using that row's own order_qty /
+// standard_cost / order_vat_rate, so one upload takes you from "a
+// spreadsheet of items I need to order" to a reviewable PO draft in one
+// step -- no separate trip to add each one to the order afterward.
+function BulkUploadItemsModal({
+  onClose,
+  onImported,
+}: {
+  onClose: () => void;
+  onImported: (lines: PoLineDraft[], options: Array<{ id: string; label: string }>) => void;
+}) {
+  const { token, companyId } = useAuth();
+  const [file, setFile] = useState<File | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [summary, setSummary] = useState<{ created: number; failed: number; results: PoUploadRowResult[] } | null>(null);
+
+  async function handleUpload() {
+    if (!file) {
+      setError("Choose a CSV file first.");
+      return;
+    }
+    setError(null);
+    setUploading(true);
+    setSummary(null);
+    try {
+      const [rows, result] = await Promise.all([
+        file.text().then(parseCsv),
+        uploadFile<{ totalRows: number; created: number; failed: number; results: PoUploadRowResult[] }>(
+          "/api/items/bulk-import",
+          file,
+          { token, companyId },
+        ),
+      ]);
+      setSummary(result);
+
+      const byKey = new Map(rows.map((r) => [`${r.item_code}::${r.variant_code}`, r]));
+      const newLines: PoLineDraft[] = [];
+      const newOptions: Array<{ id: string; label: string }> = [];
+      for (const r of result.results) {
+        if (r.status !== "created" || !r.variantId) continue;
+        const csvRow = byKey.get(`${r.itemCode}::${r.variantCode}`);
+        newLines.push({
+          itemVariantId: r.variantId,
+          qty: csvRow?.order_qty || "1",
+          unitPrice: csvRow?.standard_cost || "0",
+          vatRate: csvRow?.order_vat_rate || "15",
+          priceIncludesVat: false,
+        });
+        const detail = [csvRow?.color, csvRow?.size].filter(Boolean).join(" / ");
+        newOptions.push({ id: r.variantId, label: `${csvRow?.name_en ?? r.itemCode} — ${r.variantCode}${detail ? ` (${detail})` : ""}` });
+      }
+      if (newLines.length > 0) onImported(newLines, newOptions);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to import file");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const failedRows = summary?.results.filter((r) => r.status === "error") ?? [];
+
+  return (
+    <Modal title="Bulk Upload New Items" onClose={onClose}>
+      <p className="mb-3 text-sm text-slate-600">
+        Upload a CSV of new items to create them (with auto-generated barcodes) and add each one straight into this PO's
+        lines, using the file's own order_qty and standard_cost.
+      </p>
+      <button
+        type="button"
+        onClick={downloadPoUploadTemplate}
+        className="mb-4 flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+      >
+        <Download size={14} /> Download CSV template
+      </button>
+      <input
+        type="file"
+        accept=".csv,text/csv"
+        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        className="mb-3 block w-full text-sm text-slate-600"
+      />
+      {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+      <button
+        type="button"
+        onClick={handleUpload}
+        disabled={uploading}
+        className="flex w-full items-center justify-center gap-1.5 rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+      >
+        <Upload size={14} /> {uploading ? "Uploading..." : "Upload & Add to PO"}
+      </button>
+      {summary && (
+        <div className="mt-4">
+          <p className="mb-2 text-sm text-slate-700">
+            {summary.created} item{summary.created === 1 ? "" : "s"} created and added to the PO
+            {summary.failed > 0 ? `, ${summary.failed} row${summary.failed === 1 ? "" : "s"} failed` : ""}.
+          </p>
+          {failedRows.length > 0 && (
+            <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-red-100 bg-red-50 p-2 text-xs text-red-700">
+              {failedRows.map((r) => (
+                <div key={r.row}>
+                  Row {r.row} ({r.itemCode || "?"}/{r.variantCode || "?"}): {r.message}
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-3 w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Done
+          </button>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function NewPurchaseOrderForm({
   onClose,
   onCreated,
@@ -426,6 +635,7 @@ function NewPurchaseOrderForm({
   const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
   const { options: variantOptions, reload: reloadVariants } = useVariantOptions();
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
 
   const [supplierId, setSupplierId] = useState(initial?.supplierId ?? "");
   const [storeId, setStoreId] = useState(initial?.storeId ?? "");
@@ -632,6 +842,9 @@ function NewPurchaseOrderForm({
         <button type="button" onClick={() => setShowQuickAdd(true)} className="flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
           <Plus size={14} /> New item
         </button>
+        <button type="button" onClick={() => setShowBulkUpload(true)} className="flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
+          <Upload size={14} /> Bulk upload items
+        </button>
       </div>
       <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
         Estimated Total: {formatMoney(totalGross, currency)}
@@ -655,6 +868,19 @@ function NewPurchaseOrderForm({
               return prev.map((l, i) => (i === emptyIndex ? { ...l, itemVariantId: variant.id } : l));
             }
             return [...prev, { itemVariantId: variant.id, qty: "1", unitPrice: "0", vatRate: "15", priceIncludesVat: false }];
+          });
+        }}
+      />
+    )}
+    {showBulkUpload && (
+      <BulkUploadItemsModal
+        onClose={() => setShowBulkUpload(false)}
+        onImported={(newLines, newOptions) => {
+          setExtraVariantOptions((prev) => [...prev, ...newOptions]);
+          reloadVariants();
+          setLines((prev) => {
+            const withoutBlankStarter = prev.filter((l) => l.itemVariantId);
+            return [...withoutBlankStarter, ...newLines];
           });
         }}
       />

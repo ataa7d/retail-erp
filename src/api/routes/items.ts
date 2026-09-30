@@ -479,7 +479,15 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
         return n;
       }
 
-      const results: Array<{ row: number; itemCode: string; variantCode: string; status: "created" | "error"; message?: string; internalBarcode?: string }> = [];
+      const results: Array<{
+        row: number;
+        itemCode: string;
+        variantCode: string;
+        status: "created" | "error";
+        message?: string;
+        internalBarcode?: string;
+        variantId?: string;
+      }> = [];
       let created = 0;
       let failed = 0;
 
@@ -527,7 +535,14 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
             request.authUser.id,
           );
           created++;
-          results.push({ row: rowNumber, itemCode, variantCode, status: "created", internalBarcode: outcome.internalBarcode });
+          results.push({
+            row: rowNumber,
+            itemCode,
+            variantCode,
+            status: "created",
+            internalBarcode: outcome.internalBarcode,
+            variantId: outcome.variantId,
+          });
         } catch (err) {
           failed++;
           results.push({ row: rowNumber, itemCode, variantCode, status: "error", message: err instanceof Error ? err.message : "unknown error" });
