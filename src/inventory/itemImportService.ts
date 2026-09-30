@@ -13,7 +13,11 @@ import type { Client } from "pg";
 import { recordStockMovement } from "./inventoryService.js";
 
 export interface ItemImportRow {
-  itemCode: string;
+  // Optional: leave blank to have the system generate one (same "20xx..."
+  // -style internal sequence used for barcodes, just a different series --
+  // see nextInternalItemCode). Still respected when supplied, so an
+  // existing catalog's own item_code convention keeps working unchanged.
+  itemCode?: string;
   variantCode: string;
   nameEn?: string;
   nameAr?: string;
@@ -49,6 +53,7 @@ export interface ImportItemRowParams {
 
 export interface ImportItemRowResult {
   itemId: string;
+  itemCode: string;
   variantId: string;
   internalBarcode: string;
 }
@@ -93,6 +98,34 @@ export async function nextInternalBarcode(client: Client, companyId: string): Pr
   return body + ean13CheckDigit(body).toString();
 }
 
+/**
+ * Same gap-free per-company sequence pattern as nextInternalBarcode, its
+ * own document_type so the two counters never share numbers. Only used
+ * when a row/form doesn't supply its own item_code -- an existing
+ * catalog's own coding convention is never overridden.
+ */
+export async function nextInternalItemCode(client: Client, companyId: string): Promise<string> {
+  await client.query(
+    `INSERT INTO number_sequences (company_id, document_type, fiscal_year, prefix, padding)
+     VALUES ($1, 'internal_item_code', 0, 'ITM-', 6)
+     ON CONFLICT (company_id, document_type, fiscal_year) DO NOTHING`,
+    [companyId],
+  );
+  const seq = await client.query<{ next_value: string }>(
+    `SELECT next_value FROM number_sequences
+     WHERE company_id = $1 AND document_type = 'internal_item_code' AND fiscal_year = 0
+     FOR UPDATE`,
+    [companyId],
+  );
+  const next = BigInt(seq.rows[0]!.next_value);
+  await client.query(
+    `UPDATE number_sequences SET next_value = next_value + 1
+     WHERE company_id = $1 AND document_type = 'internal_item_code' AND fiscal_year = 0`,
+    [companyId],
+  );
+  return `ITM-${next.toString().padStart(6, "0")}`;
+}
+
 async function lookupIdByCode(
   client: Client,
   table: string,
@@ -117,25 +150,31 @@ const PRICE_LIST_COLUMNS: Array<[code: string, pick: (row: ItemImportRow) => num
 export async function importItemRow(client: Client, p: ImportItemRowParams): Promise<ImportItemRowResult> {
   const { companyId, row } = p;
 
-  const existingItem = await client.query<{ id: string }>(`SELECT id FROM items WHERE company_id = $1 AND item_code = $2`, [
-    companyId,
-    row.itemCode,
-  ]);
+  // No item_code supplied -- this row can only mean "make me a new item",
+  // never "add a variant to an existing one" (there's nothing to look up
+  // by), so the existing-item lookup is skipped entirely and a code is
+  // generated for it below, same as the barcode already is.
+  const existingItem = row.itemCode
+    ? await client.query<{ id: string }>(`SELECT id FROM items WHERE company_id = $1 AND item_code = $2`, [companyId, row.itemCode])
+    : { rows: [] as { id: string }[] };
 
   let itemId: string;
+  let itemCode: string;
   if (existingItem.rows.length > 0) {
     // Item already exists -- this row is just adding another variant to it.
     // Item-level fields (name, brand, material, ...) are never overwritten
     // from a bulk sheet, only set at creation time, so a stray or blank
     // cell in a later row can't silently clobber curated item data.
     itemId = existingItem.rows[0]!.id;
+    itemCode = row.itemCode!;
   } else {
     if (!row.nameEn || !row.nameAr) {
-      throw new Error(`item "${row.itemCode}" does not exist yet and needs name_en and name_ar to be created`);
+      throw new Error(`item "${row.itemCode ?? row.variantCode}" does not exist yet and needs name_en and name_ar to be created`);
     }
     if (!row.baseUnitCode) {
-      throw new Error(`item "${row.itemCode}" does not exist yet and needs base_unit_code to be created`);
+      throw new Error(`item "${row.itemCode ?? row.variantCode}" does not exist yet and needs base_unit_code to be created`);
     }
+    itemCode = row.itemCode ?? (await nextInternalItemCode(client, companyId));
     const baseUnitId = await lookupIdByCode(client, "units_of_measure", companyId, row.baseUnitCode, "unit of measure");
     const brandId = row.brandCode ? await lookupIdByCode(client, "brands", companyId, row.brandCode, "brand") : null;
     const categoryId = row.categoryCode ? await lookupIdByCode(client, "categories", companyId, row.categoryCode, "category") : null;
@@ -147,7 +186,7 @@ export async function importItemRow(client: Client, p: ImportItemRowParams): Pro
                           default_tax_code_id, material, country_of_origin, supplier_style_number)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
       [
-        companyId, row.itemCode, row.nameEn, row.nameAr, brandId, categoryId, seasonId, row.itemYear ?? null,
+        companyId, itemCode, row.nameEn, row.nameAr, brandId, categoryId, seasonId, row.itemYear ?? null,
         taxCodeId, row.material ?? null, row.countryOfOrigin ?? null, row.supplierStyleNumber ?? null,
       ],
     );
@@ -227,5 +266,5 @@ export async function importItemRow(client: Client, p: ImportItemRowParams): Pro
     });
   }
 
-  return { itemId, variantId, internalBarcode };
+  return { itemId, itemCode, variantId, internalBarcode };
 }

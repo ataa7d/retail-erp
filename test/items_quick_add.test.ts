@@ -156,4 +156,24 @@ describe("POST /items/quick-add", () => {
     expect(dup.statusCode).toBe(400);
     expect(dup.json().error).toMatch(/already exists/);
   });
+
+  it("auto-generates an item code when none is supplied", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/items/quick-add",
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+      payload: {
+        nameEn: "Auto Code Item",
+        nameAr: "صنف برمز تلقائي",
+        baseUnitOfMeasureId: baseUnitId,
+        variantCode: "QA-AUTO-V1",
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.itemCode).toMatch(/^ITM-\d{6}$/);
+
+    const item = await client.query(`SELECT item_code FROM items WHERE id = $1`, [body.itemId]);
+    expect(item.rows[0].item_code).toBe(body.itemCode);
+  });
 });

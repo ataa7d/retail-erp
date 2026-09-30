@@ -3,7 +3,7 @@ import { z } from "zod";
 import { parse } from "csv-parse/sync";
 import { pool, withTransaction } from "../db.js";
 import { NotFoundError, BusinessRuleError } from "../errors.js";
-import { importItemRow, nextInternalBarcode, type ItemImportRow } from "../../inventory/itemImportService.js";
+import { importItemRow, nextInternalBarcode, nextInternalItemCode, type ItemImportRow } from "../../inventory/itemImportService.js";
 
 const listQuerySchema = z.object({
   updatedSince: z.string().datetime().optional(),
@@ -67,7 +67,7 @@ const createSchema = z.object({
 });
 
 const quickAddSchema = z.object({
-  itemCode: z.string().min(1),
+  itemCode: z.string().min(1).nullable().optional(),
   nameEn: z.string().min(1),
   nameAr: z.string().min(1),
   baseUnitOfMeasureId: z.string().uuid(),
@@ -180,18 +180,23 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = quickAddSchema.parse(request.body);
       const result = await withTransaction(async (client) => {
-        const existingItem = await client.query<{ id: string }>(
-          `SELECT id FROM items WHERE company_id = $1 AND item_code = $2`,
-          [request.companyId, body.itemCode],
-        );
+        const existingItem = body.itemCode
+          ? await client.query<{ id: string }>(`SELECT id FROM items WHERE company_id = $1 AND item_code = $2`, [
+              request.companyId,
+              body.itemCode,
+            ])
+          : { rows: [] as { id: string }[] };
         let itemId: string;
+        let itemCode: string;
         if (existingItem.rows.length > 0) {
           itemId = existingItem.rows[0]!.id;
+          itemCode = body.itemCode!;
         } else {
+          itemCode = body.itemCode ?? (await nextInternalItemCode(client, request.companyId));
           const item = await client.query<{ id: string }>(
             `INSERT INTO items (company_id, item_code, name_en, name_ar, brand_id, category_id)
              VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-            [request.companyId, body.itemCode, body.nameEn, body.nameAr, body.brandId ?? null, body.categoryId ?? null],
+            [request.companyId, itemCode, body.nameEn, body.nameAr, body.brandId ?? null, body.categoryId ?? null],
           );
           itemId = item.rows[0]!.id;
           await client.query(
@@ -225,7 +230,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
           [request.companyId, variantId, baseUnitId, internalBarcode],
         );
 
-        return { itemId, variantId, internalBarcode };
+        return { itemId, itemCode, variantId, internalBarcode };
       }, request.authUser.id);
       reply.status(201);
       return result;
@@ -498,11 +503,11 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
         const variantCode = raw.variant_code?.trim() ?? "";
 
         try {
-          if (!itemCode || !variantCode) {
-            throw new Error("item_code and variant_code are required");
+          if (!variantCode) {
+            throw new Error("variant_code is required");
           }
           const row: ItemImportRow = {
-            itemCode,
+            itemCode: itemCode || undefined,
             variantCode,
             nameEn: raw.name_en || undefined,
             nameAr: raw.name_ar || undefined,
@@ -537,7 +542,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
           created++;
           results.push({
             row: rowNumber,
-            itemCode,
+            itemCode: outcome.itemCode,
             variantCode,
             status: "created",
             internalBarcode: outcome.internalBarcode,

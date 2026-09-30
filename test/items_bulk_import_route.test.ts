@@ -90,4 +90,31 @@ describe("POST /items/bulk-import", () => {
     const row = await client.query(`SELECT id FROM item_variants WHERE id = $1`, [body.results[0].variantId]);
     expect(row.rows).toHaveLength(1);
   });
+
+  it("auto-generates item_code for a row that leaves it blank", async () => {
+    const csv = [
+      "item_code,name_en,name_ar,base_unit_code,variant_code,standard_cost",
+      ",Auto Code Route Item,صنف برمز تلقائي,PC,RT-BULK-AUTO-V1,9.00",
+    ].join("\n");
+
+    const form = new FormData();
+    form.append("file", new Blob([csv], { type: "text/csv" }), "import.csv");
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/items/bulk-import",
+      headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
+      payload: form,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.created).toBe(1);
+    expect(body.results[0].status).toBe("created");
+    expect(body.results[0].itemCode).toMatch(/^ITM-\d{6}$/);
+
+    const item = await client.query(`SELECT item_code FROM items i JOIN item_variants v ON v.item_id = i.id WHERE v.id = $1`, [
+      body.results[0].variantId,
+    ]);
+    expect(item.rows[0].item_code).toBe(body.results[0].itemCode);
+  });
 });
