@@ -23,6 +23,9 @@ import NewSupplierInvoicePage from "./pages/purchasing/NewSupplierInvoicePage";
 import NewPurchaseReturnPage from "./pages/purchasing/NewPurchaseReturnPage";
 import Reports from "./pages/Reports";
 import Accounting from "./pages/Accounting";
+import NewJournalPage from "./pages/accounting/NewJournalPage";
+import NewReceiptPage from "./pages/accounting/NewReceiptPage";
+import NewPaymentPage from "./pages/accounting/NewPaymentPage";
 import Hr from "./pages/Hr";
 import Assets from "./pages/Assets";
 import Admin from "./pages/Admin";
@@ -99,6 +102,9 @@ export default function App() {
           <Route path="purchasing/returns/new" element={<NewPurchaseReturnPage />} />
           <Route path="reports" element={<Reports />} />
           <Route path="accounting" element={<Accounting />} />
+          <Route path="accounting/journals/new" element={<NewJournalPage />} />
+          <Route path="accounting/receipts/new" element={<NewReceiptPage />} />
+          <Route path="accounting/payments/new" element={<NewPaymentPage />} />
           <Route path="hr" element={<Hr />} />
           <Route path="assets" element={<Assets />} />
           <Route path="admin" element={<Admin />} />

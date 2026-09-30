@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { BookOpen, ScrollText, Wallet, Banknote, Clock, Plus, Trash2, Link2, CheckCircle2, Lock, Unlock, CalendarCheck, Coins, Percent } from "lucide-react";
 import { useAuth } from "../lib/auth";
@@ -501,7 +502,7 @@ interface JournalLineDraft {
   description: string;
 }
 
-function NewJournalForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export function NewJournalForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: accounts } = useApiList<Account>("/api/chart-of-accounts");
   const postableAccounts = accounts?.filter((a) => !a.is_header) ?? [];
@@ -644,8 +645,8 @@ function NewJournalForm({ onClose, onCreated }: { onClose: () => void; onCreated
 }
 
 function JournalsTab() {
-  const { data, error, reload } = useApiList<Journal>("/api/journals");
-  const [showNew, setShowNew] = useState(false);
+  const navigate = useNavigate();
+  const { data, error } = useApiList<Journal>("/api/journals");
 
   const columns: Column<Journal>[] = [
     { key: "number", header: "Journal #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.journal_number}</span> },
@@ -667,13 +668,8 @@ function JournalsTab() {
         emptyText="No journals yet."
         searchPlaceholder="Search journals..."
         actionLabel="New Journal Entry"
-        onAction={() => setShowNew(true)}
+        onAction={() => navigate("/accounting/journals/new", { state: { fromTab: "journals" } })}
       />
-      {showNew && (
-        <Modal title="New Manual Journal Entry" onClose={() => setShowNew(false)}>
-          <NewJournalForm onClose={() => setShowNew(false)} onCreated={reload} />
-        </Modal>
-      )}
     </>
   );
 }
@@ -780,7 +776,7 @@ function round2(n: number): number {
 
 // ---- Customer Receipts ----
 
-function NewReceiptForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export function NewReceiptForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: customers } = useApiList<Customer>("/api/customers");
   const { data: bankAccounts } = useApiList<BankAccount>("/api/bank-accounts");
@@ -896,8 +892,8 @@ function NewReceiptForm({ onClose, onCreated }: { onClose: () => void; onCreated
 }
 
 function CustomerReceiptsTab() {
-  const { data, error, reload } = useApiList<Receipt>("/api/customer-receipts");
-  const [showNew, setShowNew] = useState(false);
+  const navigate = useNavigate();
+  const { data, error } = useApiList<Receipt>("/api/customer-receipts");
 
   const columns: Column<Receipt>[] = [
     { key: "number", header: "Receipt #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
@@ -920,20 +916,15 @@ function CustomerReceiptsTab() {
         emptyText="No customer receipts yet."
         searchPlaceholder="Search receipts..."
         actionLabel="New Receipt"
-        onAction={() => setShowNew(true)}
+        onAction={() => navigate("/accounting/receipts/new", { state: { fromTab: "receipts" } })}
       />
-      {showNew && (
-        <Modal title="New Customer Receipt" onClose={() => setShowNew(false)}>
-          <NewReceiptForm onClose={() => setShowNew(false)} onCreated={reload} />
-        </Modal>
-      )}
     </>
   );
 }
 
 // ---- Supplier Payments ----
 
-function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const baseCurrency = useBaseCurrency();
   const { data: suppliers } = useApiList<Supplier>("/api/suppliers");
@@ -1062,8 +1053,8 @@ function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; onCreated
 }
 
 function SupplierPaymentsTab() {
-  const { data, error, reload } = useApiList<Payment>("/api/supplier-payments");
-  const [showNew, setShowNew] = useState(false);
+  const navigate = useNavigate();
+  const { data, error } = useApiList<Payment>("/api/supplier-payments");
   const baseCurrency = useBaseCurrency();
 
   const columns: Column<Payment>[] = [
@@ -1093,13 +1084,8 @@ function SupplierPaymentsTab() {
         emptyText="No supplier payments yet."
         searchPlaceholder="Search payments..."
         actionLabel="New Payment"
-        onAction={() => setShowNew(true)}
+        onAction={() => navigate("/accounting/payments/new", { state: { fromTab: "payments" } })}
       />
-      {showNew && (
-        <Modal title="New Supplier Payment" onClose={() => setShowNew(false)}>
-          <NewPaymentForm onClose={() => setShowNew(false)} onCreated={reload} />
-        </Modal>
-      )}
     </>
   );
 }
@@ -2232,6 +2218,7 @@ function BudgetsTab() {
 
 export default function Accounting() {
   const { t } = useTranslation();
+  const location = useLocation();
   const tabs = useMemo(
     () => [
       { key: "coa", label: "Chart of Accounts", content: <ChartOfAccountsTab /> },
@@ -2251,7 +2238,7 @@ export default function Accounting() {
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold text-slate-900">{t("nav.accounting")}</h1>
-      <Tabs tabs={tabs} />
+      <Tabs tabs={tabs} initialActive={(location.state as { fromTab?: string } | null)?.fromTab} />
     </div>
   );
 }
