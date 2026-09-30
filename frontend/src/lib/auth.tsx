@@ -9,6 +9,18 @@ export interface Company {
   base_currency: string;
 }
 
+export interface NewCompanyInput {
+  companyCode: string;
+  nameEn: string;
+  nameAr: string;
+  country: string;
+  baseCurrency: string;
+  crNumber?: string | null;
+  vatRegistrationNumber?: string | null;
+  vatRate: number;
+  fiscalYearStart: string;
+}
+
 export interface MeResponse {
   user: { id: string; email: string };
   companyId: string;
@@ -27,6 +39,7 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   selectCompany: (companyId: string) => Promise<void>;
+  createCompany: (input: NewCompanyInput) => Promise<void>;
   logout: () => void;
   hasPermission: (code: string) => boolean;
 }
@@ -108,6 +121,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [token, loadMe],
   );
 
+  // Creates the company, reloads the picker's list (so the new row's
+  // base_currency is actually in `companies` before anything reads it via
+  // useBaseCurrency()), then jumps straight into it -- one call for the
+  // "New Company" form instead of three separate round trips.
+  const createCompany = useCallback(
+    async (input: NewCompanyInput) => {
+      if (!token) throw new Error("not logged in");
+      const created = await apiRequest<{ id: string }>("/api/companies", { method: "POST", token, body: input });
+      await loadCompanies(token);
+      await loadMe(token, created.id);
+      localStorage.setItem(COMPANY_KEY, created.id);
+      setCompanyId(created.id);
+    },
+    [token, loadCompanies, loadMe],
+  );
+
   const logout = useCallback(() => {
     setToken(null);
     setCompanyId(null);
@@ -120,8 +149,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasPermission = useCallback((code: string) => me?.permissions.includes(code) ?? false, [me]);
 
   const value = useMemo(
-    () => ({ token, companyId, me, companies, loading, login, selectCompany, logout, hasPermission }),
-    [token, companyId, me, companies, loading, login, selectCompany, logout, hasPermission],
+    () => ({ token, companyId, me, companies, loading, login, selectCompany, createCompany, logout, hasPermission }),
+    [token, companyId, me, companies, loading, login, selectCompany, createCompany, logout, hasPermission],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

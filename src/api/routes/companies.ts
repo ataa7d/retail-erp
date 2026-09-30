@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
 import { NotFoundError } from "../errors.js";
+import { bootstrapCompany } from "../../companies/companyBootstrapService.js";
 
 const updateCompanySchema = z.object({
   nameEn: z.string().min(1),
@@ -9,6 +10,18 @@ const updateCompanySchema = z.object({
   crNumber: z.string().nullable().optional(),
   vatRegistrationNumber: z.string().nullable().optional(),
   address: z.string().nullable().optional(),
+});
+
+const createCompanySchema = z.object({
+  companyCode: z.string().min(1),
+  nameEn: z.string().min(1),
+  nameAr: z.string().min(1),
+  country: z.string().min(1),
+  baseCurrency: z.string().length(3),
+  crNumber: z.string().nullable().optional(),
+  vatRegistrationNumber: z.string().nullable().optional(),
+  vatRate: z.number().min(0).max(100),
+  fiscalYearStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
 // The one route a frontend can call before it has a company selected —
@@ -25,6 +38,34 @@ export async function companyRoutes(app: FastifyInstance): Promise<void> {
       [request.authUser.id],
     );
     return result.rows;
+  });
+
+  // Creating a brand-new company, not switching between ones the user
+  // already has -- same reasoning as the picker above: no X-Company-Id
+  // exists yet for a company that doesn't exist yet, so this only needs
+  // authenticateUser. The creating user becomes that company's
+  // Administrator (every permission) via bootstrapCompany, the same way
+  // scripts/seed.ts does it by hand for the one demo company.
+  app.post("/companies", { preHandler: app.authenticateUser }, async (request, reply) => {
+    const body = createCompanySchema.parse(request.body);
+    const { companyId } = await withTransaction(
+      (client) =>
+        bootstrapCompany(client, {
+          companyCode: body.companyCode,
+          nameEn: body.nameEn,
+          nameAr: body.nameAr,
+          country: body.country,
+          baseCurrency: body.baseCurrency.toUpperCase(),
+          crNumber: body.crNumber,
+          vatRegistrationNumber: body.vatRegistrationNumber,
+          vatRate: body.vatRate,
+          fiscalYearStart: body.fiscalYearStart,
+          createdByUserId: request.authUser.id,
+        }),
+      request.authUser.id,
+    );
+    reply.status(201);
+    return { id: companyId };
   });
 
   // The seller-side details a printed invoice needs (name, VAT number, CR
