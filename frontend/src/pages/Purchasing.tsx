@@ -1499,7 +1499,7 @@ export function NewSupplierCreditNoteForm({ onClose, onCreated }: { onClose: () 
   );
 }
 
-function CreditNoteDetailModal({ creditNoteId, onClose }: { creditNoteId: string; onClose: () => void }) {
+export function CreditNoteDetailModal({ creditNoteId }: { creditNoteId: string }) {
   const { token, companyId } = useAuth();
   const [detail, setDetail] = useState<SupplierCreditNoteDetail | null>(null);
   const baseCurrency = useBaseCurrency();
@@ -1545,7 +1545,6 @@ function CreditNoteDetailModal({ creditNoteId, onClose }: { creditNoteId: string
 function PurchaseReturnsTab() {
   const navigate = useNavigate();
   const { data, error } = useApiList<SupplierCreditNote>("/api/supplier-credit-notes");
-  const [openId, setOpenId] = useState<string | null>(null);
 
   const columns: Column<SupplierCreditNote>[] = [
     { key: "number", header: "SCN #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
@@ -1571,13 +1570,8 @@ function PurchaseReturnsTab() {
         searchPlaceholder="Search purchase returns..."
         actionLabel="New Purchase Return"
         onAction={() => navigate("/purchasing/returns/new", { state: { fromTab: "returns" } })}
-        onRowClick={(r) => setOpenId(r.id)}
+        onRowClick={(r) => navigate(`/purchasing/returns/${r.id}`, { state: { fromTab: "returns" } })}
       />
-      {openId && (
-        <Modal title="Purchase Return" onClose={() => setOpenId(null)}>
-          <CreditNoteDetailModal creditNoteId={openId} onClose={() => setOpenId(null)} />
-        </Modal>
-      )}
     </>
   );
 }
@@ -1824,7 +1818,7 @@ function ConvertRequisitionForm({ requisition, onClose, onConverted }: { requisi
   );
 }
 
-function RequisitionDetailModal({ requisitionId, onClose, onChanged }: { requisitionId: string; onClose: () => void; onChanged: () => void }) {
+export function RequisitionDetailModal({ requisitionId, onChanged }: { requisitionId: string; onChanged: () => void }) {
   const { token, companyId, hasPermission, me } = useAuth();
   const [detail, setDetail] = useState<RequisitionDetail | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
@@ -1973,9 +1967,10 @@ function RequisitionDetailModal({ requisitionId, onClose, onChanged }: { requisi
         <ConvertRequisitionForm
           requisition={detail}
           onClose={() => setShowConvert(false)}
-          onConverted={() => {
+          onConverted={async () => {
+            setShowConvert(false);
+            await reload();
             onChanged();
-            onClose();
           }}
         />
       )}
@@ -1986,8 +1981,7 @@ function RequisitionDetailModal({ requisitionId, onClose, onChanged }: { requisi
 
 function RequisitionsTab() {
   const navigate = useNavigate();
-  const { data, error, reload } = useApiList<PurchaseRequisition>("/api/purchase-requisitions");
-  const [openId, setOpenId] = useState<string | null>(null);
+  const { data, error } = useApiList<PurchaseRequisition>("/api/purchase-requisitions");
 
   const columns: Column<PurchaseRequisition>[] = [
     { key: "number", header: "PR #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
@@ -2012,22 +2006,17 @@ function RequisitionsTab() {
         searchPlaceholder="Search requisitions..."
         actionLabel="New Requisition"
         onAction={() => navigate("/purchasing/requisitions/new", { state: { fromTab: "requisitions" } })}
-        onRowClick={(r) => setOpenId(r.id)}
+        onRowClick={(r) => navigate(`/purchasing/requisitions/${r.id}`, { state: { fromTab: "requisitions" } })}
       />
-      {openId && (
-        <Modal title="Purchase Requisition" onClose={() => setOpenId(null)}>
-          <RequisitionDetailModal requisitionId={openId} onClose={() => setOpenId(null)} onChanged={reload} />
-        </Modal>
-      )}
     </>
   );
 }
 
-function PoDetailModal({ poId, onClose }: { poId: string; onClose: () => void }) {
+export function PoDetailModal({ poId }: { poId: string }) {
+  const navigate = useNavigate();
   const { token, companyId } = useAuth();
   const [detail, setDetail] = useState<PoDetail | null>(null);
   const [requisitionNumber, setRequisitionNumber] = useState<string | null>(null);
-  const [openRequisitionId, setOpenRequisitionId] = useState<string | null>(null);
   const baseCurrency = useBaseCurrency();
 
   useEffect(() => {
@@ -2057,7 +2046,7 @@ function PoDetailModal({ poId, onClose }: { poId: string; onClose: () => void })
       </div>
       {detail.purchase_requisition_id && (
         <button
-          onClick={() => setOpenRequisitionId(detail.purchase_requisition_id)}
+          onClick={() => navigate(`/purchasing/requisitions/${detail.purchase_requisition_id}`)}
           className="mb-3 text-xs font-medium text-brand-600 hover:text-brand-700"
         >
           Created from requisition {requisitionNumber ?? "…"}
@@ -2080,12 +2069,6 @@ function PoDetailModal({ poId, onClose }: { poId: string; onClose: () => void })
       <div className="text-sm font-medium text-slate-700">
         Total: {formatMoney(detail.gross_amount, detail.currency !== baseCurrency ? detail.currency : undefined)}
       </div>
-
-      {openRequisitionId && (
-        <Modal title="Purchase Requisition" onClose={() => setOpenRequisitionId(null)}>
-          <RequisitionDetailModal requisitionId={openRequisitionId} onClose={() => setOpenRequisitionId(null)} onChanged={() => {}} />
-        </Modal>
-      )}
     </div>
   );
 }
@@ -2094,7 +2077,6 @@ function PurchaseOrdersTab() {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
   const { data, error } = useApiList<PurchaseOrder>("/api/purchase-orders");
-  const [openId, setOpenId] = useState<string | null>(null);
   const baseCurrency = useBaseCurrency();
 
   const columns: Column<PurchaseOrder>[] = [
@@ -2123,13 +2105,8 @@ function PurchaseOrdersTab() {
         searchPlaceholder="Search purchase orders..."
         actionLabel="New Purchase Order"
         onAction={() => navigate("/purchasing/orders/new", { state: { fromTab: "pos" } })}
-        onRowClick={(r) => setOpenId(r.id)}
+        onRowClick={(r) => navigate(`/purchasing/orders/${r.id}`, { state: { fromTab: "pos" } })}
       />
-      {openId && (
-        <Modal title="Purchase Order" onClose={() => setOpenId(null)}>
-          <PoDetailModal poId={openId} onClose={() => setOpenId(null)} />
-        </Modal>
-      )}
     </>
   );
 }

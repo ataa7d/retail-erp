@@ -21,6 +21,9 @@ import NewRequisitionPage from "./pages/purchasing/NewRequisitionPage";
 import NewGoodsReceiptPage from "./pages/purchasing/NewGoodsReceiptPage";
 import NewSupplierInvoicePage from "./pages/purchasing/NewSupplierInvoicePage";
 import NewPurchaseReturnPage from "./pages/purchasing/NewPurchaseReturnPage";
+import PoDetailPage from "./pages/purchasing/PoDetailPage";
+import RequisitionDetailPage from "./pages/purchasing/RequisitionDetailPage";
+import PurchaseReturnDetailPage from "./pages/purchasing/PurchaseReturnDetailPage";
 import Reports from "./pages/Reports";
 import Accounting from "./pages/Accounting";
 import NewJournalPage from "./pages/accounting/NewJournalPage";
@@ -100,6 +103,9 @@ export default function App() {
           <Route path="purchasing/goods-receipts/new" element={<NewGoodsReceiptPage />} />
           <Route path="purchasing/supplier-invoices/new" element={<NewSupplierInvoicePage />} />
           <Route path="purchasing/returns/new" element={<NewPurchaseReturnPage />} />
+          <Route path="purchasing/orders/:id" element={<PoDetailPage />} />
+          <Route path="purchasing/requisitions/:id" element={<RequisitionDetailPage />} />
+          <Route path="purchasing/returns/:id" element={<PurchaseReturnDetailPage />} />
           <Route path="reports" element={<Reports />} />
           <Route path="accounting" element={<Accounting />} />
           <Route path="accounting/journals/new" element={<NewJournalPage />} />
