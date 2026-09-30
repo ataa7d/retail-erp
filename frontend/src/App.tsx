@@ -18,6 +18,8 @@ import Inventory from "./pages/Inventory";
 import NewTransferPage from "./pages/inventory/NewTransferPage";
 import NewTransferOrderPage from "./pages/inventory/NewTransferOrderPage";
 import NewStocktakePage from "./pages/inventory/NewStocktakePage";
+import InventoryTransferDetailPage from "./pages/inventory/InventoryTransferDetailPage";
+import CountStocktakePage from "./pages/inventory/CountStocktakePage";
 import Purchasing from "./pages/Purchasing";
 import NewPurchaseOrderPage from "./pages/purchasing/NewPurchaseOrderPage";
 import NewRequisitionPage from "./pages/purchasing/NewRequisitionPage";
@@ -103,6 +105,8 @@ export default function App() {
           <Route path="inventory/transfers/new" element={<NewTransferPage />} />
           <Route path="inventory/transfer-orders/new" element={<NewTransferOrderPage />} />
           <Route path="inventory/stocktakes/new" element={<NewStocktakePage />} />
+          <Route path="inventory/transfer-orders/:id" element={<InventoryTransferDetailPage />} />
+          <Route path="inventory/stocktakes/:id/count" element={<CountStocktakePage />} />
           <Route path="purchasing" element={<Purchasing />} />
           <Route path="purchasing/orders/new" element={<NewPurchaseOrderPage />} />
           <Route path="purchasing/requisitions/new" element={<NewRequisitionPage />} />

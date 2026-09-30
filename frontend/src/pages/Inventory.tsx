@@ -7,7 +7,6 @@ import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
 import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
-import Modal from "../components/Modal";
 import Tabs from "../components/Tabs";
 import { Field, TextInput, SelectInput, FormActions } from "../components/FormField";
 import type { Column } from "../components/DataTable";
@@ -563,7 +562,7 @@ export function NewInventoryTransferForm({ onClose, onCreated }: { onClose: () =
   );
 }
 
-function InventoryTransferDetailModal({
+export function InventoryTransferDetailModal({
   transferId,
   onClose,
   onPosted,
@@ -639,8 +638,7 @@ function InventoryTransferDetailModal({
 
 function TransferOrdersTab() {
   const navigate = useNavigate();
-  const { data, error, reload } = useApiList<InventoryTransferOrder>("/api/inventory-transfers");
-  const [openId, setOpenId] = useState<string | null>(null);
+  const { data, error } = useApiList<InventoryTransferOrder>("/api/inventory-transfers");
 
   const columns: Column<InventoryTransferOrder>[] = [
     { key: "number", header: "IT #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
@@ -665,13 +663,8 @@ function TransferOrdersTab() {
         searchPlaceholder="Search transfer orders..."
         actionLabel="New Transfer Order"
         onAction={() => navigate("/inventory/transfer-orders/new", { state: { fromTab: "transfer-orders" } })}
-        onRowClick={(r) => setOpenId(r.id)}
+        onRowClick={(r) => navigate(`/inventory/transfer-orders/${r.id}`, { state: { fromTab: "transfer-orders" } })}
       />
-      {openId && (
-        <Modal title="Inventory Transfer" onClose={() => setOpenId(null)}>
-          <InventoryTransferDetailModal transferId={openId} onClose={() => setOpenId(null)} onPosted={reload} />
-        </Modal>
-      )}
     </>
   );
 }
@@ -773,7 +766,7 @@ export function NewStocktakeForm({ onClose, onCreated }: { onClose: () => void; 
   );
 }
 
-function CountStocktakeForm({ stocktakeId, onClose, onPosted }: { stocktakeId: string; onClose: () => void; onPosted: () => void }) {
+export function CountStocktakeForm({ stocktakeId, onClose, onPosted }: { stocktakeId: string; onClose: () => void; onPosted: () => void }) {
   const { token, companyId } = useAuth();
   const [detail, setDetail] = useState<StocktakeDetail | null>(null);
   const [counts, setCounts] = useState<Record<string, string>>({});
@@ -907,8 +900,7 @@ function CountStocktakeForm({ stocktakeId, onClose, onPosted }: { stocktakeId: s
 
 function AdjustmentsTab() {
   const navigate = useNavigate();
-  const { data, error, reload } = useApiList<Stocktake>("/api/stocktakes");
-  const [countingId, setCountingId] = useState<string | null>(null);
+  const { data, error } = useApiList<Stocktake>("/api/stocktakes");
 
   const columns: Column<Stocktake>[] = [
     { key: "number", header: "ST #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
@@ -933,14 +925,9 @@ function AdjustmentsTab() {
         actionLabel="New Stocktake"
         onAction={() => navigate("/inventory/stocktakes/new", { state: { fromTab: "adjustments" } })}
         onRowClick={(r) => {
-          if (r.document_status === "draft") setCountingId(r.id);
+          if (r.document_status === "draft") navigate(`/inventory/stocktakes/${r.id}/count`, { state: { fromTab: "adjustments" } });
         }}
       />
-      {countingId && (
-        <Modal title="Count & Post Stocktake" onClose={() => setCountingId(null)}>
-          <CountStocktakeForm stocktakeId={countingId} onClose={() => setCountingId(null)} onPosted={reload} />
-        </Modal>
-      )}
     </>
   );
 }
