@@ -12,6 +12,9 @@ import NewCreditNotePage from "./pages/sales/NewCreditNotePage";
 import NewQuotationPage from "./pages/sales/NewQuotationPage";
 import Customers from "./pages/Customers";
 import Inventory from "./pages/Inventory";
+import NewTransferPage from "./pages/inventory/NewTransferPage";
+import NewTransferOrderPage from "./pages/inventory/NewTransferOrderPage";
+import NewStocktakePage from "./pages/inventory/NewStocktakePage";
 import Purchasing from "./pages/Purchasing";
 import NewPurchaseOrderPage from "./pages/purchasing/NewPurchaseOrderPage";
 import NewRequisitionPage from "./pages/purchasing/NewRequisitionPage";
@@ -85,6 +88,9 @@ export default function App() {
           <Route path="sales/quotations/new" element={<NewQuotationPage />} />
           <Route path="customers" element={<Customers />} />
           <Route path="inventory" element={<Inventory />} />
+          <Route path="inventory/transfers/new" element={<NewTransferPage />} />
+          <Route path="inventory/transfer-orders/new" element={<NewTransferOrderPage />} />
+          <Route path="inventory/stocktakes/new" element={<NewStocktakePage />} />
           <Route path="purchasing" element={<Purchasing />} />
           <Route path="purchasing/orders/new" element={<NewPurchaseOrderPage />} />
           <Route path="purchasing/requisitions/new" element={<NewRequisitionPage />} />

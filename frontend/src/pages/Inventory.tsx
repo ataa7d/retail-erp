@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Warehouse, ArrowLeftRight, ClipboardList, Truck, Plus, X } from "lucide-react";
 import { useAuth } from "../lib/auth";
@@ -243,7 +244,7 @@ function StockTab() {
   );
 }
 
-function NewTransferForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export function NewTransferForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
   const variantOptions = useVariantOptions();
@@ -331,8 +332,8 @@ function NewTransferForm({ onClose, onCreated }: { onClose: () => void; onCreate
 }
 
 function TransfersTab() {
-  const { data, error, reload } = useApiList<Transfer>("/api/stock-transfers");
-  const [showNew, setShowNew] = useState(false);
+  const navigate = useNavigate();
+  const { data, error } = useApiList<Transfer>("/api/stock-transfers");
 
   const columns: Column<Transfer>[] = [
     { key: "date", header: "Date", render: (r) => new Date(r.movement_at).toLocaleString() },
@@ -359,18 +360,13 @@ function TransfersTab() {
         emptyText="No transfers yet."
         searchPlaceholder="Search transfers..."
         actionLabel="New Transfer"
-        onAction={() => setShowNew(true)}
+        onAction={() => navigate("/inventory/transfers/new", { state: { fromTab: "transfers" } })}
       />
-      {showNew && (
-        <Modal title="New Stock Transfer" onClose={() => setShowNew(false)}>
-          <NewTransferForm onClose={() => setShowNew(false)} onCreated={reload} />
-        </Modal>
-      )}
     </>
   );
 }
 
-function NewInventoryTransferForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export function NewInventoryTransferForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
   const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
@@ -642,8 +638,8 @@ function InventoryTransferDetailModal({
 }
 
 function TransferOrdersTab() {
+  const navigate = useNavigate();
   const { data, error, reload } = useApiList<InventoryTransferOrder>("/api/inventory-transfers");
-  const [showNew, setShowNew] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
 
   const columns: Column<InventoryTransferOrder>[] = [
@@ -668,14 +664,9 @@ function TransferOrdersTab() {
         emptyText="No transfer orders yet."
         searchPlaceholder="Search transfer orders..."
         actionLabel="New Transfer Order"
-        onAction={() => setShowNew(true)}
+        onAction={() => navigate("/inventory/transfer-orders/new", { state: { fromTab: "transfer-orders" } })}
         onRowClick={(r) => setOpenId(r.id)}
       />
-      {showNew && (
-        <Modal title="New Inventory Transfer" onClose={() => setShowNew(false)}>
-          <NewInventoryTransferForm onClose={() => setShowNew(false)} onCreated={reload} />
-        </Modal>
-      )}
       {openId && (
         <Modal title="Inventory Transfer" onClose={() => setOpenId(null)}>
           <InventoryTransferDetailModal transferId={openId} onClose={() => setOpenId(null)} onPosted={reload} />
@@ -685,7 +676,7 @@ function TransferOrdersTab() {
   );
 }
 
-function NewStocktakeForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export function NewStocktakeForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
   const { data: items } = useApiList<Item>("/api/items");
@@ -915,8 +906,8 @@ function CountStocktakeForm({ stocktakeId, onClose, onPosted }: { stocktakeId: s
 }
 
 function AdjustmentsTab() {
+  const navigate = useNavigate();
   const { data, error, reload } = useApiList<Stocktake>("/api/stocktakes");
-  const [showNew, setShowNew] = useState(false);
   const [countingId, setCountingId] = useState<string | null>(null);
 
   const columns: Column<Stocktake>[] = [
@@ -940,16 +931,11 @@ function AdjustmentsTab() {
         emptyText="No stocktakes yet."
         searchPlaceholder="Search stocktakes..."
         actionLabel="New Stocktake"
-        onAction={() => setShowNew(true)}
+        onAction={() => navigate("/inventory/stocktakes/new", { state: { fromTab: "adjustments" } })}
         onRowClick={(r) => {
           if (r.document_status === "draft") setCountingId(r.id);
         }}
       />
-      {showNew && (
-        <Modal title="New Stocktake" onClose={() => setShowNew(false)}>
-          <NewStocktakeForm onClose={() => setShowNew(false)} onCreated={reload} />
-        </Modal>
-      )}
       {countingId && (
         <Modal title="Count & Post Stocktake" onClose={() => setCountingId(null)}>
           <CountStocktakeForm stocktakeId={countingId} onClose={() => setCountingId(null)} onPosted={reload} />
@@ -961,6 +947,7 @@ function AdjustmentsTab() {
 
 export default function Inventory() {
   const { t } = useTranslation();
+  const location = useLocation();
   const tabs = useMemo(
     () => [
       { key: "stock", label: "Stock", content: <StockTab /> },
@@ -973,7 +960,7 @@ export default function Inventory() {
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold text-slate-900">{t("nav.inventory")}</h1>
-      <Tabs tabs={tabs} />
+      <Tabs tabs={tabs} initialActive={(location.state as { fromTab?: string } | null)?.fromTab} />
     </div>
   );
 }
