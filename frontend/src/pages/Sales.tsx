@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Receipt, RotateCcw, Plus, Trash2, Tag, FileText, Wallet, Printer } from "lucide-react";
 import { useAuth } from "../lib/auth";
@@ -443,7 +444,7 @@ function useVariantOptions() {
   return options;
 }
 
-function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
   const { data: customers } = useApiList<Customer>("/api/customers");
@@ -752,7 +753,7 @@ function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => void; onCr
   );
 }
 
-function NewCreditNoteForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export function NewCreditNoteForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: invoices } = useApiList<SalesInvoice>("/api/sales-invoices");
   const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
@@ -897,8 +898,8 @@ function NewCreditNoteForm({ onClose, onCreated }: { onClose: () => void; onCrea
 
 function SalesInvoicesTab() {
   const { i18n } = useTranslation();
+  const navigate = useNavigate();
   const { data, error, reload } = useApiList<SalesInvoice>("/api/sales-invoices");
-  const [showNew, setShowNew] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
 
   const columns: Column<SalesInvoice>[] = [
@@ -933,22 +934,17 @@ function SalesInvoicesTab() {
         emptyText="No sales invoices yet."
         searchPlaceholder="Search sales invoices..."
         actionLabel="New Sales Invoice"
-        onAction={() => setShowNew(true)}
+        onAction={() => navigate("/sales/invoices/new", { state: { fromTab: "invoices" } })}
         onRowClick={(r) => setDetailId(r.id)}
       />
-      {showNew && (
-        <Modal title="New Sales Invoice" onClose={() => setShowNew(false)}>
-          <NewSalesInvoiceForm onClose={() => setShowNew(false)} onCreated={reload} />
-        </Modal>
-      )}
       {detailId && <SalesInvoiceDetailModal invoiceId={detailId} onClose={() => setDetailId(null)} onVoided={reload} />}
     </>
   );
 }
 
 function CreditNotesTab() {
-  const { data, error, reload } = useApiList<CreditNote>("/api/credit-notes");
-  const [showNew, setShowNew] = useState(false);
+  const navigate = useNavigate();
+  const { data, error } = useApiList<CreditNote>("/api/credit-notes");
   const [detailId, setDetailId] = useState<string | null>(null);
 
   const columns: Column<CreditNote>[] = [
@@ -973,14 +969,9 @@ function CreditNotesTab() {
         emptyText="No credit notes yet."
         searchPlaceholder="Search credit notes..."
         actionLabel="New Credit Note"
-        onAction={() => setShowNew(true)}
+        onAction={() => navigate("/sales/credit-notes/new", { state: { fromTab: "credits" } })}
         onRowClick={(r) => setDetailId(r.id)}
       />
-      {showNew && (
-        <Modal title="New Credit Note" onClose={() => setShowNew(false)}>
-          <NewCreditNoteForm onClose={() => setShowNew(false)} onCreated={reload} />
-        </Modal>
-      )}
       {detailId && <CreditNoteDetailModal creditNoteId={detailId} onClose={() => setDetailId(null)} />}
     </>
   );
@@ -1029,7 +1020,7 @@ interface SalesQuotationDetail {
   lines: SalesQuotationLine[];
 }
 
-function NewQuotationForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export function NewQuotationForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
   const { data: customers } = useApiList<Customer>("/api/customers");
@@ -1452,8 +1443,8 @@ function QuotationDetailModal({ quotationId, onClose, onChanged }: { quotationId
 }
 
 function QuotationsTab() {
+  const navigate = useNavigate();
   const { data, error, reload } = useApiList<SalesQuotation>("/api/sales-quotations");
-  const [showNew, setShowNew] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
 
   const columns: Column<SalesQuotation>[] = [
@@ -1477,14 +1468,9 @@ function QuotationsTab() {
         emptyText="No sales quotations yet."
         searchPlaceholder="Search quotations..."
         actionLabel="New Quotation"
-        onAction={() => setShowNew(true)}
+        onAction={() => navigate("/sales/quotations/new", { state: { fromTab: "quotations" } })}
         onRowClick={(r) => setDetailId(r.id)}
       />
-      {showNew && (
-        <Modal title="New Sales Quotation" onClose={() => setShowNew(false)}>
-          <NewQuotationForm onClose={() => setShowNew(false)} onCreated={reload} />
-        </Modal>
-      )}
       {detailId && (
         <Modal title="Sales Quotation" onClose={() => setDetailId(null)}>
           <QuotationDetailModal quotationId={detailId} onClose={() => setDetailId(null)} onChanged={reload} />
@@ -2252,6 +2238,7 @@ function CustomerDepositsTab() {
 
 export default function Sales() {
   const { t } = useTranslation();
+  const location = useLocation();
   const tabs = useMemo(
     () => [
       { key: "quotations", label: "Quotations", content: <QuotationsTab /> },
@@ -2266,7 +2253,7 @@ export default function Sales() {
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold text-slate-900">{t("nav.sales")}</h1>
-      <Tabs tabs={tabs} />
+      <Tabs tabs={tabs} initialActive={(location.state as { fromTab?: string } | null)?.fromTab} />
     </div>
   );
 }
