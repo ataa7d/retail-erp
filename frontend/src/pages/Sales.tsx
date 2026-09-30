@@ -199,7 +199,7 @@ function VoidInvoiceForm({ invoiceId, onClose, onVoided }: { invoiceId: string; 
   );
 }
 
-function SalesInvoiceDetailModal({ invoiceId, onClose, onVoided }: { invoiceId: string; onClose: () => void; onVoided: () => void }) {
+export function SalesInvoiceDetailModal({ invoiceId, onVoided }: { invoiceId: string; onVoided: () => void }) {
   const { token, companyId, hasPermission } = useAuth();
   const [detail, setDetail] = useState<FullSalesInvoice | null>(null);
   const [showVoid, setShowVoid] = useState(false);
@@ -212,16 +212,17 @@ function SalesInvoiceDetailModal({ invoiceId, onClose, onVoided }: { invoiceId: 
   const canVoid = detail?.document_status === "posted" && !isVoided && hasPermission("sales.document.void");
 
   return (
-    <Modal title={detail?.document_number ?? "Sales Invoice"} onClose={onClose}>
+    <>
       {!detail ? (
         <p className="text-sm text-slate-400">Loading...</p>
       ) : (
         <div>
           <div className="mb-3 flex items-center justify-between text-sm">
-            <span className="capitalize text-slate-500">
-              {detail.invoice_channel} · {detail.zatca_invoice_category}
-            </span>
+            <span className="font-mono text-xs text-slate-500">{detail.document_number}</span>
             <StatusBadge status={isVoided ? "voided" : detail.document_status} />
+          </div>
+          <div className="mb-3 text-xs capitalize text-slate-500">
+            {detail.invoice_channel} · {detail.zatca_invoice_category}
           </div>
           <div className="space-y-1 border-y border-dashed border-slate-200 py-2 text-sm">
             {detail.lines.map((l) => (
@@ -302,11 +303,11 @@ function SalesInvoiceDetailModal({ invoiceId, onClose, onVoided }: { invoiceId: 
           )}
         </div>
       )}
-    </Modal>
+    </>
   );
 }
 
-function CreditNoteDetailModal({ creditNoteId, onClose }: { creditNoteId: string; onClose: () => void }) {
+export function CreditNoteDetailModal({ creditNoteId }: { creditNoteId: string }) {
   const { token, companyId } = useAuth();
   const [detail, setDetail] = useState<FullCreditNote | null>(null);
 
@@ -315,15 +316,16 @@ function CreditNoteDetailModal({ creditNoteId, onClose }: { creditNoteId: string
   }, [creditNoteId, token, companyId]);
 
   return (
-    <Modal title={detail?.document_number ?? "Credit Note"} onClose={onClose}>
+    <>
       {!detail ? (
         <p className="text-sm text-slate-400">Loading...</p>
       ) : (
         <div>
           <div className="mb-3 flex items-center justify-between text-sm">
-            <span className="text-slate-500">{detail.reason}</span>
+            <span className="font-mono text-xs text-slate-500">{detail.document_number}</span>
             <StatusBadge status={detail.document_status} />
           </div>
+          <div className="mb-3 text-xs text-slate-500">{detail.reason}</div>
           <div className="space-y-1 border-y border-dashed border-slate-200 py-2 text-sm">
             {detail.lines.map((l) => (
               <div key={l.id} className="flex justify-between">
@@ -352,7 +354,7 @@ function CreditNoteDetailModal({ creditNoteId, onClose }: { creditNoteId: string
           <XmlDownloadButton status={detail.document_status} path={`/api/credit-notes/${detail.id}/xml`} />
         </div>
       )}
-    </Modal>
+    </>
   );
 }
 
@@ -899,8 +901,7 @@ export function NewCreditNoteForm({ onClose, onCreated }: { onClose: () => void;
 function SalesInvoicesTab() {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
-  const { data, error, reload } = useApiList<SalesInvoice>("/api/sales-invoices");
-  const [detailId, setDetailId] = useState<string | null>(null);
+  const { data, error } = useApiList<SalesInvoice>("/api/sales-invoices");
 
   const columns: Column<SalesInvoice>[] = [
     { key: "number", header: "Invoice #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
@@ -935,9 +936,8 @@ function SalesInvoicesTab() {
         searchPlaceholder="Search sales invoices..."
         actionLabel="New Sales Invoice"
         onAction={() => navigate("/sales/invoices/new", { state: { fromTab: "invoices" } })}
-        onRowClick={(r) => setDetailId(r.id)}
+        onRowClick={(r) => navigate(`/sales/invoices/${r.id}`, { state: { fromTab: "invoices" } })}
       />
-      {detailId && <SalesInvoiceDetailModal invoiceId={detailId} onClose={() => setDetailId(null)} onVoided={reload} />}
     </>
   );
 }
@@ -945,7 +945,6 @@ function SalesInvoicesTab() {
 function CreditNotesTab() {
   const navigate = useNavigate();
   const { data, error } = useApiList<CreditNote>("/api/credit-notes");
-  const [detailId, setDetailId] = useState<string | null>(null);
 
   const columns: Column<CreditNote>[] = [
     { key: "number", header: "CN #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
@@ -970,9 +969,8 @@ function CreditNotesTab() {
         searchPlaceholder="Search credit notes..."
         actionLabel="New Credit Note"
         onAction={() => navigate("/sales/credit-notes/new", { state: { fromTab: "credits" } })}
-        onRowClick={(r) => setDetailId(r.id)}
+        onRowClick={(r) => navigate(`/sales/credit-notes/${r.id}`, { state: { fromTab: "credits" } })}
       />
-      {detailId && <CreditNoteDetailModal creditNoteId={detailId} onClose={() => setDetailId(null)} />}
     </>
   );
 }
@@ -1278,7 +1276,7 @@ function useOpenPeriods() {
   return data?.filter((p) => p.status === "open") ?? [];
 }
 
-function QuotationDetailModal({ quotationId, onClose, onChanged }: { quotationId: string; onClose: () => void; onChanged: () => void }) {
+export function QuotationDetailModal({ quotationId, onChanged }: { quotationId: string; onChanged: () => void }) {
   const { token, companyId, hasPermission, me } = useAuth();
   const [detail, setDetail] = useState<SalesQuotationDetail | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
@@ -1431,9 +1429,10 @@ function QuotationDetailModal({ quotationId, onClose, onChanged }: { quotationId
         <ConvertQuotationForm
           quotation={detail}
           onClose={() => setShowConvert(false)}
-          onConverted={() => {
+          onConverted={async () => {
+            setShowConvert(false);
+            await reload();
             onChanged();
-            onClose();
           }}
         />
       )}
@@ -1444,8 +1443,7 @@ function QuotationDetailModal({ quotationId, onClose, onChanged }: { quotationId
 
 function QuotationsTab() {
   const navigate = useNavigate();
-  const { data, error, reload } = useApiList<SalesQuotation>("/api/sales-quotations");
-  const [detailId, setDetailId] = useState<string | null>(null);
+  const { data, error } = useApiList<SalesQuotation>("/api/sales-quotations");
 
   const columns: Column<SalesQuotation>[] = [
     { key: "number", header: "Quotation #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
@@ -1469,13 +1467,8 @@ function QuotationsTab() {
         searchPlaceholder="Search quotations..."
         actionLabel="New Quotation"
         onAction={() => navigate("/sales/quotations/new", { state: { fromTab: "quotations" } })}
-        onRowClick={(r) => setDetailId(r.id)}
+        onRowClick={(r) => navigate(`/sales/quotations/${r.id}`, { state: { fromTab: "quotations" } })}
       />
-      {detailId && (
-        <Modal title="Sales Quotation" onClose={() => setDetailId(null)}>
-          <QuotationDetailModal quotationId={detailId} onClose={() => setDetailId(null)} onChanged={reload} />
-        </Modal>
-      )}
     </>
   );
 }
