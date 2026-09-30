@@ -10,6 +10,11 @@ import Sales from "./pages/Sales";
 import Customers from "./pages/Customers";
 import Inventory from "./pages/Inventory";
 import Purchasing from "./pages/Purchasing";
+import NewPurchaseOrderPage from "./pages/purchasing/NewPurchaseOrderPage";
+import NewRequisitionPage from "./pages/purchasing/NewRequisitionPage";
+import NewGoodsReceiptPage from "./pages/purchasing/NewGoodsReceiptPage";
+import NewSupplierInvoicePage from "./pages/purchasing/NewSupplierInvoicePage";
+import NewPurchaseReturnPage from "./pages/purchasing/NewPurchaseReturnPage";
 import Reports from "./pages/Reports";
 import Accounting from "./pages/Accounting";
 import Hr from "./pages/Hr";
@@ -75,6 +80,11 @@ export default function App() {
           <Route path="customers" element={<Customers />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="purchasing" element={<Purchasing />} />
+          <Route path="purchasing/orders/new" element={<NewPurchaseOrderPage />} />
+          <Route path="purchasing/requisitions/new" element={<NewRequisitionPage />} />
+          <Route path="purchasing/goods-receipts/new" element={<NewGoodsReceiptPage />} />
+          <Route path="purchasing/supplier-invoices/new" element={<NewSupplierInvoicePage />} />
+          <Route path="purchasing/returns/new" element={<NewPurchaseReturnPage />} />
           <Route path="reports" element={<Reports />} />
           <Route path="accounting" element={<Accounting />} />
           <Route path="hr" element={<Hr />} />

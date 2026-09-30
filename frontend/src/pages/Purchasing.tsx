@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ShoppingCart, Truck, Plus, Trash2, PackageCheck, ReceiptText, ClipboardList, Undo2, Download, Upload } from "lucide-react";
 import { useAuth } from "../lib/auth";
@@ -403,7 +404,7 @@ function QuickAddItemModal({
   );
 }
 
-interface PoFormInitial {
+export interface PoFormInitial {
   supplierId: string;
   storeId: string;
   lines: PoLineDraft[];
@@ -624,7 +625,7 @@ function BulkUploadItemsModal({
   );
 }
 
-function NewPurchaseOrderForm({
+export function NewPurchaseOrderForm({
   onClose,
   onCreated,
   initial,
@@ -895,7 +896,7 @@ function NewPurchaseOrderForm({
   );
 }
 
-function NewGoodsReceiptForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export function NewGoodsReceiptForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: purchaseOrders } = useApiList<PurchaseOrder>("/api/purchase-orders");
   const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
@@ -1094,7 +1095,7 @@ function NewGoodsReceiptForm({ onClose, onCreated }: { onClose: () => void; onCr
   );
 }
 
-function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: purchaseOrders } = useApiList<PurchaseOrder>("/api/purchase-orders");
   const { data: goodsReceipts } = useApiList<GoodsReceipt>("/api/goods-receipts");
@@ -1274,8 +1275,8 @@ function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => void; o
 }
 
 function GoodsReceiptsTab() {
-  const { data, error, reload } = useApiList<GoodsReceipt>("/api/goods-receipts");
-  const [showNew, setShowNew] = useState(false);
+  const navigate = useNavigate();
+  const { data, error } = useApiList<GoodsReceipt>("/api/goods-receipts");
   const baseCurrency = useBaseCurrency();
 
   const columns: Column<GoodsReceipt>[] = [
@@ -1300,20 +1301,15 @@ function GoodsReceiptsTab() {
         emptyText="No goods receipts yet."
         searchPlaceholder="Search goods receipts..."
         actionLabel="New Goods Receipt"
-        onAction={() => setShowNew(true)}
+        onAction={() => navigate("/purchasing/goods-receipts/new", { state: { fromTab: "receipts" } })}
       />
-      {showNew && (
-        <Modal title="New Goods Receipt" onClose={() => setShowNew(false)}>
-          <NewGoodsReceiptForm onClose={() => setShowNew(false)} onCreated={reload} />
-        </Modal>
-      )}
     </>
   );
 }
 
 function SupplierInvoicesTab() {
-  const { data, error, reload } = useApiList<SupplierInvoice>("/api/supplier-invoices");
-  const [showNew, setShowNew] = useState(false);
+  const navigate = useNavigate();
+  const { data, error } = useApiList<SupplierInvoice>("/api/supplier-invoices");
   const baseCurrency = useBaseCurrency();
 
   const columns: Column<SupplierInvoice>[] = [
@@ -1344,18 +1340,13 @@ function SupplierInvoicesTab() {
         emptyText="No supplier invoices yet."
         searchPlaceholder="Search supplier invoices..."
         actionLabel="New Supplier Invoice"
-        onAction={() => setShowNew(true)}
+        onAction={() => navigate("/purchasing/supplier-invoices/new", { state: { fromTab: "invoices" } })}
       />
-      {showNew && (
-        <Modal title="New Supplier Invoice" onClose={() => setShowNew(false)}>
-          <NewSupplierInvoiceForm onClose={() => setShowNew(false)} onCreated={reload} />
-        </Modal>
-      )}
     </>
   );
 }
 
-function NewSupplierCreditNoteForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export function NewSupplierCreditNoteForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: supplierInvoices } = useApiList<SupplierInvoice>("/api/supplier-invoices");
   const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
@@ -1552,8 +1543,8 @@ function CreditNoteDetailModal({ creditNoteId, onClose }: { creditNoteId: string
 }
 
 function PurchaseReturnsTab() {
-  const { data, error, reload } = useApiList<SupplierCreditNote>("/api/supplier-credit-notes");
-  const [showNew, setShowNew] = useState(false);
+  const navigate = useNavigate();
+  const { data, error } = useApiList<SupplierCreditNote>("/api/supplier-credit-notes");
   const [openId, setOpenId] = useState<string | null>(null);
 
   const columns: Column<SupplierCreditNote>[] = [
@@ -1579,14 +1570,9 @@ function PurchaseReturnsTab() {
         emptyText="No purchase returns yet."
         searchPlaceholder="Search purchase returns..."
         actionLabel="New Purchase Return"
-        onAction={() => setShowNew(true)}
+        onAction={() => navigate("/purchasing/returns/new", { state: { fromTab: "returns" } })}
         onRowClick={(r) => setOpenId(r.id)}
       />
-      {showNew && (
-        <Modal title="New Purchase Return" onClose={() => setShowNew(false)}>
-          <NewSupplierCreditNoteForm onClose={() => setShowNew(false)} onCreated={reload} />
-        </Modal>
-      )}
       {openId && (
         <Modal title="Purchase Return" onClose={() => setOpenId(null)}>
           <CreditNoteDetailModal creditNoteId={openId} onClose={() => setOpenId(null)} />
@@ -1596,7 +1582,7 @@ function PurchaseReturnsTab() {
   );
 }
 
-function NewRequisitionForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export function NewRequisitionForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
   const { options: variantOptions } = useVariantOptions();
@@ -1999,8 +1985,8 @@ function RequisitionDetailModal({ requisitionId, onClose, onChanged }: { requisi
 }
 
 function RequisitionsTab() {
+  const navigate = useNavigate();
   const { data, error, reload } = useApiList<PurchaseRequisition>("/api/purchase-requisitions");
-  const [showNew, setShowNew] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
 
   const columns: Column<PurchaseRequisition>[] = [
@@ -2025,14 +2011,9 @@ function RequisitionsTab() {
         emptyText="No purchase requisitions yet."
         searchPlaceholder="Search requisitions..."
         actionLabel="New Requisition"
-        onAction={() => setShowNew(true)}
+        onAction={() => navigate("/purchasing/requisitions/new", { state: { fromTab: "requisitions" } })}
         onRowClick={(r) => setOpenId(r.id)}
       />
-      {showNew && (
-        <Modal title="New Purchase Requisition" onClose={() => setShowNew(false)}>
-          <NewRequisitionForm onClose={() => setShowNew(false)} onCreated={reload} />
-        </Modal>
-      )}
       {openId && (
         <Modal title="Purchase Requisition" onClose={() => setOpenId(null)}>
           <RequisitionDetailModal requisitionId={openId} onClose={() => setOpenId(null)} onChanged={reload} />
@@ -2111,8 +2092,8 @@ function PoDetailModal({ poId, onClose }: { poId: string; onClose: () => void })
 
 function PurchaseOrdersTab() {
   const { i18n } = useTranslation();
-  const { data, error, reload } = useApiList<PurchaseOrder>("/api/purchase-orders");
-  const [showNew, setShowNew] = useState(false);
+  const navigate = useNavigate();
+  const { data, error } = useApiList<PurchaseOrder>("/api/purchase-orders");
   const [openId, setOpenId] = useState<string | null>(null);
   const baseCurrency = useBaseCurrency();
 
@@ -2141,14 +2122,9 @@ function PurchaseOrdersTab() {
         emptyText="No purchase orders yet."
         searchPlaceholder="Search purchase orders..."
         actionLabel="New Purchase Order"
-        onAction={() => setShowNew(true)}
+        onAction={() => navigate("/purchasing/orders/new", { state: { fromTab: "pos" } })}
         onRowClick={(r) => setOpenId(r.id)}
       />
-      {showNew && (
-        <Modal title="New Purchase Order" onClose={() => setShowNew(false)}>
-          <NewPurchaseOrderForm onClose={() => setShowNew(false)} onCreated={reload} />
-        </Modal>
-      )}
       {openId && (
         <Modal title="Purchase Order" onClose={() => setOpenId(null)}>
           <PoDetailModal poId={openId} onClose={() => setOpenId(null)} />
@@ -2596,12 +2572,12 @@ interface ReorderSuggestion {
 }
 
 function ReorderSuggestionsTab() {
+  const navigate = useNavigate();
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
   const [storeId, setStoreId] = useState("");
   const [suggestions, setSuggestions] = useState<ReorderSuggestion[] | null>(null);
   const [qtyOverrides, setQtyOverrides] = useState<Record<string, string>>({});
-  const [poInitial, setPoInitial] = useState<PoFormInitial | null>(null);
 
   function load() {
     if (!storeId || !token || !companyId) {
@@ -2626,7 +2602,7 @@ function ReorderSuggestionsTab() {
   }
 
   function openPoForGroup(group: { supplierId: string; rows: ReorderSuggestion[] }) {
-    setPoInitial({
+    const initial: PoFormInitial = {
       supplierId: group.supplierId,
       storeId,
       lines: group.rows.map((r) => ({
@@ -2636,7 +2612,8 @@ function ReorderSuggestionsTab() {
         vatRate: "15",
         priceIncludesVat: false,
       })),
-    });
+    };
+    navigate("/purchasing/orders/new", { state: { fromTab: "reorder", initial } });
   }
 
   return (
@@ -2711,29 +2688,18 @@ function ReorderSuggestionsTab() {
           </div>
         </div>
       )}
-
-      {poInitial && (
-        <Modal title="New Purchase Order" onClose={() => setPoInitial(null)}>
-          <NewPurchaseOrderForm
-            initial={poInitial}
-            onClose={() => setPoInitial(null)}
-            onCreated={() => {
-              setPoInitial(null);
-              load();
-            }}
-          />
-        </Modal>
-      )}
     </div>
   );
 }
 
 export default function Purchasing() {
   const { t } = useTranslation();
+  const location = useLocation();
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold text-slate-900">{t("nav.purchasing")}</h1>
       <Tabs
+        initialActive={(location.state as { fromTab?: string } | null)?.fromTab}
         tabs={[
           { key: "requisitions", label: "Requisitions", content: <RequisitionsTab /> },
           { key: "reorder", label: "Reorder Suggestions", content: <ReorderSuggestionsTab /> },

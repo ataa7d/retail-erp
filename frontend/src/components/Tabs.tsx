@@ -6,8 +6,8 @@ interface Tab {
   content: ReactNode;
 }
 
-export default function Tabs({ tabs }: { tabs: Tab[] }) {
-  const [active, setActive] = useState(tabs[0]?.key);
+export default function Tabs({ tabs, initialActive }: { tabs: Tab[]; initialActive?: string }) {
+  const [active, setActive] = useState(initialActive ?? tabs[0]?.key);
 
   return (
     <div>
