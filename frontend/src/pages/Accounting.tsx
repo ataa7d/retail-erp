@@ -13,6 +13,7 @@ import ExchangeRateField from "../components/ExchangeRateField";
 import { useBaseCurrency, formatMoney } from "../lib/currency";
 import { Field, TextInput, SelectInput, FormActions } from "../components/FormField";
 import type { Column } from "../components/DataTable";
+import Customers from "./Customers";
 
 interface Account {
   id: string;
@@ -2217,6 +2218,7 @@ export default function Accounting() {
   const tabs = useMemo(
     () => [
       { key: "coa", label: "Chart of Accounts", content: <ChartOfAccountsTab /> },
+      { key: "customers", label: "Customers", content: <Customers /> },
       { key: "tax-codes", label: "Tax Codes", content: <TaxCodesTab /> },
       { key: "journals", label: "Journals", content: <JournalsTab /> },
       { key: "receipts", label: "Customer Receipts", content: <CustomerReceiptsTab /> },

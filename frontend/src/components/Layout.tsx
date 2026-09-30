@@ -3,9 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard,
-  Package,
   Receipt,
-  Users,
   Warehouse,
   ShoppingCart,
   BarChart3,
@@ -26,13 +24,24 @@ import {
 import { useAuth } from "../lib/auth";
 import { apiRequest } from "../lib/api";
 
+// Items now lives inside Inventory's tabs -- this link stays visible to
+// anyone who could reach Items before (inventory.items.manage), not just
+// inventory.adjustment.post, so nobody loses access they already had.
+// Customers (moved into Accounting below) doesn't get the same treatment:
+// it used to be visible to *everyone* (no permission at all), and Accounting
+// is gated behind accounting.journal.post -- users who could see customers
+// but not post journals will lose the sidebar link. Flagged, not silently
+// widened, since broadening Accounting's gate would expose GL data instead.
 const navItems = [
   { to: "/", label: "nav.dashboard", permission: null, icon: LayoutDashboard },
-  { to: "/items", label: "nav.items", permission: "inventory.items.manage", icon: Package },
   { to: "/sales", label: "nav.sales", permission: "sales.pos_invoice.create", icon: Receipt },
-  { to: "/pos", label: "nav.pos", permission: "sales.pos_invoice.create", icon: Monitor },
-  { to: "/customers", label: "nav.customers", permission: null, icon: Users },
-  { to: "/inventory", label: "nav.inventory", permission: "inventory.adjustment.post", icon: Warehouse },
+  { to: "/pos", label: "nav.pos", permission: "sales.pos_invoice.create", icon: Monitor, indent: true },
+  {
+    to: "/inventory",
+    label: "nav.inventory",
+    permission: ["inventory.adjustment.post", "inventory.items.manage"],
+    icon: Warehouse,
+  },
   { to: "/purchasing", label: "nav.purchasing", permission: "purchasing.po.create", icon: ShoppingCart },
   { to: "/accounting", label: "nav.accounting", permission: "accounting.journal.post", icon: Landmark },
   { to: "/reports", label: "nav.reports", permission: "accounting.reports.view", icon: BarChart3 },
@@ -198,23 +207,28 @@ export default function Layout() {
         {/* Nav rail */}
         <nav className="flex w-56 shrink-0 flex-col gap-0.5 overflow-y-auto border-e border-slate-200 bg-white p-2">
           {navItems
-            .filter((item) => !item.permission || hasPermission(item.permission))
+            .filter((item) => {
+              if (!item.permission) return true;
+              const required = Array.isArray(item.permission) ? item.permission : [item.permission];
+              return required.some((p) => hasPermission(p));
+            })
             .map((item) => {
               const Icon = item.icon;
+              const indent = "indent" in item && item.indent;
               return (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   end={item.to === "/"}
                   className={({ isActive }) =>
-                    `flex items-center gap-2.5 rounded-md border-s-[3px] px-2.5 py-2 text-sm transition-colors ${
+                    `flex items-center gap-2.5 rounded-md border-s-[3px] py-2 text-sm transition-colors ${indent ? "ms-4 ps-2 pe-2.5 text-[13px]" : "px-2.5"} ${
                       isActive
                         ? "border-brand-500 bg-brand-50 font-medium text-brand-700"
                         : "border-transparent text-slate-600 hover:bg-slate-50"
                     }`
                   }
                 >
-                  <Icon size={16} strokeWidth={2} />
+                  <Icon size={indent ? 14 : 16} strokeWidth={2} />
                   {t(item.label)}
                 </NavLink>
               );

@@ -5,7 +5,6 @@ import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import CompanyPicker from "./pages/CompanyPicker";
 import Dashboard from "./pages/Dashboard";
-import Items from "./pages/Items";
 import Sales from "./pages/Sales";
 import NewSalesInvoicePage from "./pages/sales/NewSalesInvoicePage";
 import NewCreditNotePage from "./pages/sales/NewCreditNotePage";
@@ -13,7 +12,6 @@ import NewQuotationPage from "./pages/sales/NewQuotationPage";
 import SalesInvoiceDetailPage from "./pages/sales/SalesInvoiceDetailPage";
 import SalesCreditNoteDetailPage from "./pages/sales/SalesCreditNoteDetailPage";
 import QuotationDetailPage from "./pages/sales/QuotationDetailPage";
-import Customers from "./pages/Customers";
 import Inventory from "./pages/Inventory";
 import NewTransferPage from "./pages/inventory/NewTransferPage";
 import NewTransferOrderPage from "./pages/inventory/NewTransferOrderPage";
@@ -93,7 +91,7 @@ export default function App() {
           }
         >
           <Route index element={<Dashboard />} />
-          <Route path="items" element={<Items />} />
+          <Route path="items" element={<Navigate to="/inventory" state={{ fromTab: "items" }} replace />} />
           <Route path="sales" element={<Sales />} />
           <Route path="sales/invoices/new" element={<NewSalesInvoicePage />} />
           <Route path="sales/credit-notes/new" element={<NewCreditNotePage />} />
@@ -101,7 +99,7 @@ export default function App() {
           <Route path="sales/invoices/:id" element={<SalesInvoiceDetailPage />} />
           <Route path="sales/credit-notes/:id" element={<SalesCreditNoteDetailPage />} />
           <Route path="sales/quotations/:id" element={<QuotationDetailPage />} />
-          <Route path="customers" element={<Customers />} />
+          <Route path="customers" element={<Navigate to="/accounting" state={{ fromTab: "customers" }} replace />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="inventory/transfers/new" element={<NewTransferPage />} />
           <Route path="inventory/transfer-orders/new" element={<NewTransferOrderPage />} />

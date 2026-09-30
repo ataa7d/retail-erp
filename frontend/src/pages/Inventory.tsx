@@ -10,6 +10,7 @@ import StatusBadge from "../components/StatusBadge";
 import Tabs from "../components/Tabs";
 import { Field, TextInput, SelectInput, FormActions } from "../components/FormField";
 import type { Column } from "../components/DataTable";
+import { ItemsSection } from "./Items";
 
 interface Store {
   id: string;
@@ -937,6 +938,7 @@ export default function Inventory() {
   const location = useLocation();
   const tabs = useMemo(
     () => [
+      { key: "items", label: "Items", content: <ItemsSection /> },
       { key: "stock", label: "Stock", content: <StockTab /> },
       { key: "transfers", label: "Transfers", content: <TransfersTab /> },
       { key: "transfer-orders", label: "Transfer Orders", content: <TransferOrdersTab /> },

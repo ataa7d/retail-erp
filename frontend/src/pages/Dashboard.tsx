@@ -241,7 +241,8 @@ export default function Dashboard() {
           loading={loading}
         />
         <KpiTile
-          to="/customers"
+          to="/accounting"
+          state={{ fromTab: "customers" }}
           label="AR Outstanding"
           value={loading ? "—" : formatMoney(summary.arOutstanding)}
           icon={ArrowDownCircle}
@@ -257,15 +258,32 @@ export default function Dashboard() {
           loading={loading}
         />
         <KpiTile
-          to="/items"
+          to="/inventory"
+          state={{ fromTab: "items" }}
           label="Low Stock Alerts"
           value={loading ? "—" : summary.lowStockCount}
           icon={AlertTriangle}
           accent={!loading && summary.lowStockCount > 0 ? "amber" : "slate"}
           loading={loading}
         />
-        <KpiTile to="/items" label={t("nav.items")} value={itemCount ?? "—"} icon={Package} accent="brand" loading={itemCount === null} />
-        <KpiTile to="/customers" label={t("nav.customers")} value={customerCount ?? "—"} icon={Users} accent="green" loading={customerCount === null} />
+        <KpiTile
+          to="/inventory"
+          state={{ fromTab: "items" }}
+          label={t("nav.items")}
+          value={itemCount ?? "—"}
+          icon={Package}
+          accent="brand"
+          loading={itemCount === null}
+        />
+        <KpiTile
+          to="/accounting"
+          state={{ fromTab: "customers" }}
+          label={t("nav.customers")}
+          value={customerCount ?? "—"}
+          icon={Users}
+          accent="green"
+          loading={customerCount === null}
+        />
         {hasPermission("hr.employee.manage") && (
           <KpiTile to="/hr" label={t("nav.hr")} value={employeeCount ?? "—"} icon={UserCog} accent="amber" loading={employeeCount === null} />
         )}

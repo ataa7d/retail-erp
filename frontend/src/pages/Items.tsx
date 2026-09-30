@@ -1608,7 +1608,9 @@ function AllVariantsTab() {
   );
 }
 
-export default function Items() {
+// Embedded directly as the Inventory page's "Items" tab -- no h1/page wrapper
+// of its own, since Inventory already provides one.
+export function ItemsSection() {
   const { t } = useTranslation();
   const tabs = useMemo(
     () => [
@@ -1637,10 +1639,5 @@ export default function Items() {
     ],
     [t],
   );
-  return (
-    <div>
-      <h1 className="mb-4 text-xl font-semibold text-slate-900">{t("nav.items")}</h1>
-      <Tabs tabs={tabs} />
-    </div>
-  );
+  return <Tabs tabs={tabs} />;
 }

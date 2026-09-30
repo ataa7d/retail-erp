@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 interface KpiTileProps {
   to: string;
+  state?: Record<string, unknown>;
   label: string;
   value: string | number;
   icon: LucideIcon;
@@ -17,10 +18,11 @@ const accentClasses: Record<NonNullable<KpiTileProps["accent"]>, string> = {
   slate: "bg-slate-100 text-slate-600",
 };
 
-export default function KpiTile({ to, label, value, icon: Icon, accent = "brand", loading }: KpiTileProps) {
+export default function KpiTile({ to, state, label, value, icon: Icon, accent = "brand", loading }: KpiTileProps) {
   return (
     <Link
       to={to}
+      state={state}
       className="group flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
     >
       <div className="flex items-start justify-between">
