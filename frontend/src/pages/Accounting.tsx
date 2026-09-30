@@ -2031,7 +2031,7 @@ function NewBudgetForm({ onClose, onCreated }: { onClose: () => void; onCreated:
   );
 }
 
-function BudgetDetailModal({ budgetId, onClose, onChanged }: { budgetId: string; onClose: () => void; onChanged: () => void }) {
+export function BudgetDetailModal({ budgetId, onChanged }: { budgetId: string; onChanged: () => void }) {
   const { token, companyId } = useAuth();
   const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
   const { data: accounts } = useApiList<Account>("/api/chart-of-accounts");
@@ -2174,9 +2174,9 @@ function BudgetDetailModal({ budgetId, onClose, onChanged }: { budgetId: string;
 }
 
 function BudgetsTab() {
+  const navigate = useNavigate();
   const { data, error, reload } = useApiList<Budget>("/api/budgets");
   const [showNew, setShowNew] = useState(false);
-  const [detailId, setDetailId] = useState<string | null>(null);
 
   const columns: Column<Budget>[] = [
     { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900">{r.name}</span> },
@@ -2200,16 +2200,11 @@ function BudgetsTab() {
         searchPlaceholder="Search budgets..."
         actionLabel="New Budget"
         onAction={() => setShowNew(true)}
-        onRowClick={(r) => setDetailId(r.id)}
+        onRowClick={(r) => navigate(`/accounting/budgets/${r.id}`, { state: { fromTab: "budgets" } })}
       />
       {showNew && (
         <Modal title="New Budget" onClose={() => setShowNew(false)}>
           <NewBudgetForm onClose={() => setShowNew(false)} onCreated={reload} />
-        </Modal>
-      )}
-      {detailId && (
-        <Modal title="Budget" onClose={() => setDetailId(null)}>
-          <BudgetDetailModal budgetId={detailId} onClose={() => setDetailId(null)} onChanged={reload} />
         </Modal>
       )}
     </>

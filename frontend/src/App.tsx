@@ -34,6 +34,7 @@ import Accounting from "./pages/Accounting";
 import NewJournalPage from "./pages/accounting/NewJournalPage";
 import NewReceiptPage from "./pages/accounting/NewReceiptPage";
 import NewPaymentPage from "./pages/accounting/NewPaymentPage";
+import BudgetDetailPage from "./pages/accounting/BudgetDetailPage";
 import Hr from "./pages/Hr";
 import Assets from "./pages/Assets";
 import Admin from "./pages/Admin";
@@ -121,6 +122,7 @@ export default function App() {
           <Route path="accounting/journals/new" element={<NewJournalPage />} />
           <Route path="accounting/receipts/new" element={<NewReceiptPage />} />
           <Route path="accounting/payments/new" element={<NewPaymentPage />} />
+          <Route path="accounting/budgets/:id" element={<BudgetDetailPage />} />
           <Route path="hr" element={<Hr />} />
           <Route path="assets" element={<Assets />} />
           <Route path="admin" element={<Admin />} />
