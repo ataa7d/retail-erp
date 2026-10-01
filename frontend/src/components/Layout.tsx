@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -55,9 +55,13 @@ const navItems = [
       { key: "gift-cards", label: "Gift Cards" },
       { key: "deposits", label: "Customer Deposits" },
       { key: "price-lists", label: "Price Lists" },
+      // Not a tab on Sales's own page -- POS Terminal is a separate,
+      // full-screen route with no sidebar at all. `to` overrides the
+      // default "navigate to the parent module with this fromTab" behavior
+      // every other sub-item uses, going straight to /pos instead.
+      { key: "pos", label: "POS Terminal", to: "/pos", icon: Monitor },
     ],
   },
-  { to: "/pos", label: "nav.pos", permission: "sales.pos_invoice.create", icon: Monitor, indent: true },
   {
     to: "/inventory",
     label: "nav.inventory",
@@ -253,14 +257,19 @@ export default function Layout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  // Whichever module the current URL is inside auto-opens its dropdown --
-  // manual toggles (below) still win afterward, this only seeds the
-  // default the first time a module becomes current.
+  // Auto-opens a module's dropdown the moment you arrive in it from
+  // somewhere else -- but only on that transition, not on every sub-path
+  // change while you're already inside it, so a manual collapse (see the
+  // header/chevron handlers below) isn't immediately re-forced open by
+  // this effect the next time a tab inside the same module navigates.
+  const lastAutoModule = useRef<string | null>(null);
   useEffect(() => {
     const current = navItems.find((item) => item.to !== "/" && location.pathname.startsWith(item.to));
-    if (current && "subItems" in current) {
-      setExpanded((prev) => (prev[current.to] ? prev : { ...prev, [current.to]: true }));
+    const currentKey = current && "subItems" in current ? current.to : null;
+    if (currentKey && currentKey !== lastAutoModule.current) {
+      setExpanded((prev) => ({ ...prev, [currentKey]: true }));
     }
+    lastAutoModule.current = currentKey;
   }, [location.pathname]);
 
   const company = companies.find((c) => c.id === companyId);
@@ -367,6 +376,9 @@ export default function Layout() {
                     <NavLink
                       to={item.to}
                       end={item.to === "/"}
+                      onClick={() => {
+                        if (subItems) setExpanded((prev) => ({ ...prev, [item.to]: !prev[item.to] }));
+                      }}
                       className={`flex min-w-0 flex-1 items-center gap-2.5 py-2 ${indent ? "ps-2 pe-1 text-[13px]" : "px-2.5"}`}
                     >
                       <Icon size={indent ? 14 : 16} strokeWidth={2} className="shrink-0" />
@@ -385,16 +397,22 @@ export default function Layout() {
                   </div>
                   {subItems && isOpen && (
                     <div className="ms-4 mt-0.5 flex flex-col gap-0.5 border-s border-slate-200 ps-2 dark:border-slate-700">
-                      {subItems.map((sub) => (
-                        <button
-                          key={sub.key}
-                          type="button"
-                          onClick={() => navigate(item.to, { state: { fromTab: sub.key } })}
-                          className="rounded-md px-2 py-1.5 text-start text-[13px] text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                        >
-                          {sub.label}
-                        </button>
-                      ))}
+                      {subItems.map((sub) => {
+                        const SubIcon = "icon" in sub ? sub.icon : null;
+                        return (
+                          <button
+                            key={sub.key}
+                            type="button"
+                            onClick={() =>
+                              "to" in sub ? navigate(sub.to) : navigate(item.to, { state: { fromTab: sub.key } })
+                            }
+                            className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-[13px] text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                          >
+                            {SubIcon && <SubIcon size={13} strokeWidth={2} className="shrink-0" />}
+                            {sub.label}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
