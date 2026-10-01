@@ -1,6 +1,8 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
+import fastifyStatic from "@fastify/static";
+import path from "node:path";
 import { ZodError } from "zod";
 import { registerAuth } from "./plugins/auth.js";
 import { HttpError, pgErrorStatus } from "./errors.js";
@@ -62,6 +64,14 @@ export async function buildApp(): Promise<FastifyInstance> {
   // thousand rows, but still bounded so a bad request can't exhaust memory.
   await app.register(multipart, {
     limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+  });
+
+  // Serves uploaded company logos (see routes/companies.ts) -- the only
+  // uploaded files in the app, so plain static serving off local disk
+  // rather than a CDN/blob store.
+  await app.register(fastifyStatic, {
+    root: path.join(process.cwd(), "uploads"),
+    prefix: "/uploads/",
   });
 
   app.setErrorHandler((err: Error, _request, reply) => {

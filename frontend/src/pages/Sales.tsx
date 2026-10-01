@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Receipt, RotateCcw, Plus, Trash2, Tag, FileText, Wallet, Printer } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
-import { apiRequest, ApiError, downloadFile } from "../lib/api";
+import { apiRequest, ApiError, downloadFile, API_URL } from "../lib/api";
 import { runBulkAction } from "../lib/bulkAction";
 import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
@@ -73,6 +73,7 @@ interface FullSalesInvoice {
   company_name_ar: string;
   company_vat_number: string | null;
   company_cr_number: string | null;
+  company_logo_path: string | null;
   customer_name_en: string | null;
   customer_name_ar: string | null;
   customer_vat_number: string | null;
@@ -316,6 +317,7 @@ export function SalesInvoiceDetailModal({ invoiceId, onVoided }: { invoiceId: st
               companyNameAr={detail.company_name_ar}
               companyVatNumber={detail.company_vat_number}
               companyCrNumber={detail.company_cr_number}
+              companyLogoUrl={detail.company_logo_path ? `${API_URL}${detail.company_logo_path}` : null}
               customerNameEn={detail.customer_name_en}
               customerVatNumber={detail.customer_vat_number}
               lines={detail.lines.map((l) => ({

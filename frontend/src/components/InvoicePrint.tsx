@@ -29,6 +29,7 @@ export interface InvoicePrintProps {
   companyNameAr: string;
   companyVatNumber: string | null;
   companyCrNumber?: string | null;
+  companyLogoUrl?: string | null;
   customerNameEn?: string | null;
   customerNameAr?: string | null;
   customerVatNumber?: string | null;
@@ -52,13 +53,16 @@ export function InvoicePrintArea(props: InvoicePrintProps) {
       `}</style>
       <div id="invoice-print-area" className="hidden print:block">
         <div className="mb-4 flex items-start justify-between">
-          <div>
-            <div className="text-base font-semibold">{props.companyNameEn}</div>
-            <div className="text-base font-semibold" dir="rtl">
-              {props.companyNameAr}
+          <div className="flex items-start gap-3">
+            {props.companyLogoUrl && <img src={props.companyLogoUrl} alt="" className="h-12 w-12 object-contain" />}
+            <div>
+              <div className="text-base font-semibold">{props.companyNameEn}</div>
+              <div className="text-base font-semibold" dir="rtl">
+                {props.companyNameAr}
+              </div>
+              {props.companyVatNumber && <div className="mt-1 text-xs">VAT No: {props.companyVatNumber}</div>}
+              {props.companyCrNumber && <div className="text-xs">CR No: {props.companyCrNumber}</div>}
             </div>
-            {props.companyVatNumber && <div className="mt-1 text-xs">VAT No: {props.companyVatNumber}</div>}
-            {props.companyCrNumber && <div className="text-xs">CR No: {props.companyCrNumber}</div>}
           </div>
           <div className="text-end">
             <div className="text-sm font-semibold">{isStandard ? "Tax Invoice / فاتورة ضريبية" : "Simplified Tax Invoice / فاتورة ضريبية مبسطة"}</div>

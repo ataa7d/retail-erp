@@ -96,6 +96,7 @@ export async function salesInvoiceRoutes(app: FastifyInstance): Promise<void> {
       const header = await pool.query(
         `SELECT si.*, c.name_en AS company_name_en, c.name_ar AS company_name_ar,
                 c.vat_registration_number AS company_vat_number, c.cr_number AS company_cr_number,
+                c.logo_path AS company_logo_path,
                 cust.name_en AS customer_name_en, cust.name_ar AS customer_name_ar,
                 cust.vat_registration_number AS customer_vat_number
          FROM sales_invoices si

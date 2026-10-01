@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { ShieldCheck, KeyRound, ScrollText, Smartphone, RefreshCw, CheckCircle2, XCircle, Circle, AlertTriangle, Plus } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
-import { apiRequest, ApiError } from "../lib/api";
+import { apiRequest, ApiError, uploadFile, API_URL } from "../lib/api";
 import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
@@ -1478,6 +1478,7 @@ interface CompanyProfile {
   cr_number: string | null;
   address: string | null;
   base_currency: string;
+  logo_path: string | null;
 }
 
 function CompanyProfileTab() {
@@ -1491,6 +1492,8 @@ function CompanyProfileTab() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const canManage = hasPermission("admin.companies.manage");
 
   function load() {
@@ -1533,10 +1536,45 @@ function CompanyProfileTab() {
     }
   }
 
+  async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoError(null);
+    setUploadingLogo(true);
+    try {
+      await uploadFile("/api/companies/current/logo", file, { token, companyId });
+      load();
+    } catch (err) {
+      setLogoError(err instanceof ApiError ? err.message : "Failed to upload logo");
+    } finally {
+      setUploadingLogo(false);
+      e.target.value = "";
+    }
+  }
+
   if (!company) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
   return (
     <div className="max-w-lg">
+      {canManage && (
+        <div className="mb-4 flex items-center gap-4 rounded-md border border-slate-200 p-3 dark:border-slate-700">
+          {company.logo_path ? (
+            <img src={`${API_URL}${company.logo_path}`} alt="Company logo" className="h-16 w-16 rounded object-contain" />
+          ) : (
+            <div className="flex h-16 w-16 items-center justify-center rounded bg-slate-100 text-xs text-slate-400 dark:bg-slate-700 dark:text-slate-500">
+              No logo
+            </div>
+          )}
+          <div>
+            <label className="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">
+              {uploadingLogo ? "Uploading..." : company.logo_path ? "Replace logo" : "Upload logo"}
+              <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={uploadingLogo} onChange={handleLogoChange} />
+            </label>
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">PNG, JPEG, or WebP, up to 2MB. Shown on printed invoices.</p>
+            {logoError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{logoError}</p>}
+          </div>
+        </div>
+      )}
       <form onSubmit={handleSubmit}>
         <div className="mb-3 grid grid-cols-2 gap-3">
           <Field label="Company Code">

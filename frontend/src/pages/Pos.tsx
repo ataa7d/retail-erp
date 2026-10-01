@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Search, Plus, Minus, Trash2, WifiOff, Wifi, RefreshCw, LogOut, X, ShoppingCart, Wallet, PauseCircle, Printer, Percent } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
-import { apiRequest, ApiError } from "../lib/api";
+import { apiRequest, ApiError, API_URL } from "../lib/api";
 import { InvoicePrintArea } from "../components/InvoicePrint";
 
 interface PosDevice {
@@ -550,13 +550,18 @@ export default function Pos() {
   const { data: items } = useApiList<PosItem>("/api/items");
   const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
   const { data: stores } = useApiList<Store>("/api/stores");
-  const [company, setCompany] = useState<{ name_en: string; name_ar: string; vat_registration_number: string | null } | null>(null);
+  const [company, setCompany] = useState<{
+    name_en: string;
+    name_ar: string;
+    vat_registration_number: string | null;
+    logo_path: string | null;
+  } | null>(null);
   useEffect(() => {
     if (!token || !companyId) return;
-    apiRequest<{ name_en: string; name_ar: string; vat_registration_number: string | null }>("/api/companies/current", {
-      token,
-      companyId,
-    }).then(setCompany);
+    apiRequest<{ name_en: string; name_ar: string; vat_registration_number: string | null; logo_path: string | null }>(
+      "/api/companies/current",
+      { token, companyId },
+    ).then(setCompany);
   }, [token, companyId]);
 
   const device = devices?.find((d) => d.id === deviceId) ?? null;
@@ -1382,6 +1387,7 @@ export default function Pos() {
             companyNameEn={company?.name_en ?? ""}
             companyNameAr={company?.name_ar ?? ""}
             companyVatNumber={company?.vat_registration_number ?? null}
+            companyLogoUrl={company?.logo_path ? `${API_URL}${company.logo_path}` : null}
             lines={receipt.lines.map((l) => {
               const gross = l.qty * l.unitPrice;
               const net = gross / (1 + VAT_RATE / 100);

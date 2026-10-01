@@ -1,8 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { pool, withTransaction } from "../db.js";
-import { NotFoundError } from "../errors.js";
+import { NotFoundError, BusinessRuleError } from "../errors.js";
 import { bootstrapCompany } from "../../companies/companyBootstrapService.js";
+
+const LOGO_DIR = path.join(process.cwd(), "uploads", "logos");
+const ALLOWED_LOGO_TYPES: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
 
 const updateCompanySchema = z.object({
   nameEn: z.string().min(1),
@@ -74,13 +80,41 @@ export async function companyRoutes(app: FastifyInstance): Promise<void> {
   // X-Company-Id like every other authenticated route.
   app.get("/companies/current", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
-      `SELECT id, company_code, name_en, name_ar, vat_registration_number, cr_number, address, base_currency
+      `SELECT id, company_code, name_en, name_ar, vat_registration_number, cr_number, address, base_currency, logo_path
        FROM companies WHERE id = $1`,
       [request.companyId],
     );
     if (result.rows.length === 0) throw new NotFoundError("company not found");
     return result.rows[0];
   });
+
+  // Logo shown at the top of printed invoices (InvoicePrint.tsx) -- the
+  // only image upload in the app, so it gets its own small local-disk
+  // store under uploads/logos/ (served statically, see app.ts) rather than
+  // standing up real blob storage for one file per company.
+  app.post(
+    "/companies/current/logo",
+    { preHandler: [app.authenticate, app.requirePermission("admin.companies.manage")] },
+    async (request) => {
+      const file = await request.file({ limits: { fileSize: 2 * 1024 * 1024 } });
+      if (!file) throw new BusinessRuleError("no file uploaded");
+      const ext = ALLOWED_LOGO_TYPES[file.mimetype];
+      if (!ext) throw new BusinessRuleError("logo must be a PNG, JPEG, or WebP image");
+
+      const buffer = await file.toBuffer();
+      if (file.file.truncated) throw new BusinessRuleError("logo must be 2MB or smaller");
+      await mkdir(LOGO_DIR, { recursive: true });
+      const filename = `${request.companyId}-${randomUUID()}.${ext}`;
+      await writeFile(path.join(LOGO_DIR, filename), buffer);
+
+      const logoPath = `/uploads/logos/${filename}`;
+      await withTransaction(async (client) => {
+        await client.query(`UPDATE companies SET logo_path = $1 WHERE id = $2`, [logoPath, request.companyId]);
+      }, request.authUser.id);
+
+      return { logoPath };
+    },
+  );
 
   app.post(
     "/companies/current",
