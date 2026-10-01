@@ -5,8 +5,10 @@ import { ShoppingCart, Truck, Plus, Trash2, PackageCheck, ReceiptText, Clipboard
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError, uploadFile } from "../lib/api";
+import { runBulkAction } from "../lib/bulkAction";
 import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
+import StatusStepper from "../components/StatusStepper";
 import Modal from "../components/Modal";
 import Tabs from "../components/Tabs";
 import ExchangeRateField from "../components/ExchangeRateField";
@@ -1276,8 +1278,12 @@ export function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => 
 
 function GoodsReceiptsTab() {
   const navigate = useNavigate();
-  const { data, error } = useApiList<GoodsReceipt>("/api/goods-receipts");
+  const { token, companyId, hasPermission } = useAuth();
+  const { data, error, reload } = useApiList<GoodsReceipt>("/api/goods-receipts");
   const baseCurrency = useBaseCurrency();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const canPost = hasPermission("purchasing.goods_receipt.post");
 
   const columns: Column<GoodsReceipt>[] = [
     { key: "number", header: "GR #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
@@ -1288,8 +1294,17 @@ function GoodsReceiptsTab() {
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
   ];
 
+  async function bulkPost() {
+    setBulkMessage(await runBulkAction("/api/goods-receipts/bulk-post", [...selected], { token, companyId }));
+    setSelected(new Set());
+    reload();
+  }
+
   return (
     <>
+      {bulkMessage && (
+        <p className="mb-3 rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">{bulkMessage}</p>
+      )}
       <ListPage
         title=""
         data={data}
@@ -1302,6 +1317,10 @@ function GoodsReceiptsTab() {
         searchPlaceholder="Search goods receipts..."
         actionLabel="New Goods Receipt"
         onAction={() => navigate("/purchasing/goods-receipts/new", { state: { fromTab: "receipts" } })}
+        selectable={canPost}
+        selectedKeys={selected}
+        onSelectionChange={setSelected}
+        bulkActions={canPost ? [{ label: "Post", onClick: bulkPost }] : undefined}
       />
     </>
   );
@@ -1309,8 +1328,12 @@ function GoodsReceiptsTab() {
 
 function SupplierInvoicesTab() {
   const navigate = useNavigate();
-  const { data, error } = useApiList<SupplierInvoice>("/api/supplier-invoices");
+  const { token, companyId, hasPermission } = useAuth();
+  const { data, error, reload } = useApiList<SupplierInvoice>("/api/supplier-invoices");
   const baseCurrency = useBaseCurrency();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const canPost = hasPermission("purchasing.goods_receipt.post");
 
   const columns: Column<SupplierInvoice>[] = [
     { key: "number", header: "Invoice #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
@@ -1327,8 +1350,17 @@ function SupplierInvoicesTab() {
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
   ];
 
+  async function bulkPost() {
+    setBulkMessage(await runBulkAction("/api/supplier-invoices/bulk-post", [...selected], { token, companyId }));
+    setSelected(new Set());
+    reload();
+  }
+
   return (
     <>
+      {bulkMessage && (
+        <p className="mb-3 rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">{bulkMessage}</p>
+      )}
       <ListPage
         title=""
         data={data}
@@ -1341,6 +1373,10 @@ function SupplierInvoicesTab() {
         searchPlaceholder="Search supplier invoices..."
         actionLabel="New Supplier Invoice"
         onAction={() => navigate("/purchasing/supplier-invoices/new", { state: { fromTab: "invoices" } })}
+        selectable={canPost}
+        selectedKeys={selected}
+        onSelectionChange={setSelected}
+        bulkActions={canPost ? [{ label: "Post", onClick: bulkPost }] : undefined}
       />
     </>
   );
@@ -1500,14 +1536,35 @@ export function NewSupplierCreditNoteForm({ onClose, onCreated }: { onClose: () 
 }
 
 export function CreditNoteDetailModal({ creditNoteId }: { creditNoteId: string }) {
-  const { token, companyId } = useAuth();
+  const { token, companyId, hasPermission } = useAuth();
   const [detail, setDetail] = useState<SupplierCreditNoteDetail | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const baseCurrency = useBaseCurrency();
+
+  async function reload() {
+    const d = await apiRequest<SupplierCreditNoteDetail>(`/api/supplier-credit-notes/${creditNoteId}`, { token, companyId });
+    setDetail(d);
+  }
 
   useEffect(() => {
     if (!token || !companyId) return;
-    apiRequest<SupplierCreditNoteDetail>(`/api/supplier-credit-notes/${creditNoteId}`, { token, companyId }).then(setDetail);
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creditNoteId, token, companyId]);
+
+  async function post() {
+    setError(null);
+    setBusy(true);
+    try {
+      await apiRequest(`/api/supplier-credit-notes/${creditNoteId}/post`, { method: "POST", token, companyId });
+      await reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to post");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (!detail) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
@@ -1522,6 +1579,12 @@ export function CreditNoteDetailModal({ creditNoteId }: { creditNoteId: string }
         </div>
         <StatusBadge status={detail.document_status} />
       </div>
+      {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+      {detail.document_status === "draft" && hasPermission("purchasing.goods_receipt.post") && (
+        <button onClick={post} disabled={busy} className="mb-3 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
+          {busy ? "Working..." : "Post"}
+        </button>
+      )}
       <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">{detail.reason}</p>
 
       <div className="mb-3 space-y-1 rounded-md border border-slate-200 dark:border-slate-700 p-2">
@@ -1544,7 +1607,11 @@ export function CreditNoteDetailModal({ creditNoteId }: { creditNoteId: string }
 
 function PurchaseReturnsTab() {
   const navigate = useNavigate();
-  const { data, error } = useApiList<SupplierCreditNote>("/api/supplier-credit-notes");
+  const { token, companyId, hasPermission } = useAuth();
+  const { data, error, reload } = useApiList<SupplierCreditNote>("/api/supplier-credit-notes");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const canPost = hasPermission("purchasing.goods_receipt.post");
 
   const columns: Column<SupplierCreditNote>[] = [
     { key: "number", header: "SCN #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
@@ -1556,8 +1623,17 @@ function PurchaseReturnsTab() {
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
   ];
 
+  async function bulkPost() {
+    setBulkMessage(await runBulkAction("/api/supplier-credit-notes/bulk-post", [...selected], { token, companyId }));
+    setSelected(new Set());
+    reload();
+  }
+
   return (
     <>
+      {bulkMessage && (
+        <p className="mb-3 rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">{bulkMessage}</p>
+      )}
       <ListPage
         title=""
         data={data}
@@ -1571,6 +1647,10 @@ function PurchaseReturnsTab() {
         actionLabel="New Purchase Return"
         onAction={() => navigate("/purchasing/returns/new", { state: { fromTab: "returns" } })}
         onRowClick={(r) => navigate(`/purchasing/returns/${r.id}`, { state: { fromTab: "returns" } })}
+        selectable={canPost}
+        selectedKeys={selected}
+        onSelectionChange={setSelected}
+        bulkActions={canPost ? [{ label: "Post", onClick: bulkPost }] : undefined}
       />
     </>
   );
@@ -1852,6 +1932,20 @@ export function RequisitionDetailModal({ requisitionId, onChanged }: { requisiti
     }
   }
 
+  async function unapprove() {
+    setError(null);
+    setBusy(true);
+    try {
+      await apiRequest(`/api/purchase-requisitions/${requisitionId}/unapprove`, { method: "POST", token, companyId });
+      await reload();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to unapprove");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function withdraw() {
     setError(null);
     setBusy(true);
@@ -1903,6 +1997,16 @@ export function RequisitionDetailModal({ requisitionId, onChanged }: { requisiti
         </div>
         <StatusBadge status={detail.document_status} />
       </div>
+      <StatusStepper
+        steps={[
+          { key: "draft", label: "Draft" },
+          { key: "pending_approval", label: "Pending Approval" },
+          { key: "approved", label: "Approved" },
+          { key: "converted_to_po", label: "Converted to PO" },
+        ]}
+        current={detail.document_status}
+        terminalStatuses={{ rejected: "Rejected", withdrawn: "Withdrawn" }}
+      />
       {detail.notes && <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">{detail.notes}</p>}
       {detail.document_status === "rejected" && detail.rejection_reason && (
         <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">Rejected: {detail.rejection_reason}</p>
@@ -1959,9 +2063,16 @@ export function RequisitionDetailModal({ requisitionId, onChanged }: { requisiti
       )}
 
       {detail.document_status === "approved" && !showConvert && (
-        <button onClick={() => setShowConvert(true)} className="rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600">
-          Convert to Purchase Order
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowConvert(true)} className="rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600">
+            Convert to Purchase Order
+          </button>
+          {canApprove && (
+            <button onClick={unapprove} disabled={busy} className="rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">
+              {busy ? "Working..." : "Unapprove"}
+            </button>
+          )}
+        </div>
       )}
       {showConvert && (
         <ConvertRequisitionForm
@@ -1981,7 +2092,11 @@ export function RequisitionDetailModal({ requisitionId, onChanged }: { requisiti
 
 function RequisitionsTab() {
   const navigate = useNavigate();
-  const { data, error } = useApiList<PurchaseRequisition>("/api/purchase-requisitions");
+  const { token, companyId, hasPermission } = useAuth();
+  const { data, error, reload } = useApiList<PurchaseRequisition>("/api/purchase-requisitions");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const [bulkReason, setBulkReason] = useState<string | null>(null);
 
   const columns: Column<PurchaseRequisition>[] = [
     { key: "number", header: "PR #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
@@ -1992,8 +2107,45 @@ function RequisitionsTab() {
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
   ];
 
+  const canApprove = hasPermission("purchasing.requisition.approve");
+
+  async function bulkApprove() {
+    setBulkMessage(await runBulkAction("/api/purchase-requisitions/bulk-approve", [...selected], { token, companyId }));
+    setSelected(new Set());
+    reload();
+  }
+
+  async function bulkReject() {
+    const rejectionReason = bulkReason?.trim();
+    if (!rejectionReason) return;
+    setBulkMessage(
+      await runBulkAction("/api/purchase-requisitions/bulk-reject", [...selected], { token, companyId, body: { rejectionReason } }),
+    );
+    setSelected(new Set());
+    setBulkReason(null);
+    reload();
+  }
+
   return (
     <>
+      {bulkMessage && (
+        <p className="mb-3 rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">{bulkMessage}</p>
+      )}
+      {bulkReason !== null && (
+        <div className="mb-3 flex items-center gap-2 rounded-md border border-red-200 bg-red-50 p-2 dark:border-red-500/30 dark:bg-red-500/10">
+          <TextInput
+            value={bulkReason}
+            onChange={(e) => setBulkReason(e.target.value)}
+            placeholder="Rejection reason for all selected..."
+          />
+          <button onClick={bulkReject} className="shrink-0 rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700">
+            Confirm Reject ({selected.size})
+          </button>
+          <button onClick={() => setBulkReason(null)} className="shrink-0 text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400">
+            Cancel
+          </button>
+        </div>
+      )}
       <ListPage
         title=""
         data={data}
@@ -2007,6 +2159,17 @@ function RequisitionsTab() {
         actionLabel="New Requisition"
         onAction={() => navigate("/purchasing/requisitions/new", { state: { fromTab: "requisitions" } })}
         onRowClick={(r) => navigate(`/purchasing/requisitions/${r.id}`, { state: { fromTab: "requisitions" } })}
+        selectable={canApprove}
+        selectedKeys={selected}
+        onSelectionChange={setSelected}
+        bulkActions={
+          canApprove
+            ? [
+                { label: "Approve", onClick: bulkApprove },
+                { label: "Reject", onClick: () => setBulkReason(""), variant: "danger" },
+              ]
+            : undefined
+        }
       />
     </>
   );
@@ -2014,22 +2177,41 @@ function RequisitionsTab() {
 
 export function PoDetailModal({ poId }: { poId: string }) {
   const navigate = useNavigate();
-  const { token, companyId } = useAuth();
+  const { token, companyId, hasPermission } = useAuth();
   const [detail, setDetail] = useState<PoDetail | null>(null);
   const [requisitionNumber, setRequisitionNumber] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const baseCurrency = useBaseCurrency();
+
+  async function reload() {
+    const d = await apiRequest<PoDetail>(`/api/purchase-orders/${poId}`, { token, companyId });
+    setDetail(d);
+    if (d.purchase_requisition_id) {
+      apiRequest<RequisitionDetail>(`/api/purchase-requisitions/${d.purchase_requisition_id}`, { token, companyId }).then((r) =>
+        setRequisitionNumber(r.document_number),
+      );
+    }
+  }
 
   useEffect(() => {
     if (!token || !companyId) return;
-    apiRequest<PoDetail>(`/api/purchase-orders/${poId}`, { token, companyId }).then((d) => {
-      setDetail(d);
-      if (d.purchase_requisition_id) {
-        apiRequest<RequisitionDetail>(`/api/purchase-requisitions/${d.purchase_requisition_id}`, { token, companyId }).then((r) =>
-          setRequisitionNumber(r.document_number),
-        );
-      }
-    });
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poId, token, companyId]);
+
+  async function post() {
+    setError(null);
+    setBusy(true);
+    try {
+      await apiRequest(`/api/purchase-orders/${poId}/post`, { method: "POST", token, companyId });
+      await reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to post");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (!detail) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
@@ -2044,6 +2226,12 @@ export function PoDetailModal({ poId }: { poId: string }) {
         </div>
         <StatusBadge status={detail.document_status} />
       </div>
+      {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+      {detail.document_status === "draft" && hasPermission("purchasing.po.create") && (
+        <button onClick={post} disabled={busy} className="mb-3 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
+          {busy ? "Working..." : "Post"}
+        </button>
+      )}
       {detail.purchase_requisition_id && (
         <button
           onClick={() => navigate(`/purchasing/requisitions/${detail.purchase_requisition_id}`)}
@@ -2076,8 +2264,12 @@ export function PoDetailModal({ poId }: { poId: string }) {
 function PurchaseOrdersTab() {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
-  const { data, error } = useApiList<PurchaseOrder>("/api/purchase-orders");
+  const { token, companyId, hasPermission } = useAuth();
+  const { data, error, reload } = useApiList<PurchaseOrder>("/api/purchase-orders");
   const baseCurrency = useBaseCurrency();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const canPost = hasPermission("purchasing.po.create");
 
   const columns: Column<PurchaseOrder>[] = [
     { key: "number", header: "PO #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
@@ -2091,8 +2283,17 @@ function PurchaseOrdersTab() {
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
   ];
 
+  async function bulkPost() {
+    setBulkMessage(await runBulkAction("/api/purchase-orders/bulk-post", [...selected], { token, companyId }));
+    setSelected(new Set());
+    reload();
+  }
+
   return (
     <>
+      {bulkMessage && (
+        <p className="mb-3 rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">{bulkMessage}</p>
+      )}
       <ListPage
         title=""
         data={data}
@@ -2106,6 +2307,10 @@ function PurchaseOrdersTab() {
         actionLabel="New Purchase Order"
         onAction={() => navigate("/purchasing/orders/new", { state: { fromTab: "pos" } })}
         onRowClick={(r) => navigate(`/purchasing/orders/${r.id}`, { state: { fromTab: "pos" } })}
+        selectable={canPost}
+        selectedKeys={selected}
+        onSelectionChange={setSelected}
+        bulkActions={canPost ? [{ label: "Post", onClick: bulkPost }] : undefined}
       />
     </>
   );

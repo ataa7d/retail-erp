@@ -3,6 +3,7 @@ import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
 import { acquireFixedAsset, createDepreciationRun, postDepreciationRun, disposeFixedAsset } from "../../assets/fixedAssetService.js";
 import { NotFoundError } from "../errors.js";
+import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
 
 const categorySchema = z.object({
   code: z.string().min(1),
@@ -186,6 +187,25 @@ export async function fixedAssetRoutes(app: FastifyInstance): Promise<void> {
         await postDepreciationRun(client, request.params.id, request.authUser.id);
       }, request.authUser.id);
       return { id: request.params.id, status: "posted" };
+    },
+  );
+
+  app.post(
+    "/depreciation-runs/bulk-post",
+    { preHandler: [app.authenticate, app.requirePermission("assets.depreciation.post")] },
+    async (request) => {
+      const body = bulkIdsSchema.parse(request.body);
+      const results = await runBulkAction(body.ids, "posted", (id) =>
+        withTransaction(async (client) => {
+          const existing = await client.query(`SELECT id FROM depreciation_runs WHERE id = $1 AND company_id = $2`, [
+            id,
+            request.companyId,
+          ]);
+          if (existing.rows.length === 0) throw new NotFoundError("depreciation run not found");
+          await postDepreciationRun(client, id, request.authUser.id);
+        }, request.authUser.id),
+      );
+      return { results };
     },
   );
 }

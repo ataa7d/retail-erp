@@ -3,6 +3,7 @@ import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
 import { createPayrollRun, postPayrollRun } from "../../hr/payrollService.js";
 import { NotFoundError } from "../errors.js";
+import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
 
 const createSchema = z.object({
   fiscalPeriodId: z.string().uuid(),
@@ -76,6 +77,25 @@ export async function payrollRoutes(app: FastifyInstance): Promise<void> {
         await postPayrollRun(client, request.params.id, request.authUser.id);
       }, request.authUser.id);
       return { id: request.params.id, status: "posted" };
+    },
+  );
+
+  app.post(
+    "/payroll-runs/bulk-post",
+    { preHandler: [app.authenticate, app.requirePermission("hr.payroll.post")] },
+    async (request) => {
+      const body = bulkIdsSchema.parse(request.body);
+      const results = await runBulkAction(body.ids, "posted", (id) =>
+        withTransaction(async (client) => {
+          const existing = await client.query(`SELECT id FROM payroll_runs WHERE id = $1 AND company_id = $2`, [
+            id,
+            request.companyId,
+          ]);
+          if (existing.rows.length === 0) throw new NotFoundError("payroll run not found");
+          await postPayrollRun(client, id, request.authUser.id);
+        }, request.authUser.id),
+      );
+      return { results };
     },
   );
 }

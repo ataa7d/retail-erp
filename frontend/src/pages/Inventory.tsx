@@ -5,6 +5,7 @@ import { Warehouse, ArrowLeftRight, ClipboardList, Truck, Plus, X } from "lucide
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
+import { runBulkAction } from "../lib/bulkAction";
 import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
 import Tabs from "../components/Tabs";
@@ -639,7 +640,11 @@ export function InventoryTransferDetailModal({
 
 function TransferOrdersTab() {
   const navigate = useNavigate();
-  const { data, error } = useApiList<InventoryTransferOrder>("/api/inventory-transfers");
+  const { token, companyId, hasPermission } = useAuth();
+  const { data, error, reload } = useApiList<InventoryTransferOrder>("/api/inventory-transfers");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const canPost = hasPermission("inventory.transfer.post");
 
   const columns: Column<InventoryTransferOrder>[] = [
     { key: "number", header: "IT #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
@@ -650,8 +655,17 @@ function TransferOrdersTab() {
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
   ];
 
+  async function bulkPost() {
+    setBulkMessage(await runBulkAction("/api/inventory-transfers/bulk-post", [...selected], { token, companyId }));
+    setSelected(new Set());
+    reload();
+  }
+
   return (
     <>
+      {bulkMessage && (
+        <p className="mb-3 rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">{bulkMessage}</p>
+      )}
       <ListPage
         title=""
         data={data}
@@ -665,6 +679,10 @@ function TransferOrdersTab() {
         actionLabel="New Transfer Order"
         onAction={() => navigate("/inventory/transfer-orders/new", { state: { fromTab: "transfer-orders" } })}
         onRowClick={(r) => navigate(`/inventory/transfer-orders/${r.id}`, { state: { fromTab: "transfer-orders" } })}
+        selectable={canPost}
+        selectedKeys={selected}
+        onSelectionChange={setSelected}
+        bulkActions={canPost ? [{ label: "Post", onClick: bulkPost }] : undefined}
       />
     </>
   );

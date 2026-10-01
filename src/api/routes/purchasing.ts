@@ -12,12 +12,14 @@ import {
   submitPurchaseRequisition,
   withdrawPurchaseRequisition,
   approvePurchaseRequisition,
+  unapprovePurchaseRequisition,
   rejectPurchaseRequisition,
   convertPurchaseRequisitionToPo,
   createSupplierCreditNote,
   postSupplierCreditNote,
 } from "../../purchasing/purchasingService.js";
 import { NotFoundError, BusinessRuleError } from "../errors.js";
+import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
 
 const lineSchema = z.object({
   itemVariantId: z.string().uuid(),
@@ -56,6 +58,11 @@ const requisitionCreateSchema = z.object({
 });
 
 const requisitionRejectSchema = z.object({
+  rejectionReason: z.string().min(1),
+});
+
+const bulkRejectSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1),
   rejectionReason: z.string().min(1),
 });
 
@@ -213,6 +220,25 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  app.post(
+    "/purchase-orders/bulk-post",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.po.create")] },
+    async (request) => {
+      const body = bulkIdsSchema.parse(request.body);
+      const results = await runBulkAction(body.ids, "posted", (id) =>
+        withTransaction(async (client) => {
+          const existing = await client.query(`SELECT id FROM purchase_orders WHERE id = $1 AND company_id = $2`, [
+            id,
+            request.companyId,
+          ]);
+          if (existing.rows.length === 0) throw new NotFoundError("purchase order not found");
+          await postPurchaseOrder(client, id, request.authUser.id);
+        }, request.authUser.id),
+      );
+      return { results };
+    },
+  );
+
   app.get("/purchase-orders", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
       `SELECT po.id, po.document_number, po.order_date, po.expected_date, po.document_status,
@@ -343,6 +369,60 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
         await rejectPurchaseRequisition(client, request.params.id, request.authUser.id, body.rejectionReason);
       }, request.authUser.id);
       return { id: request.params.id, status: "rejected" };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/purchase-requisitions/:id/unapprove",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.requisition.approve")] },
+    async (request) => {
+      await withTransaction(async (client) => {
+        const existing = await client.query(`SELECT id FROM purchase_requisitions WHERE id = $1 AND company_id = $2`, [
+          request.params.id,
+          request.companyId,
+        ]);
+        if (existing.rows.length === 0) throw new NotFoundError("purchase requisition not found");
+        await unapprovePurchaseRequisition(client, request.params.id);
+      }, request.authUser.id);
+      return { id: request.params.id, status: "pending_approval" };
+    },
+  );
+
+  app.post(
+    "/purchase-requisitions/bulk-approve",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.requisition.approve")] },
+    async (request) => {
+      const body = bulkIdsSchema.parse(request.body);
+      const results = await runBulkAction(body.ids, "approved", (id) =>
+        withTransaction(async (client) => {
+          const existing = await client.query(`SELECT id FROM purchase_requisitions WHERE id = $1 AND company_id = $2`, [
+            id,
+            request.companyId,
+          ]);
+          if (existing.rows.length === 0) throw new NotFoundError("purchase requisition not found");
+          await approvePurchaseRequisition(client, id, request.authUser.id);
+        }, request.authUser.id),
+      );
+      return { results };
+    },
+  );
+
+  app.post(
+    "/purchase-requisitions/bulk-reject",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.requisition.approve")] },
+    async (request) => {
+      const body = bulkRejectSchema.parse(request.body);
+      const results = await runBulkAction(body.ids, "rejected", (id) =>
+        withTransaction(async (client) => {
+          const existing = await client.query(`SELECT id FROM purchase_requisitions WHERE id = $1 AND company_id = $2`, [
+            id,
+            request.companyId,
+          ]);
+          if (existing.rows.length === 0) throw new NotFoundError("purchase requisition not found");
+          await rejectPurchaseRequisition(client, id, request.authUser.id, body.rejectionReason);
+        }, request.authUser.id),
+      );
+      return { results };
     },
   );
 
@@ -694,6 +774,25 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  app.post(
+    "/goods-receipts/bulk-post",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.goods_receipt.post")] },
+    async (request) => {
+      const body = bulkIdsSchema.parse(request.body);
+      const results = await runBulkAction(body.ids, "posted", (id) =>
+        withTransaction(async (client) => {
+          const existing = await client.query(`SELECT id FROM goods_receipts WHERE id = $1 AND company_id = $2`, [
+            id,
+            request.companyId,
+          ]);
+          if (existing.rows.length === 0) throw new NotFoundError("goods receipt not found");
+          await postGoodsReceipt(client, id, request.authUser.id);
+        }, request.authUser.id),
+      );
+      return { results };
+    },
+  );
+
   app.get("/goods-receipts", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
       `SELECT gr.id, gr.document_number, gr.receipt_date, gr.document_status, gr.purchase_order_id, gr.currency, gr.exchange_rate,
@@ -771,6 +870,25 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
         await postSupplierInvoice(client, request.params.id, request.authUser.id);
       }, request.authUser.id);
       return { id: request.params.id, status: "posted" };
+    },
+  );
+
+  app.post(
+    "/supplier-invoices/bulk-post",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.goods_receipt.post")] },
+    async (request) => {
+      const body = bulkIdsSchema.parse(request.body);
+      const results = await runBulkAction(body.ids, "posted", (id) =>
+        withTransaction(async (client) => {
+          const existing = await client.query(`SELECT id FROM supplier_invoices WHERE id = $1 AND company_id = $2`, [
+            id,
+            request.companyId,
+          ]);
+          if (existing.rows.length === 0) throw new NotFoundError("supplier invoice not found");
+          await postSupplierInvoice(client, id, request.authUser.id);
+        }, request.authUser.id),
+      );
+      return { results };
     },
   );
 
@@ -891,6 +1009,25 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
         await postSupplierCreditNote(client, request.params.id, request.authUser.id);
       }, request.authUser.id);
       return { id: request.params.id, status: "posted" };
+    },
+  );
+
+  app.post(
+    "/supplier-credit-notes/bulk-post",
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.goods_receipt.post")] },
+    async (request) => {
+      const body = bulkIdsSchema.parse(request.body);
+      const results = await runBulkAction(body.ids, "posted", (id) =>
+        withTransaction(async (client) => {
+          const existing = await client.query(`SELECT id FROM supplier_credit_notes WHERE id = $1 AND company_id = $2`, [
+            id,
+            request.companyId,
+          ]);
+          if (existing.rows.length === 0) throw new NotFoundError("supplier credit note not found");
+          await postSupplierCreditNote(client, id, request.authUser.id);
+        }, request.authUser.id),
+      );
+      return { results };
     },
   );
 

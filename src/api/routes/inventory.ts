@@ -10,6 +10,7 @@ import {
   postInventoryTransfer,
 } from "../../inventory/inventoryService.js";
 import { NotFoundError } from "../errors.js";
+import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
 
 const transferSchema = z.object({
   sourceStoreId: z.string().uuid(),
@@ -174,6 +175,25 @@ export async function inventoryRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  app.post(
+    "/inventory-transfers/bulk-post",
+    { preHandler: [app.authenticate, app.requirePermission("inventory.transfer.post")] },
+    async (request) => {
+      const body = bulkIdsSchema.parse(request.body);
+      const results = await runBulkAction(body.ids, "posted", (id) =>
+        withTransaction(async (client) => {
+          const existing = await client.query(`SELECT id FROM inventory_transfers WHERE id = $1 AND company_id = $2`, [
+            id,
+            request.companyId,
+          ]);
+          if (existing.rows.length === 0) throw new NotFoundError("inventory transfer not found");
+          await postInventoryTransfer(client, id, request.authUser.id);
+        }, request.authUser.id),
+      );
+      return { results };
+    },
+  );
+
   // ---- Stocktakes (the GL-posting adjustment mechanism: count a store's
   // stock, post the variance as stock_movements plus a journal against
   // 5110 Inventory Adjustments) ----
@@ -267,6 +287,25 @@ export async function inventoryRoutes(app: FastifyInstance): Promise<void> {
         await postStocktake(client, request.params.id, request.authUser.id);
       }, request.authUser.id);
       return { id: request.params.id, status: "posted" };
+    },
+  );
+
+  app.post(
+    "/stocktakes/bulk-post",
+    { preHandler: [app.authenticate, app.requirePermission("inventory.adjustment.post")] },
+    async (request) => {
+      const body = bulkIdsSchema.parse(request.body);
+      const results = await runBulkAction(body.ids, "posted", (id) =>
+        withTransaction(async (client) => {
+          const existing = await client.query(`SELECT id FROM stocktakes WHERE id = $1 AND company_id = $2`, [
+            id,
+            request.companyId,
+          ]);
+          if (existing.rows.length === 0) throw new NotFoundError("stocktake not found");
+          await postStocktake(client, id, request.authUser.id);
+        }, request.authUser.id),
+      );
+      return { results };
     },
   );
 }

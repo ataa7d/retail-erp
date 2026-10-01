@@ -3,6 +3,7 @@ import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
 import { createSalesInvoice, postSalesInvoice, createCreditNote, postCreditNote } from "../../sales/salesService.js";
 import { NotFoundError, BusinessRuleError } from "../errors.js";
+import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
 import { renderZatcaQrDataUrl } from "../../zatca/qrCode.js";
 import { finalizeSalesInvoiceXmlHash, renderSalesInvoiceXml, finalizeCreditNoteXmlHash } from "../../zatca/invoiceXmlService.js";
 
@@ -167,6 +168,26 @@ export async function salesInvoiceRoutes(app: FastifyInstance): Promise<void> {
       }, request.authUser.id);
 
       return { id: request.params.id, status: "posted" };
+    },
+  );
+
+  app.post(
+    "/sales-invoices/bulk-post",
+    { preHandler: [app.authenticate, app.requirePermission("sales.pos_invoice.create")] },
+    async (request) => {
+      const body = bulkIdsSchema.parse(request.body);
+      const results = await runBulkAction(body.ids, "posted", (id) =>
+        withTransaction(async (client) => {
+          const existing = await client.query(`SELECT id FROM sales_invoices WHERE id = $1 AND company_id = $2`, [
+            id,
+            request.companyId,
+          ]);
+          if (existing.rows.length === 0) throw new NotFoundError("sales invoice not found");
+          await postSalesInvoice(client, id, request.authUser.id);
+          await finalizeSalesInvoiceXmlHash(client, id);
+        }, request.authUser.id),
+      );
+      return { results };
     },
   );
 

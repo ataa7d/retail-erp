@@ -1,6 +1,12 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Search, Plus, type LucideIcon } from "lucide-react";
+import { Search, Plus, X, type LucideIcon } from "lucide-react";
 import DataTable, { type Column } from "./DataTable";
+
+export interface BulkAction {
+  label: string;
+  onClick: () => void;
+  variant?: "primary" | "danger";
+}
 
 interface ListPageProps<T> {
   title: string;
@@ -18,6 +24,11 @@ interface ListPageProps<T> {
   onRowClick?: (row: T) => void;
   /** Extra controls in the toolbar row, e.g. a store selector for stock. */
   toolbarExtra?: ReactNode;
+  /** Renders a checkbox column + a bulk-action bar once something is selected. */
+  selectable?: boolean;
+  selectedKeys?: Set<string>;
+  onSelectionChange?: (keys: Set<string>) => void;
+  bulkActions?: BulkAction[];
 }
 
 export default function ListPage<T>({
@@ -35,6 +46,10 @@ export default function ListPage<T>({
   onAction,
   onRowClick,
   toolbarExtra,
+  selectable,
+  selectedKeys,
+  onSelectionChange,
+  bulkActions,
 }: ListPageProps<T>) {
   const [query, setQuery] = useState("");
 
@@ -44,6 +59,8 @@ export default function ListPage<T>({
     if (!q) return data;
     return data.filter((row) => getSearchText(row).toLowerCase().includes(q));
   }, [data, query, getSearchText]);
+
+  const selectedCount = selectedKeys?.size ?? 0;
 
   return (
     <div>
@@ -78,10 +95,45 @@ export default function ListPage<T>({
           {toolbarExtra}
         </div>
 
+        {selectable && selectedCount > 0 && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-brand-100 bg-brand-50 px-3 py-2 text-sm dark:border-brand-500/20 dark:bg-brand-500/10">
+            <span className="font-medium text-brand-700 dark:text-brand-300">{selectedCount} selected</span>
+            {bulkActions?.map((action) => (
+              <button
+                key={action.label}
+                onClick={action.onClick}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                  action.variant === "danger"
+                    ? "bg-red-500 text-white hover:bg-red-600"
+                    : "bg-brand-500 text-white hover:bg-brand-600"
+                }`}
+              >
+                {action.label}
+              </button>
+            ))}
+            <button
+              onClick={() => onSelectionChange?.(new Set())}
+              className="ms-auto flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+            >
+              <X size={13} /> Clear selection
+            </button>
+          </div>
+        )}
+
         {error && <p className="p-6 text-sm text-red-600 dark:text-red-400">{error}</p>}
         {!error && data === null && <p className="p-6 text-sm text-slate-400 dark:text-slate-500">Loading...</p>}
         {!error && data !== null && (
-          <DataTable columns={columns} rows={filtered} getRowKey={getRowKey} emptyIcon={emptyIcon} emptyText={emptyText} onRowClick={onRowClick} />
+          <DataTable
+            columns={columns}
+            rows={filtered}
+            getRowKey={getRowKey}
+            emptyIcon={emptyIcon}
+            emptyText={emptyText}
+            onRowClick={onRowClick}
+            selectable={selectable}
+            selectedKeys={selectedKeys}
+            onSelectionChange={onSelectionChange}
+          />
         )}
       </div>
     </div>

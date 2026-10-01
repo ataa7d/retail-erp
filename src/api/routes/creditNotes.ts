@@ -3,6 +3,7 @@ import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
 import { createCreditNote, postCreditNote } from "../../sales/salesService.js";
 import { NotFoundError } from "../errors.js";
+import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
 import { renderZatcaQrDataUrl } from "../../zatca/qrCode.js";
 import { finalizeCreditNoteXmlHash, renderCreditNoteXml } from "../../zatca/invoiceXmlService.js";
 
@@ -129,6 +130,26 @@ export async function creditNoteRoutes(app: FastifyInstance): Promise<void> {
       }, request.authUser.id);
 
       return { id: request.params.id, status: "posted" };
+    },
+  );
+
+  app.post(
+    "/credit-notes/bulk-post",
+    { preHandler: [app.authenticate, app.requirePermission("sales.return.create")] },
+    async (request) => {
+      const body = bulkIdsSchema.parse(request.body);
+      const results = await runBulkAction(body.ids, "posted", (id) =>
+        withTransaction(async (client) => {
+          const existing = await client.query(`SELECT id FROM credit_notes WHERE id = $1 AND company_id = $2`, [
+            id,
+            request.companyId,
+          ]);
+          if (existing.rows.length === 0) throw new NotFoundError("credit note not found");
+          await postCreditNote(client, id, request.authUser.id);
+          await finalizeCreditNoteXmlHash(client, id);
+        }, request.authUser.id),
+      );
+      return { results };
     },
   );
 

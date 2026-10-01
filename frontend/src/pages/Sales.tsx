@@ -5,6 +5,7 @@ import { Receipt, RotateCcw, Plus, Trash2, Tag, FileText, Wallet, Printer } from
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError, downloadFile } from "../lib/api";
+import { runBulkAction } from "../lib/bulkAction";
 import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
@@ -203,10 +204,30 @@ export function SalesInvoiceDetailModal({ invoiceId, onVoided }: { invoiceId: st
   const { token, companyId, hasPermission } = useAuth();
   const [detail, setDetail] = useState<FullSalesInvoice | null>(null);
   const [showVoid, setShowVoid] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
+
+  function reload() {
+    return apiRequest<FullSalesInvoice>(`/api/sales-invoices/${invoiceId}`, { token, companyId }).then(setDetail);
+  }
 
   useEffect(() => {
-    apiRequest<FullSalesInvoice>(`/api/sales-invoices/${invoiceId}`, { token, companyId }).then(setDetail);
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceId, token, companyId]);
+
+  async function post() {
+    setPostError(null);
+    setBusy(true);
+    try {
+      await apiRequest(`/api/sales-invoices/${invoiceId}/post`, { method: "POST", token, companyId });
+      await reload();
+    } catch (err) {
+      setPostError(err instanceof ApiError ? err.message : "Failed to post");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const isVoided = detail ? Number(detail.creditedAmount) >= Number(detail.gross_amount) && Number(detail.gross_amount) > 0 : false;
   const canVoid = detail?.document_status === "posted" && !isVoided && hasPermission("sales.document.void");
@@ -248,6 +269,16 @@ export function SalesInvoiceDetailModal({ invoiceId, onVoided }: { invoiceId: st
               <span className="tabular-nums">{Number(detail.gross_amount).toFixed(2)}</span>
             </div>
           </div>
+          {postError && <p className="mt-2 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{postError}</p>}
+          {detail.document_status === "draft" && hasPermission("sales.pos_invoice.create") && (
+            <button
+              onClick={post}
+              disabled={busy}
+              className="mt-3 w-full rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              {busy ? "Working..." : "Post"}
+            </button>
+          )}
           <ZatcaQrPanel status={detail.document_status} qr={detail.zatcaQr} qrError={detail.zatcaQrError} />
           <XmlDownloadButton status={detail.document_status} path={`/api/sales-invoices/${detail.id}/xml`} />
           {detail.document_status === "posted" && (
@@ -308,12 +339,32 @@ export function SalesInvoiceDetailModal({ invoiceId, onVoided }: { invoiceId: st
 }
 
 export function CreditNoteDetailModal({ creditNoteId }: { creditNoteId: string }) {
-  const { token, companyId } = useAuth();
+  const { token, companyId, hasPermission } = useAuth();
   const [detail, setDetail] = useState<FullCreditNote | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
+
+  function reload() {
+    return apiRequest<FullCreditNote>(`/api/credit-notes/${creditNoteId}`, { token, companyId }).then(setDetail);
+  }
 
   useEffect(() => {
-    apiRequest<FullCreditNote>(`/api/credit-notes/${creditNoteId}`, { token, companyId }).then(setDetail);
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creditNoteId, token, companyId]);
+
+  async function post() {
+    setPostError(null);
+    setBusy(true);
+    try {
+      await apiRequest(`/api/credit-notes/${creditNoteId}/post`, { method: "POST", token, companyId });
+      await reload();
+    } catch (err) {
+      setPostError(err instanceof ApiError ? err.message : "Failed to post");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <>
@@ -350,6 +401,16 @@ export function CreditNoteDetailModal({ creditNoteId }: { creditNoteId: string }
               <span className="tabular-nums">{Number(detail.gross_amount).toFixed(2)}</span>
             </div>
           </div>
+          {postError && <p className="mt-2 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{postError}</p>}
+          {detail.document_status === "draft" && hasPermission("sales.return.create") && (
+            <button
+              onClick={post}
+              disabled={busy}
+              className="mt-3 w-full rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              {busy ? "Working..." : "Post"}
+            </button>
+          )}
           <ZatcaQrPanel status={detail.document_status} qr={detail.zatcaQr} qrError={detail.zatcaQrError} />
           <XmlDownloadButton status={detail.document_status} path={`/api/credit-notes/${detail.id}/xml`} />
         </div>
@@ -901,7 +962,11 @@ export function NewCreditNoteForm({ onClose, onCreated }: { onClose: () => void;
 function SalesInvoicesTab() {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
-  const { data, error } = useApiList<SalesInvoice>("/api/sales-invoices");
+  const { token, companyId, hasPermission } = useAuth();
+  const { data, error, reload } = useApiList<SalesInvoice>("/api/sales-invoices");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const canPost = hasPermission("sales.pos_invoice.create");
 
   const columns: Column<SalesInvoice>[] = [
     { key: "number", header: "Invoice #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
@@ -922,8 +987,17 @@ function SalesInvoicesTab() {
     },
   ];
 
+  async function bulkPost() {
+    setBulkMessage(await runBulkAction("/api/sales-invoices/bulk-post", [...selected], { token, companyId }));
+    setSelected(new Set());
+    reload();
+  }
+
   return (
     <>
+      {bulkMessage && (
+        <p className="mb-3 rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">{bulkMessage}</p>
+      )}
       <ListPage
         title=""
         data={data}
@@ -937,6 +1011,10 @@ function SalesInvoicesTab() {
         actionLabel="New Sales Invoice"
         onAction={() => navigate("/sales/invoices/new", { state: { fromTab: "invoices" } })}
         onRowClick={(r) => navigate(`/sales/invoices/${r.id}`, { state: { fromTab: "invoices" } })}
+        selectable={canPost}
+        selectedKeys={selected}
+        onSelectionChange={setSelected}
+        bulkActions={canPost ? [{ label: "Post", onClick: bulkPost }] : undefined}
       />
     </>
   );
@@ -944,7 +1022,11 @@ function SalesInvoicesTab() {
 
 function CreditNotesTab() {
   const navigate = useNavigate();
-  const { data, error } = useApiList<CreditNote>("/api/credit-notes");
+  const { token, companyId, hasPermission } = useAuth();
+  const { data, error, reload } = useApiList<CreditNote>("/api/credit-notes");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const canPost = hasPermission("sales.return.create");
 
   const columns: Column<CreditNote>[] = [
     { key: "number", header: "CN #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
@@ -955,8 +1037,17 @@ function CreditNotesTab() {
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
   ];
 
+  async function bulkPost() {
+    setBulkMessage(await runBulkAction("/api/credit-notes/bulk-post", [...selected], { token, companyId }));
+    setSelected(new Set());
+    reload();
+  }
+
   return (
     <>
+      {bulkMessage && (
+        <p className="mb-3 rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">{bulkMessage}</p>
+      )}
       <ListPage
         title=""
         data={data}
@@ -970,6 +1061,10 @@ function CreditNotesTab() {
         actionLabel="New Credit Note"
         onAction={() => navigate("/sales/credit-notes/new", { state: { fromTab: "credits" } })}
         onRowClick={(r) => navigate(`/sales/credit-notes/${r.id}`, { state: { fromTab: "credits" } })}
+        selectable={canPost}
+        selectedKeys={selected}
+        onSelectionChange={setSelected}
+        bulkActions={canPost ? [{ label: "Post", onClick: bulkPost }] : undefined}
       />
     </>
   );

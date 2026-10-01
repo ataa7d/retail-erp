@@ -167,6 +167,10 @@ export async function approvePurchaseRequisition(client: Client, requisitionId: 
   ]);
 }
 
+export async function unapprovePurchaseRequisition(client: Client, requisitionId: string): Promise<void> {
+  await client.query(`UPDATE purchase_requisitions SET document_status = 'pending_approval' WHERE id = $1`, [requisitionId]);
+}
+
 export async function rejectPurchaseRequisition(
   client: Client,
   requisitionId: string,

@@ -5,6 +5,7 @@ import { Building2, CalendarClock, Trash2 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
+import { runBulkAction } from "../lib/bulkAction";
 import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
@@ -336,8 +337,12 @@ function AssetsTab() {
 }
 
 function DepreciationRunsTab() {
+  const { token, companyId, hasPermission } = useAuth();
   const { data, error, reload } = useApiList<DepreciationRun>("/api/depreciation-runs");
   const [showNew, setShowNew] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const canPost = hasPermission("assets.depreciation.post");
 
   const columns: Column<DepreciationRun>[] = [
     { key: "number", header: "Run #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
@@ -345,8 +350,17 @@ function DepreciationRunsTab() {
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
   ];
 
+  async function bulkPost() {
+    setBulkMessage(await runBulkAction("/api/depreciation-runs/bulk-post", [...selected], { token, companyId }));
+    setSelected(new Set());
+    reload();
+  }
+
   return (
     <>
+      {bulkMessage && (
+        <p className="mb-3 rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">{bulkMessage}</p>
+      )}
       <ListPage
         title=""
         data={data}
@@ -359,6 +373,10 @@ function DepreciationRunsTab() {
         searchPlaceholder="Search runs..."
         actionLabel="New Depreciation Run"
         onAction={() => setShowNew(true)}
+        selectable={canPost}
+        selectedKeys={selected}
+        onSelectionChange={setSelected}
+        bulkActions={canPost ? [{ label: "Post", onClick: bulkPost }] : undefined}
       />
       {showNew && (
         <Modal title="New Depreciation Run" onClose={() => setShowNew(false)}>
