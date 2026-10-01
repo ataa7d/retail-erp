@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { BarChart3, Receipt, Boxes, Wallet } from "lucide-react";
 import { useAuth } from "../lib/auth";
@@ -745,10 +746,13 @@ function VatSummaryTab() {
 
 export default function Reports() {
   const { t } = useTranslation();
+  const location = useLocation();
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{t("nav.reports")}</h1>
       <Tabs
+        initialActive={(location.state as { fromTab?: string } | null)?.fromTab}
+        hideHeader
         tabs={[
           { key: "tb", label: "Trial Balance", content: <TrialBalanceTab /> },
           { key: "is", label: "Income Statement", content: <IncomeStatementTab /> },

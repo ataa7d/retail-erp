@@ -2677,6 +2677,7 @@ export default function Purchasing() {
       <h1 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{t("nav.purchasing")}</h1>
       <Tabs
         initialActive={(location.state as { fromTab?: string } | null)?.fromTab}
+        hideHeader
         tabs={[
           { key: "requisitions", label: "Requisitions", content: <RequisitionsTab /> },
           { key: "reorder", label: "Reorder Suggestions", content: <ReorderSuggestionsTab /> },

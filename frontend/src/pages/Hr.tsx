@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { UserCog, Wallet, Printer } from "lucide-react";
 import { useAuth } from "../lib/auth";
@@ -386,10 +387,13 @@ function PayrollRunsTab() {
 
 export default function Hr() {
   const { t } = useTranslation();
+  const location = useLocation();
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{t("nav.hr")}</h1>
       <Tabs
+        initialActive={(location.state as { fromTab?: string } | null)?.fromTab}
+        hideHeader
         tabs={[
           { key: "employees", label: "Employees", content: <EmployeesTab /> },
           { key: "payroll", label: "Payroll Runs", content: <PayrollRunsTab /> },

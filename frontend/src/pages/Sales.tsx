@@ -2246,7 +2246,7 @@ export default function Sales() {
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{t("nav.sales")}</h1>
-      <Tabs tabs={tabs} initialActive={(location.state as { fromTab?: string } | null)?.fromTab} />
+      <Tabs tabs={tabs} initialActive={(location.state as { fromTab?: string } | null)?.fromTab} hideHeader />
     </div>
   );
 }

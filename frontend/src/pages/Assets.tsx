@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Building2, CalendarClock, Trash2 } from "lucide-react";
 import { useAuth } from "../lib/auth";
@@ -370,10 +371,13 @@ function DepreciationRunsTab() {
 
 export default function Assets() {
   const { t } = useTranslation();
+  const location = useLocation();
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{t("nav.assets")}</h1>
       <Tabs
+        initialActive={(location.state as { fromTab?: string } | null)?.fromTab}
+        hideHeader
         tabs={[
           { key: "assets", label: "Assets", content: <AssetsTab /> },
           { key: "depreciation", label: "Depreciation Runs", content: <DepreciationRunsTab /> },

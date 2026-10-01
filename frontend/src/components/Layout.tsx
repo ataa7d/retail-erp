@@ -272,6 +272,8 @@ export default function Layout() {
     lastAutoModule.current = currentKey;
   }, [location.pathname]);
 
+  const fromTab = (location.state as { fromTab?: string } | null)?.fromTab;
+
   const company = companies.find((c) => c.id === companyId);
   const companyName = i18n.language.startsWith("ar") ? company?.name_ar : company?.name_en;
 
@@ -373,17 +375,28 @@ export default function Layout() {
                         : "border-transparent text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
                     }`}
                   >
-                    <NavLink
-                      to={item.to}
-                      end={item.to === "/"}
-                      onClick={() => {
-                        if (subItems) setExpanded((prev) => ({ ...prev, [item.to]: !prev[item.to] }));
-                      }}
-                      className={`flex min-w-0 flex-1 items-center gap-2.5 py-2 ${indent ? "ps-2 pe-1 text-[13px]" : "px-2.5"}`}
-                    >
-                      <Icon size={indent ? 14 : 16} strokeWidth={2} className="shrink-0" />
-                      <span className="truncate">{t(item.label)}</span>
-                    </NavLink>
+                    {subItems ? (
+                      // Modules with a dropdown aren't a page of their own anymore --
+                      // only the sub-items below navigate. The header is just the
+                      // expand/collapse toggle for the list of sub-items.
+                      <button
+                        type="button"
+                        onClick={() => setExpanded((prev) => ({ ...prev, [item.to]: !prev[item.to] }))}
+                        className={`flex min-w-0 flex-1 items-center gap-2.5 py-2 text-start ${indent ? "ps-2 pe-1 text-[13px]" : "px-2.5"}`}
+                      >
+                        <Icon size={indent ? 14 : 16} strokeWidth={2} className="shrink-0" />
+                        <span className="truncate">{t(item.label)}</span>
+                      </button>
+                    ) : (
+                      <NavLink
+                        to={item.to}
+                        end={item.to === "/"}
+                        className={`flex min-w-0 flex-1 items-center gap-2.5 py-2 ${indent ? "ps-2 pe-1 text-[13px]" : "px-2.5"}`}
+                      >
+                        <Icon size={indent ? 14 : 16} strokeWidth={2} className="shrink-0" />
+                        <span className="truncate">{t(item.label)}</span>
+                      </NavLink>
+                    )}
                     {subItems && (
                       <button
                         type="button"
@@ -399,6 +412,10 @@ export default function Layout() {
                     <div className="ms-4 mt-0.5 flex flex-col gap-0.5 border-s border-slate-200 ps-2 dark:border-slate-700">
                       {subItems.map((sub) => {
                         const SubIcon = "icon" in sub ? sub.icon : null;
+                        const isSubActive =
+                          "to" in sub
+                            ? location.pathname === sub.to
+                            : location.pathname === item.to && fromTab === sub.key;
                         return (
                           <button
                             key={sub.key}
@@ -406,7 +423,11 @@ export default function Layout() {
                             onClick={() =>
                               "to" in sub ? navigate(sub.to) : navigate(item.to, { state: { fromTab: sub.key } })
                             }
-                            className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-[13px] text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                            className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-[13px] ${
+                              isSubActive
+                                ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+                                : "text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                            }`}
                           >
                             {SubIcon && <SubIcon size={13} strokeWidth={2} className="shrink-0" />}
                             {sub.label}
