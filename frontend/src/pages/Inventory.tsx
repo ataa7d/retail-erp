@@ -20,13 +20,6 @@ interface Store {
   name_ar: string;
 }
 
-interface StockBalance {
-  item_variant_id: string;
-  qty_on_hand: string;
-  avg_unit_cost: string;
-  last_movement_at: string | null;
-}
-
 interface ItemVariant {
   id: string;
   variant_code: string;
@@ -40,13 +33,6 @@ interface Item {
   name_en: string;
   name_ar: string;
   variants: ItemVariant[];
-}
-
-interface StockRow extends StockBalance {
-  itemCode: string;
-  itemName: string;
-  variantCode: string;
-  variantDetail: string;
 }
 
 interface FiscalPeriod {
@@ -147,60 +133,71 @@ function useBarcodeMap() {
   return map;
 }
 
+interface StockMatrixRow {
+  variantId: string;
+  itemCode: string;
+  itemName: string;
+  variantCode: string;
+  variantDetail: string;
+  byStore: Record<string, number>;
+  total: number;
+}
+
+// A single item x store grid instead of picking one store at a time --
+// answers "where do we have this?" and "what's low everywhere?" without
+// switching stores back and forth. Every variant is listed (even stores
+// with 0 on hand), since knowing something is OUT of stock somewhere is
+// exactly what this screen is for.
 function StockTab() {
   const { i18n } = useTranslation();
   const { token, companyId } = useAuth();
-  const { data: stores } = useApiList<Store>("/api/stores");
   const { data: items } = useApiList<Item>("/api/items");
-  const [storeId, setStoreId] = useState<string>("");
-  const [balances, setBalances] = useState<StockBalance[] | null>(null);
+  const [stores, setStores] = useState<Store[] | null>(null);
+  const [balances, setBalances] = useState<Array<{ item_variant_id: string; store_id: string; qty_on_hand: string }> | null>(null);
   const [asOf, setAsOf] = useState<string | null>(null);
+  const [hideZero, setHideZero] = useState(false);
 
   useEffect(() => {
-    if (stores && stores.length > 0 && !storeId) setStoreId(stores[0]!.id);
-  }, [stores, storeId]);
+    if (!token || !companyId) return;
+    apiRequest<{ asOf: string; stores: Store[]; balances: Array<{ item_variant_id: string; store_id: string; qty_on_hand: string }> }>(
+      "/api/stock-balances/matrix",
+      { token, companyId },
+    ).then((r) => {
+      setStores(r.stores);
+      setBalances(r.balances);
+      setAsOf(r.asOf);
+    });
+  }, [token, companyId]);
 
-  useEffect(() => {
-    if (!token || !companyId || !storeId) return;
-    setBalances(null);
-    apiRequest<{ asOf: string; balances: StockBalance[] }>(`/api/stock-balances?storeId=${storeId}`, { token, companyId }).then(
-      (r) => {
-        setBalances(r.balances);
-        setAsOf(r.asOf);
-      },
-    );
-  }, [token, companyId, storeId]);
-
-  const variantIndex = useMemo(() => {
-    const map = new Map<string, { itemCode: string; itemName: string; variantCode: string; variantDetail: string }>();
-    for (const item of items ?? []) {
+  const rows: StockMatrixRow[] | null = useMemo(() => {
+    if (!items || !balances) return null;
+    const qtyByVariant = new Map<string, Record<string, number>>();
+    for (const b of balances) {
+      if (!qtyByVariant.has(b.item_variant_id)) qtyByVariant.set(b.item_variant_id, {});
+      qtyByVariant.get(b.item_variant_id)![b.store_id] = Number(b.qty_on_hand);
+    }
+    const result: StockMatrixRow[] = [];
+    for (const item of items) {
       for (const v of item.variants) {
-        const detail = [v.color, v.size].filter(Boolean).join(" / ");
-        map.set(v.id, {
+        const byStore = qtyByVariant.get(v.id) ?? {};
+        const total = Object.values(byStore).reduce((s, q) => s + q, 0);
+        if (hideZero && total === 0) continue;
+        result.push({
+          variantId: v.id,
           itemCode: item.item_code,
           itemName: i18n.language.startsWith("ar") ? item.name_ar : item.name_en,
           variantCode: v.variant_code,
-          variantDetail: detail,
+          variantDetail: [v.color, v.size].filter(Boolean).join(" / "),
+          byStore,
+          total,
         });
       }
     }
-    return map;
+    return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, i18n.language]);
+  }, [items, balances, i18n.language, hideZero]);
 
-  const rows: StockRow[] | null =
-    balances?.map((b) => {
-      const info = variantIndex.get(b.item_variant_id);
-      return {
-        ...b,
-        itemCode: info?.itemCode ?? "—",
-        itemName: info?.itemName ?? "Unknown item",
-        variantCode: info?.variantCode ?? "—",
-        variantDetail: info?.variantDetail ?? "",
-      };
-    }) ?? null;
-
-  const columns: Column<StockRow>[] = [
+  const columns: Column<StockMatrixRow>[] = [
     { key: "code", header: "Item", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.itemCode}</span> },
     {
       key: "name",
@@ -212,36 +209,46 @@ function StockTab() {
         </div>
       ),
     },
-    { key: "qty", header: "Qty on Hand", render: (r) => Number(r.qty_on_hand).toLocaleString(), numeric: true },
-    { key: "cost", header: "Avg Unit Cost", render: (r) => Number(r.avg_unit_cost).toFixed(2), numeric: true },
+    ...(stores ?? []).map(
+      (s): Column<StockMatrixRow> => ({
+        key: `store:${s.id}`,
+        header: i18n.language.startsWith("ar") ? s.name_ar : s.name_en,
+        numeric: true,
+        render: (r) => {
+          const qty = r.byStore[s.id] ?? 0;
+          return <span className={qty <= 0 ? "text-slate-300 dark:text-slate-600" : ""}>{qty.toLocaleString()}</span>;
+        },
+      }),
+    ),
+    {
+      key: "total",
+      header: "Total",
+      numeric: true,
+      render: (r) => <span className="font-semibold text-slate-900 dark:text-slate-100">{r.total.toLocaleString()}</span>,
+    },
   ];
 
   return (
-    <ListPage
-      title=""
-      subtitle={asOf ? `As of ${new Date(asOf).toLocaleString()}` : undefined}
-      data={rows}
-      error={null}
-      columns={columns}
-      getRowKey={(r) => r.item_variant_id}
-      getSearchText={(r) => `${r.itemCode} ${r.itemName} ${r.variantCode}`}
-      emptyIcon={Warehouse}
-      emptyText="No stock at this store."
-      searchPlaceholder="Search stock..."
-      toolbarExtra={
-        <select
-          value={storeId}
-          onChange={(e) => setStoreId(e.target.value)}
-          className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-sm focus:border-brand-400 focus:outline-none"
-        >
-          {stores?.map((s) => (
-            <option key={s.id} value={s.id}>
-              {i18n.language.startsWith("ar") ? s.name_ar : s.name_en}
-            </option>
-          ))}
-        </select>
-      }
-    />
+    <div className="overflow-x-auto">
+      <ListPage
+        title=""
+        subtitle={asOf ? `As of ${new Date(asOf).toLocaleString()}` : undefined}
+        data={rows}
+        error={null}
+        columns={columns}
+        getRowKey={(r) => r.variantId}
+        getSearchText={(r) => `${r.itemCode} ${r.itemName} ${r.variantCode} ${r.variantDetail}`}
+        emptyIcon={Warehouse}
+        emptyText="No items found."
+        searchPlaceholder="Search by item, code, color, size..."
+        toolbarExtra={
+          <label className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
+            <input type="checkbox" checked={hideZero} onChange={(e) => setHideZero(e.target.checked)} />
+            Hide out-of-stock everywhere
+          </label>
+        }
+      />
+    </div>
   );
 }
 

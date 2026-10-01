@@ -25,4 +25,25 @@ export async function stockRoutes(app: FastifyInstance): Promise<void> {
 
     return { asOf: new Date().toISOString(), balances: result.rows };
   });
+
+  // Availability matrix: every variant's qty_on_hand across every store in
+  // one call, for the Stock screen's item x store grid -- avoids N
+  // requests (one per store) or forcing the "which store?" dropdown just
+  // to answer "where do we have this?".
+  app.get("/stock-balances/matrix", { preHandler: app.authenticate }, async (request) => {
+    const stores = await pool.query<{ id: string; name_en: string; name_ar: string }>(
+      `SELECT id, name_en, name_ar FROM stores WHERE company_id = $1 AND is_active = true ORDER BY name_en`,
+      [request.companyId],
+    );
+
+    const balances = await pool.query<{ item_variant_id: string; store_id: string; qty_on_hand: string }>(
+      `SELECT sb.item_variant_id, sb.store_id, sb.qty_on_hand
+       FROM stock_balances sb
+       JOIN stores s ON s.id = sb.store_id
+       WHERE s.company_id = $1 AND sb.qty_on_hand <> 0`,
+      [request.companyId],
+    );
+
+    return { asOf: new Date().toISOString(), stores: stores.rows, balances: balances.rows };
+  });
 }
