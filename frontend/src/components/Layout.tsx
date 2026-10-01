@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard,
@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   Sun,
   Moon,
+  ChevronRight,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useTheme } from "../lib/theme";
@@ -35,22 +36,128 @@ import { apiRequest } from "../lib/api";
 // is gated behind accounting.journal.post -- users who could see customers
 // but not post journals will lose the sidebar link. Flagged, not silently
 // widened, since broadening Accounting's gate would expose GL data instead.
+// subItems mirror each module's own internal <Tabs> keys/labels exactly
+// (Purchasing.tsx, Sales.tsx, etc.) so a sub-item navigates straight to
+// that tab via the same `state: { fromTab }` mechanism every "New X" page
+// and Dashboard KPI tile already uses -- no new routing concept, just
+// surfacing the existing one one level higher, in the sidebar itself.
 const navItems = [
   { to: "/", label: "nav.dashboard", permission: null, icon: LayoutDashboard },
-  { to: "/sales", label: "nav.sales", permission: "sales.pos_invoice.create", icon: Receipt },
+  {
+    to: "/sales",
+    label: "nav.sales",
+    permission: "sales.pos_invoice.create",
+    icon: Receipt,
+    subItems: [
+      { key: "quotations", label: "Quotations" },
+      { key: "invoices", label: "Sales Invoices" },
+      { key: "credits", label: "Credit Notes" },
+      { key: "gift-cards", label: "Gift Cards" },
+      { key: "deposits", label: "Customer Deposits" },
+      { key: "price-lists", label: "Price Lists" },
+    ],
+  },
   { to: "/pos", label: "nav.pos", permission: "sales.pos_invoice.create", icon: Monitor, indent: true },
   {
     to: "/inventory",
     label: "nav.inventory",
     permission: ["inventory.adjustment.post", "inventory.items.manage"],
     icon: Warehouse,
+    subItems: [
+      { key: "items", label: "Items" },
+      { key: "stock", label: "Stock" },
+      { key: "transfers", label: "Transfers" },
+      { key: "transfer-orders", label: "Transfer Orders" },
+      { key: "adjustments", label: "Adjustments" },
+    ],
   },
-  { to: "/purchasing", label: "nav.purchasing", permission: "purchasing.po.create", icon: ShoppingCart },
-  { to: "/accounting", label: "nav.accounting", permission: "accounting.journal.post", icon: Landmark },
-  { to: "/reports", label: "nav.reports", permission: "accounting.reports.view", icon: BarChart3 },
-  { to: "/hr", label: "nav.hr", permission: "hr.employee.manage", icon: UserCog },
-  { to: "/assets", label: "nav.assets", permission: "assets.fixed_asset.manage", icon: Building2 },
-  { to: "/admin", label: "nav.admin", permission: "admin.users.manage", icon: ShieldCheck },
+  {
+    to: "/purchasing",
+    label: "nav.purchasing",
+    permission: "purchasing.po.create",
+    icon: ShoppingCart,
+    subItems: [
+      { key: "requisitions", label: "Requisitions" },
+      { key: "reorder", label: "Reorder Suggestions" },
+      { key: "pos", label: "Purchase Orders" },
+      { key: "receipts", label: "Goods Receipts" },
+      { key: "invoices", label: "Supplier Invoices" },
+      { key: "returns", label: "Purchase Returns" },
+      { key: "suppliers", label: "Suppliers" },
+    ],
+  },
+  {
+    to: "/accounting",
+    label: "nav.accounting",
+    permission: "accounting.journal.post",
+    icon: Landmark,
+    subItems: [
+      { key: "coa", label: "Chart of Accounts" },
+      { key: "customers", label: "Customers" },
+      { key: "tax-codes", label: "Tax Codes" },
+      { key: "journals", label: "Journals" },
+      { key: "receipts", label: "Customer Receipts" },
+      { key: "payments", label: "Supplier Payments" },
+      { key: "bank", label: "Bank Reconciliation" },
+      { key: "ar", label: "AR Ageing" },
+      { key: "ap", label: "AP Ageing" },
+      { key: "fx", label: "Exchange Rates" },
+      { key: "close", label: "Period Close" },
+      { key: "budgets", label: "Budgets" },
+    ],
+  },
+  {
+    to: "/reports",
+    label: "nav.reports",
+    permission: "accounting.reports.view",
+    icon: BarChart3,
+    subItems: [
+      { key: "tb", label: "Trial Balance" },
+      { key: "is", label: "Income Statement" },
+      { key: "bs", label: "Balance Sheet" },
+      { key: "cs", label: "Customer Statement" },
+      { key: "sv", label: "Stock Valuation" },
+      { key: "cs2", label: "Cash Shifts" },
+      { key: "bva", label: "Budget vs Actual" },
+      { key: "vat", label: "VAT Summary" },
+    ],
+  },
+  {
+    to: "/hr",
+    label: "nav.hr",
+    permission: "hr.employee.manage",
+    icon: UserCog,
+    subItems: [
+      { key: "employees", label: "Employees" },
+      { key: "payroll", label: "Payroll Runs" },
+    ],
+  },
+  {
+    to: "/assets",
+    label: "nav.assets",
+    permission: "assets.fixed_asset.manage",
+    icon: Building2,
+    subItems: [
+      { key: "assets", label: "Assets" },
+      { key: "depreciation", label: "Depreciation Runs" },
+    ],
+  },
+  {
+    to: "/admin",
+    label: "nav.admin",
+    permission: "admin.users.manage",
+    icon: ShieldCheck,
+    subItems: [
+      { key: "company", label: "Company Profile" },
+      { key: "branches-stores", label: "Branches & Stores" },
+      { key: "users", label: "Users" },
+      { key: "roles", label: "Roles" },
+      { key: "pos-devices", label: "POS Devices" },
+      { key: "offline-sync", label: "Offline Sync" },
+      { key: "zatca", label: "ZATCA Onboarding" },
+      { key: "audit", label: "Audit Log" },
+    ],
+  },
 ] as const;
 
 function initials(email: string): string {
@@ -142,7 +249,19 @@ export default function Layout() {
   const { me, companies, companyId, logout, hasPermission } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  // Whichever module the current URL is inside auto-opens its dropdown --
+  // manual toggles (below) still win afterward, this only seeds the
+  // default the first time a module becomes current.
+  useEffect(() => {
+    const current = navItems.find((item) => item.to !== "/" && location.pathname.startsWith(item.to));
+    if (current && "subItems" in current) {
+      setExpanded((prev) => (prev[current.to] ? prev : { ...prev, [current.to]: true }));
+    }
+  }, [location.pathname]);
 
   const company = companies.find((c) => c.id === companyId);
   const companyName = i18n.language.startsWith("ar") ? company?.name_ar : company?.name_en;
@@ -234,22 +353,51 @@ export default function Layout() {
             .map((item) => {
               const Icon = item.icon;
               const indent = "indent" in item && item.indent;
+              const subItems = "subItems" in item ? item.subItems : null;
+              const isOpen = !!expanded[item.to];
               return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.to === "/"}
-                  className={({ isActive }) =>
-                    `flex items-center gap-2.5 rounded-md border-s-[3px] py-2 text-sm transition-colors ${indent ? "ms-4 ps-2 pe-2.5 text-[13px]" : "px-2.5"} ${
-                      isActive
+                <div key={item.to}>
+                  <div
+                    className={`flex items-center rounded-md border-s-[3px] text-sm transition-colors ${indent ? "ms-4" : ""} ${
+                      location.pathname === item.to || (item.to !== "/" && location.pathname.startsWith(item.to))
                         ? "border-brand-500 bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
                         : "border-transparent text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
-                    }`
-                  }
-                >
-                  <Icon size={indent ? 14 : 16} strokeWidth={2} />
-                  {t(item.label)}
-                </NavLink>
+                    }`}
+                  >
+                    <NavLink
+                      to={item.to}
+                      end={item.to === "/"}
+                      className={`flex min-w-0 flex-1 items-center gap-2.5 py-2 ${indent ? "ps-2 pe-1 text-[13px]" : "px-2.5"}`}
+                    >
+                      <Icon size={indent ? 14 : 16} strokeWidth={2} className="shrink-0" />
+                      <span className="truncate">{t(item.label)}</span>
+                    </NavLink>
+                    {subItems && (
+                      <button
+                        type="button"
+                        onClick={() => setExpanded((prev) => ({ ...prev, [item.to]: !prev[item.to] }))}
+                        className="me-1 shrink-0 rounded p-1 hover:bg-black/5 dark:hover:bg-white/10"
+                        title={isOpen ? "Collapse" : "Expand"}
+                      >
+                        <ChevronRight size={14} className={`transition-transform ${isOpen ? "rotate-90" : ""}`} />
+                      </button>
+                    )}
+                  </div>
+                  {subItems && isOpen && (
+                    <div className="ms-4 mt-0.5 flex flex-col gap-0.5 border-s border-slate-200 ps-2 dark:border-slate-700">
+                      {subItems.map((sub) => (
+                        <button
+                          key={sub.key}
+                          type="button"
+                          onClick={() => navigate(item.to, { state: { fromTab: sub.key } })}
+                          className="rounded-md px-2 py-1.5 text-start text-[13px] text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                        >
+                          {sub.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               );
             })}
         </nav>
