@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Warehouse, ArrowLeftRight, ClipboardList, Truck, Plus, X } from "lucide-react";
+import { ArrowLeftRight, ClipboardList, Truck, Plus, X } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
 import { runBulkAction } from "../lib/bulkAction";
 import ListPage from "../components/ListPage";
+import Modal from "../components/Modal";
 import StatusBadge from "../components/StatusBadge";
 import Tabs from "../components/Tabs";
 import { Field, TextInput, SelectInput, FormActions } from "../components/FormField";
@@ -133,121 +134,318 @@ function useBarcodeMap() {
   return map;
 }
 
-interface StockMatrixRow {
-  variantId: string;
-  itemCode: string;
-  itemName: string;
-  variantCode: string;
-  variantDetail: string;
-  byStore: Record<string, number>;
-  total: number;
+interface StockVariantRow {
+  id: string;
+  variant_code: string;
+  color: string | null;
+  size: string | null;
+  is_active: boolean;
+  reorder_point: string;
+  item_id: string;
+  item_code: string;
+  name_en: string;
+  name_ar: string;
+  brand_name: string | null;
+  category_name: string | null;
+  season_name: string | null;
+  group_name: string | null;
+  primary_barcode: string | null;
+  qty_on_hand: string;
+  stores_in_stock: string;
 }
 
-// A single item x store grid instead of picking one store at a time --
-// answers "where do we have this?" and "what's low everywhere?" without
-// switching stores back and forth. Every variant is listed (even stores
-// with 0 on hand), since knowing something is OUT of stock somewhere is
-// exactly what this screen is for.
-function StockTab() {
+interface StockSearchResponse {
+  rows: StockVariantRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+type StockSortColumn = "variantCode" | "itemCode" | "name" | "color" | "size" | "qty";
+
+interface StockFilters {
+  search: string;
+  itemCode: string;
+  color: string;
+  size: string;
+  barcode: string;
+  groupId: string;
+  storeId: string;
+  belowReorderPoint: boolean;
+}
+
+const EMPTY_STOCK_FILTERS: StockFilters = {
+  search: "", itemCode: "", color: "", size: "", barcode: "", groupId: "", storeId: "", belowReorderPoint: false,
+};
+
+function StoreBreakdownModal({ variant, onClose }: { variant: StockVariantRow; onClose: () => void }) {
   const { i18n } = useTranslation();
   const { token, companyId } = useAuth();
-  const { data: items } = useApiList<Item>("/api/items");
-  const [stores, setStores] = useState<Store[] | null>(null);
-  const [balances, setBalances] = useState<Array<{ item_variant_id: string; store_id: string; qty_on_hand: string }> | null>(null);
-  const [asOf, setAsOf] = useState<string | null>(null);
-  const [hideZero, setHideZero] = useState(false);
+  const [rows, setRows] = useState<Array<{ store_id: string; store_name_en: string; store_name_ar: string; qty_on_hand: string }> | null>(null);
+
+  useEffect(() => {
+    apiRequest<{ rows: typeof rows }>(`/api/stock-balances/variants/${variant.id}/by-store`, { token, companyId }).then((r) => setRows(r.rows));
+  }, [variant.id, token, companyId]);
+
+  return (
+    <Modal title={`${variant.name_en} — ${variant.variant_code}`} onClose={onClose}>
+      {!rows ? (
+        <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-slate-400 dark:text-slate-500">No active stores.</p>
+      ) : (
+        <div className="space-y-1">
+          {rows.map((r) => (
+            <div key={r.store_id} className="flex items-center justify-between text-sm">
+              <span className="text-slate-600 dark:text-slate-300">{i18n.language.startsWith("ar") ? r.store_name_ar : r.store_name_en}</span>
+              <span className={`tabular-nums ${Number(r.qty_on_hand) <= 0 ? "text-slate-300 dark:text-slate-600" : "font-medium text-slate-900 dark:text-slate-100"}`}>
+                {Number(r.qty_on_hand).toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// Every item variant as a row, availability as a column -- scales to any
+// number of stores because a store is a *filter* here (optional storeId
+// narrows qty to just that store), never a column of its own. Same
+// paginated/filterable shape as Items' "All Variants" tab (GET
+// /item-variants), plus qty_on_hand and how many stores carry it.
+function StockTab() {
+  const { token, companyId } = useAuth();
+  const { data: stores } = useApiList<Store>("/api/stores");
+  const { data: groups } = useApiList<{ id: string; code: string; name_en: string }>("/api/item-groups");
+
+  const [filters, setFilters] = useState<StockFilters>(EMPTY_STOCK_FILTERS);
+  const [debouncedFilters, setDebouncedFilters] = useState<StockFilters>(EMPTY_STOCK_FILTERS);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [sortBy, setSortBy] = useState<StockSortColumn>("itemCode");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [result, setResult] = useState<StockSearchResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [breakdownVariant, setBreakdownVariant] = useState<StockVariantRow | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedFilters(filters);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [filters]);
 
   useEffect(() => {
     if (!token || !companyId) return;
-    apiRequest<{ asOf: string; stores: Store[]; balances: Array<{ item_variant_id: string; store_id: string; qty_on_hand: string }> }>(
-      "/api/stock-balances/matrix",
-      { token, companyId },
-    ).then((r) => {
-      setStores(r.stores);
-      setBalances(r.balances);
-      setAsOf(r.asOf);
-    });
-  }, [token, companyId]);
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("pageSize", String(pageSize));
+    params.set("sortBy", sortBy);
+    params.set("sortDir", sortDir);
+    if (debouncedFilters.search) params.set("search", debouncedFilters.search);
+    if (debouncedFilters.itemCode) params.set("itemCode", debouncedFilters.itemCode);
+    if (debouncedFilters.color) params.set("color", debouncedFilters.color);
+    if (debouncedFilters.size) params.set("size", debouncedFilters.size);
+    if (debouncedFilters.barcode) params.set("barcode", debouncedFilters.barcode);
+    if (debouncedFilters.groupId) params.set("groupId", debouncedFilters.groupId);
+    if (debouncedFilters.storeId) params.set("storeId", debouncedFilters.storeId);
+    if (debouncedFilters.belowReorderPoint) params.set("belowReorderPoint", "true");
+    apiRequest<StockSearchResponse>(`/api/stock-balances/variants?${params.toString()}`, { token, companyId })
+      .then((res) => {
+        if (!cancelled) setResult(res);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof ApiError ? err.message : "Failed to load stock");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, companyId, page, pageSize, sortBy, sortDir, debouncedFilters]);
 
-  const rows: StockMatrixRow[] | null = useMemo(() => {
-    if (!items || !balances) return null;
-    const qtyByVariant = new Map<string, Record<string, number>>();
-    for (const b of balances) {
-      if (!qtyByVariant.has(b.item_variant_id)) qtyByVariant.set(b.item_variant_id, {});
-      qtyByVariant.get(b.item_variant_id)![b.store_id] = Number(b.qty_on_hand);
-    }
-    const result: StockMatrixRow[] = [];
-    for (const item of items) {
-      for (const v of item.variants) {
-        const byStore = qtyByVariant.get(v.id) ?? {};
-        const total = Object.values(byStore).reduce((s, q) => s + q, 0);
-        if (hideZero && total === 0) continue;
-        result.push({
-          variantId: v.id,
-          itemCode: item.item_code,
-          itemName: i18n.language.startsWith("ar") ? item.name_ar : item.name_en,
-          variantCode: v.variant_code,
-          variantDetail: [v.color, v.size].filter(Boolean).join(" / "),
-          byStore,
-          total,
-        });
-      }
-    }
-    return result;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, balances, i18n.language, hideZero]);
+  function updateFilter<K extends keyof StockFilters>(key: K, value: StockFilters[K]) {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  }
 
-  const columns: Column<StockMatrixRow>[] = [
-    { key: "code", header: "Item", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.itemCode}</span> },
-    {
-      key: "name",
-      header: "Name",
-      render: (r) => (
-        <div>
-          <div className="font-medium text-slate-900 dark:text-slate-100">{r.itemName}</div>
-          {r.variantDetail && <div className="text-xs text-slate-400 dark:text-slate-500">{r.variantDetail}</div>}
-        </div>
-      ),
-    },
-    ...(stores ?? []).map(
-      (s): Column<StockMatrixRow> => ({
-        key: `store:${s.id}`,
-        header: i18n.language.startsWith("ar") ? s.name_ar : s.name_en,
-        numeric: true,
-        render: (r) => {
-          const qty = r.byStore[s.id] ?? 0;
-          return <span className={qty <= 0 ? "text-slate-300 dark:text-slate-600" : ""}>{qty.toLocaleString()}</span>;
-        },
-      }),
-    ),
-    {
-      key: "total",
-      header: "Total",
-      numeric: true,
-      render: (r) => <span className="font-semibold text-slate-900 dark:text-slate-100">{r.total.toLocaleString()}</span>,
-    },
-  ];
+  function toggleSort(col: StockSortColumn) {
+    if (sortBy === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortBy(col);
+      setSortDir("asc");
+    }
+  }
+
+  function sortIndicator(col: StockSortColumn) {
+    if (sortBy !== col) return null;
+    return <span className="ms-1 text-slate-400 dark:text-slate-500">{sortDir === "asc" ? "▲" : "▼"}</span>;
+  }
+
+  const totalPages = result ? Math.max(1, Math.ceil(result.total / result.pageSize)) : 1;
+  const hasFilters = (Object.keys(filters) as Array<keyof StockFilters>).some((k) => filters[k]);
+  const storeCount = stores?.length ?? 0;
+
+  const thClass = "cursor-pointer select-none whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300";
+  const filterInputClass = "w-full rounded border border-slate-200 dark:border-slate-700 px-1.5 py-1 text-xs focus:border-brand-400 focus:outline-none dark:bg-slate-900";
 
   return (
-    <div className="overflow-x-auto">
-      <ListPage
-        title=""
-        subtitle={asOf ? `As of ${new Date(asOf).toLocaleString()}` : undefined}
-        data={rows}
-        error={null}
-        columns={columns}
-        getRowKey={(r) => r.variantId}
-        getSearchText={(r) => `${r.itemCode} ${r.itemName} ${r.variantCode} ${r.variantDetail}`}
-        emptyIcon={Warehouse}
-        emptyText="No items found."
-        searchPlaceholder="Search by item, code, color, size..."
-        toolbarExtra={
-          <label className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
-            <input type="checkbox" checked={hideZero} onChange={(e) => setHideZero(e.target.checked)} />
-            Hide out-of-stock everywhere
-          </label>
-        }
-      />
+    <div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <input
+          value={filters.search}
+          onChange={(e) => updateFilter("search", e.target.value)}
+          placeholder="Search item code, name, or variant code..."
+          className="min-w-64 flex-1 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-sm focus:border-brand-400 focus:bg-white dark:focus:bg-slate-900 focus:outline-none"
+        />
+        <select
+          value={filters.storeId}
+          onChange={(e) => updateFilter("storeId", e.target.value)}
+          className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-sm focus:border-brand-400 focus:outline-none"
+        >
+          <option value="">All stores ({storeCount})</option>
+          {stores?.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name_en}
+            </option>
+          ))}
+        </select>
+        <label className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
+          <input type="checkbox" checked={filters.belowReorderPoint} onChange={(e) => updateFilter("belowReorderPoint", e.target.checked)} />
+          Below reorder point
+        </label>
+        {hasFilters && (
+          <button
+            onClick={() => setFilters(EMPTY_STOCK_FILTERS)}
+            className="rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            Clear filters
+          </button>
+        )}
+        <span className="text-sm text-slate-500 dark:text-slate-400">
+          {result ? `${result.total.toLocaleString()} variant${result.total === 1 ? "" : "s"}` : loading ? "Loading..." : ""}
+        </span>
+      </div>
+
+      {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-100 dark:border-slate-800">
+              <th className={thClass} onClick={() => toggleSort("itemCode")}>Item Code{sortIndicator("itemCode")}</th>
+              <th className={thClass} onClick={() => toggleSort("name")}>Name{sortIndicator("name")}</th>
+              <th className={thClass} onClick={() => toggleSort("variantCode")}>Variant Code{sortIndicator("variantCode")}</th>
+              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Group</th>
+              <th className={thClass} onClick={() => toggleSort("color")}>Color{sortIndicator("color")}</th>
+              <th className={thClass} onClick={() => toggleSort("size")}>Size{sortIndicator("size")}</th>
+              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Barcode</th>
+              <th className={`${thClass} text-end`} onClick={() => toggleSort("qty")}>
+                {filters.storeId ? "Qty at Store" : "Qty (All Stores)"}
+                {sortIndicator("qty")}
+              </th>
+              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500"># Stores</th>
+              <th className="px-3 py-2" />
+            </tr>
+            <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800">
+              <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.itemCode} onChange={(e) => updateFilter("itemCode", e.target.value)} placeholder="Code" /></th>
+              <th className="px-2 py-1.5" />
+              <th className="px-2 py-1.5" />
+              <th className="px-2 py-1.5">
+                <select className={filterInputClass} value={filters.groupId} onChange={(e) => updateFilter("groupId", e.target.value)}>
+                  <option value="">All</option>
+                  {groups?.map((g) => <option key={g.id} value={g.id}>{g.code}</option>)}
+                </select>
+              </th>
+              <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.color} onChange={(e) => updateFilter("color", e.target.value)} /></th>
+              <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.size} onChange={(e) => updateFilter("size", e.target.value)} /></th>
+              <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.barcode} onChange={(e) => updateFilter("barcode", e.target.value)} /></th>
+              <th className="px-2 py-1.5" colSpan={3} />
+            </tr>
+          </thead>
+          <tbody>
+            {result?.rows.length === 0 && (
+              <tr>
+                <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-400 dark:text-slate-500">
+                  No variants match these filters.
+                </td>
+              </tr>
+            )}
+            {result?.rows.map((r) => {
+              const qty = Number(r.qty_on_hand);
+              return (
+                <tr key={r.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800">
+                  <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-500 dark:text-slate-400">{r.item_code}</td>
+                  <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{r.name_en}</td>
+                  <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-700 dark:text-slate-200">{r.variant_code}</td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{r.group_name ?? "—"}</td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{r.color ?? "—"}</td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{r.size ?? "—"}</td>
+                  <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-500 dark:text-slate-400">{r.primary_barcode ?? "—"}</td>
+                  <td className={`px-3 py-2 text-end tabular-nums ${qty <= 0 ? "text-slate-300 dark:text-slate-600" : Number(r.reorder_point) > 0 && qty < Number(r.reorder_point) ? "font-medium text-amber-600 dark:text-amber-400" : "font-medium text-slate-900 dark:text-slate-100"}`}>
+                    {qty.toLocaleString()}
+                  </td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{r.stores_in_stock}</td>
+                  <td className="px-3 py-2">
+                    {!filters.storeId && (
+                      <button onClick={() => setBreakdownVariant(r)} className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">
+                        By store
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {result && result.total > 0 && (
+        <div className="mt-3 flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
+          <div className="flex items-center gap-2">
+            <span>Rows per page</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+              className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1 text-xs"
+            >
+              {[25, 50, 100, 200].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-3">
+            <span>
+              Page {result.page} of {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
+      {breakdownVariant && <StoreBreakdownModal variant={breakdownVariant} onClose={() => setBreakdownVariant(null)} />}
     </div>
   );
 }
