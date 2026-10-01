@@ -11,7 +11,6 @@ import {
   Building2,
   ShieldCheck,
   Landmark,
-  Search,
   Bell,
   Globe,
   ChevronDown,
@@ -28,6 +27,7 @@ import { useAuth } from "../lib/auth";
 import { useTheme } from "../lib/theme";
 import { apiRequest } from "../lib/api";
 import { isPushSupported, subscribeToPush } from "../lib/push";
+import GlobalSearch from "./GlobalSearch";
 
 // Items now lives inside Inventory's tabs -- this link stays visible to
 // anyone who could reach Items before (inventory.items.manage), not just
@@ -321,13 +321,7 @@ export default function Layout() {
           <span className="hidden text-sm sm:inline">{t("app.title")}</span>
         </div>
 
-        <div className="mx-auto flex max-w-xl flex-1 items-center rounded-md bg-white/10 px-3 py-1.5 text-sm text-white/70 focus-within:bg-white/15">
-          <Search size={15} className="me-2 shrink-0" />
-          <input
-            placeholder="Search..."
-            className="w-full bg-transparent text-white placeholder:text-white/50 focus:outline-none"
-          />
-        </div>
+        <GlobalSearch />
 
         <button
           onClick={toggleTheme}

@@ -5,6 +5,7 @@ import JsBarcode from "jsbarcode";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError, uploadFile } from "../lib/api";
+import { exportToCsv } from "../lib/csvExport";
 import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
@@ -856,12 +857,29 @@ function ItemsTab() {
         onAction={() => setShowNew(true)}
         onRowClick={(r) => setDetailItemId(r.id)}
         toolbarExtra={
-          <button
-            onClick={() => setShowImport(true)}
-            className="flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
-          >
-            <Upload size={14} /> Bulk Import
-          </button>
+          <>
+            <button
+              onClick={() => setShowImport(true)}
+              className="flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              <Upload size={14} /> Bulk Import
+            </button>
+            <button
+              onClick={() =>
+                data &&
+                exportToCsv("items.csv", data, [
+                  { header: "Code", value: (r) => r.item_code },
+                  { header: "Name (EN)", value: (r) => r.name_en },
+                  { header: "Name (AR)", value: (r) => r.name_ar },
+                  { header: "Variants", value: (r) => r.variants.length },
+                  { header: "Status", value: (r) => (r.is_active ? "Active" : "Inactive") },
+                ])
+              }
+              className="flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              <Download size={14} /> Export CSV
+            </button>
+          </>
         }
       />
       {showNew && (

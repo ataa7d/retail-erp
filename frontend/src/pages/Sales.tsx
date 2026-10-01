@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Receipt, RotateCcw, Plus, Trash2, Tag, FileText, Wallet, Printer } from "lucide-react";
+import { Receipt, RotateCcw, Plus, Trash2, Tag, FileText, Wallet, Printer, Download } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError, downloadFile, API_URL } from "../lib/api";
 import { runBulkAction } from "../lib/bulkAction";
+import { exportToCsv } from "../lib/csvExport";
 import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
@@ -1017,6 +1018,24 @@ function SalesInvoicesTab() {
         selectedKeys={selected}
         onSelectionChange={setSelected}
         bulkActions={canPost ? [{ label: "Post", onClick: bulkPost }] : undefined}
+        toolbarExtra={
+          <button
+            onClick={() =>
+              data &&
+              exportToCsv("sales-invoices.csv", data, [
+                { header: "Invoice #", value: (r) => r.document_number },
+                { header: "Channel", value: (r) => r.invoice_channel },
+                { header: "Customer", value: (r) => r.customer_name_en ?? "Walk-in" },
+                { header: "Date", value: (r) => r.invoice_date },
+                { header: "Total", value: (r) => Number(r.gross_amount).toFixed(2) },
+                { header: "Status", value: (r) => r.document_status },
+              ])
+            }
+            className="flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            <Download size={14} /> Export CSV
+          </button>
+        }
       />
     </>
   );

@@ -6,6 +6,7 @@ import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError, uploadFile } from "../lib/api";
 import { runBulkAction } from "../lib/bulkAction";
+import { exportToCsv } from "../lib/csvExport";
 import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
 import StatusStepper from "../components/StatusStepper";
@@ -1656,18 +1657,31 @@ function PurchaseReturnsTab() {
   );
 }
 
-export function NewRequisitionForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export interface RequisitionFormInitial {
+  storeId: string;
+  lines: Array<{ itemVariantId: string; qty: string; notes: string }>;
+}
+
+export function NewRequisitionForm({
+  onClose,
+  onCreated,
+  initial,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+  initial?: RequisitionFormInitial;
+}) {
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
   const { options: variantOptions } = useVariantOptions();
 
-  const [storeId, setStoreId] = useState("");
+  const [storeId, setStoreId] = useState(initial?.storeId ?? "");
   const [requisitionDate, setRequisitionDate] = useState(new Date().toISOString().slice(0, 10));
   const [neededByDate, setNeededByDate] = useState("");
   const [notes, setNotes] = useState("");
-  const [lines, setLines] = useState<Array<{ itemVariantId: string; qty: string; notes: string }>>([
-    { itemVariantId: "", qty: "1", notes: "" },
-  ]);
+  const [lines, setLines] = useState<Array<{ itemVariantId: string; qty: string; notes: string }>>(
+    initial?.lines ?? [{ itemVariantId: "", qty: "1", notes: "" }],
+  );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -1899,6 +1913,7 @@ function ConvertRequisitionForm({ requisition, onClose, onConverted }: { requisi
 }
 
 export function RequisitionDetailModal({ requisitionId, onChanged }: { requisitionId: string; onChanged: () => void }) {
+  const navigate = useNavigate();
   const { token, companyId, hasPermission, me } = useAuth();
   const [detail, setDetail] = useState<RequisitionDetail | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
@@ -1986,6 +2001,19 @@ export function RequisitionDetailModal({ requisitionId, onChanged }: { requisiti
   const isOwnRequisition = me?.user.email === detail.requested_by_email;
   const canApprove = hasPermission("purchasing.requisition.approve") && !isOwnRequisition;
 
+  function duplicate() {
+    if (!detail) return;
+    navigate("/purchasing/requisitions/new", {
+      state: {
+        fromTab: "requisitions",
+        initial: {
+          storeId: detail.store_id,
+          lines: detail.lines.map((l) => ({ itemVariantId: l.item_variant_id, qty: l.qty, notes: l.notes ?? "" })),
+        },
+      },
+    });
+  }
+
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
@@ -1995,7 +2023,12 @@ export function RequisitionDetailModal({ requisitionId, onChanged }: { requisiti
             {detail.store_name_en} · requested by {detail.requested_by_email ?? "—"}
           </div>
         </div>
-        <StatusBadge status={detail.document_status} />
+        <div className="flex items-center gap-2">
+          <button onClick={duplicate} className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">
+            Duplicate
+          </button>
+          <StatusBadge status={detail.document_status} />
+        </div>
       </div>
       <StatusStepper
         steps={[
@@ -2215,6 +2248,26 @@ export function PoDetailModal({ poId }: { poId: string }) {
 
   if (!detail) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
+  function duplicate() {
+    if (!detail) return;
+    navigate("/purchasing/orders/new", {
+      state: {
+        fromTab: "pos",
+        initial: {
+          supplierId: detail.supplier_id,
+          storeId: detail.store_id,
+          lines: detail.lines.map((l) => ({
+            itemVariantId: l.item_variant_id,
+            qty: l.qty,
+            unitPrice: l.unit_price,
+            vatRate: "15",
+            priceIncludesVat: false,
+          })),
+        },
+      },
+    });
+  }
+
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
@@ -2224,7 +2277,12 @@ export function PoDetailModal({ poId }: { poId: string }) {
             {detail.supplier_name_en} · {new Date(detail.order_date).toLocaleDateString()}
           </div>
         </div>
-        <StatusBadge status={detail.document_status} />
+        <div className="flex items-center gap-2">
+          <button onClick={duplicate} className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">
+            Duplicate
+          </button>
+          <StatusBadge status={detail.document_status} />
+        </div>
       </div>
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
       {detail.document_status === "draft" && hasPermission("purchasing.po.create") && (
@@ -2311,6 +2369,24 @@ function PurchaseOrdersTab() {
         selectedKeys={selected}
         onSelectionChange={setSelected}
         bulkActions={canPost ? [{ label: "Post", onClick: bulkPost }] : undefined}
+        toolbarExtra={
+          <button
+            onClick={() =>
+              data &&
+              exportToCsv("purchase-orders.csv", data, [
+                { header: "PO #", value: (r) => r.document_number },
+                { header: "Supplier", value: (r) => r.supplier_name_en },
+                { header: "Order Date", value: (r) => r.order_date },
+                { header: "Total", value: (r) => r.gross_amount },
+                { header: "Currency", value: (r) => r.currency },
+                { header: "Status", value: (r) => r.document_status },
+              ])
+            }
+            className="flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            <Download size={14} /> Export CSV
+          </button>
+        }
       />
     </>
   );

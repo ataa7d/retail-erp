@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { BookOpen, ScrollText, Wallet, Banknote, Clock, Plus, Trash2, Link2, CheckCircle2, Lock, Unlock, CalendarCheck, Coins, Percent } from "lucide-react";
+import { BookOpen, ScrollText, Wallet, Banknote, Clock, Plus, Trash2, Link2, CheckCircle2, Lock, Unlock, CalendarCheck, Coins, Percent, Download } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
+import { exportToCsv } from "../lib/csvExport";
 import ListPage from "../components/ListPage";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
@@ -670,6 +671,22 @@ function JournalsTab() {
         searchPlaceholder="Search journals..."
         actionLabel="New Journal Entry"
         onAction={() => navigate("/accounting/journals/new", { state: { fromTab: "journals" } })}
+        toolbarExtra={
+          <button
+            onClick={() =>
+              data &&
+              exportToCsv("journals.csv", data, [
+                { header: "Journal #", value: (r) => r.journal_number },
+                { header: "Date", value: (r) => r.journal_date },
+                { header: "Source", value: (r) => r.source_type },
+                { header: "Status", value: (r) => r.document_status },
+              ])
+            }
+            className="flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            <Download size={14} /> Export CSV
+          </button>
+        }
       />
     </>
   );

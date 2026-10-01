@@ -1,11 +1,11 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import TransactionPage from "../../components/TransactionPage";
-import { NewRequisitionForm } from "../Purchasing";
+import { NewRequisitionForm, type RequisitionFormInitial } from "../Purchasing";
 
 export default function NewRequisitionPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const state = location.state as { fromTab?: string } | null;
+  const state = location.state as { fromTab?: string; initial?: RequisitionFormInitial } | null;
 
   function back() {
     navigate("/purchasing", { replace: true, state: { fromTab: state?.fromTab ?? "requisitions" } });
@@ -13,7 +13,7 @@ export default function NewRequisitionPage() {
 
   return (
     <TransactionPage title="New Purchase Requisition" onBack={back}>
-      <NewRequisitionForm onClose={back} onCreated={back} />
+      <NewRequisitionForm onClose={back} onCreated={back} initial={state?.initial} />
     </TransactionPage>
   );
 }
