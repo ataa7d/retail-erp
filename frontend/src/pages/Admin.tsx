@@ -1885,6 +1885,84 @@ function BranchesStoresTab() {
   );
 }
 
+const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
+  requisition_pending: "Requisition awaiting approval",
+  low_stock: "Item low on stock",
+};
+const NOTIFICATION_CHANNEL_LABELS: Record<string, string> = {
+  email: "Email",
+  sms: "SMS",
+  whatsapp: "WhatsApp",
+  push: "Push",
+};
+
+function NotificationPreferencesTab() {
+  const { token, companyId } = useAuth();
+  const [types, setTypes] = useState<string[]>([]);
+  const [channels, setChannels] = useState<string[]>([]);
+  const [enabled, setEnabled] = useState<Set<string>>(new Set());
+
+  function reload() {
+    apiRequest<{ types: string[]; channels: string[]; preferences: Array<{ type: string; channel: string; enabled: boolean }> }>(
+      "/api/notification-preferences",
+      { token, companyId },
+    ).then((r) => {
+      setTypes(r.types);
+      setChannels(r.channels);
+      setEnabled(new Set(r.preferences.filter((p) => p.enabled).map((p) => `${p.type}:${p.channel}`)));
+    });
+  }
+
+  useEffect(reload, [token, companyId]);
+
+  async function toggle(type: string, channel: string) {
+    const key = `${type}:${channel}`;
+    const next = !enabled.has(key);
+    await apiRequest("/api/notification-preferences", { method: "POST", token, companyId, body: { type, channel, enabled: next } });
+    setEnabled((prev) => {
+      const copy = new Set(prev);
+      if (next) copy.add(key);
+      else copy.delete(key);
+      return copy;
+    });
+  }
+
+  if (types.length === 0) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
+
+  return (
+    <div className="max-w-xl">
+      <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+        Choose which channels deliver each notification type to you, on top of the in-app bell (which always shows them). SMS and WhatsApp aren't
+        wired to a provider yet -- toggling them is safe, but nothing sends until one is configured.
+      </p>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 dark:border-slate-700">
+            <th className="py-2 text-start font-medium text-slate-500 dark:text-slate-400">Notification</th>
+            {channels.map((c) => (
+              <th key={c} className="py-2 text-center font-medium text-slate-500 dark:text-slate-400">
+                {NOTIFICATION_CHANNEL_LABELS[c] ?? c}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {types.map((type) => (
+            <tr key={type} className="border-b border-slate-100 dark:border-slate-800">
+              <td className="py-2 text-slate-700 dark:text-slate-200">{NOTIFICATION_TYPE_LABELS[type] ?? type}</td>
+              {channels.map((channel) => (
+                <td key={channel} className="py-2 text-center">
+                  <input type="checkbox" checked={enabled.has(`${type}:${channel}`)} onChange={() => toggle(type, channel)} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function Admin() {
   const { t } = useTranslation();
   const location = useLocation();
@@ -1902,6 +1980,7 @@ export default function Admin() {
           { key: "pos-devices", label: "POS Devices", content: <PosDevicesTab /> },
           { key: "offline-sync", label: "Offline Sync", content: <OfflineSyncTab /> },
           { key: "zatca", label: "ZATCA Onboarding", content: <ZatcaOnboardingTab /> },
+          { key: "notifications", label: "Notification Preferences", content: <NotificationPreferencesTab /> },
           { key: "audit", label: "Audit Log", content: <AuditLogTab /> },
         ]}
       />

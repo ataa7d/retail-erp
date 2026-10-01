@@ -27,6 +27,7 @@ import {
 import { useAuth } from "../lib/auth";
 import { useTheme } from "../lib/theme";
 import { apiRequest } from "../lib/api";
+import { isPushSupported, subscribeToPush } from "../lib/push";
 
 // Items now lives inside Inventory's tabs -- this link stays visible to
 // anyone who could reach Items before (inventory.items.manage), not just
@@ -159,6 +160,7 @@ const navItems = [
       { key: "pos-devices", label: "POS Devices" },
       { key: "offline-sync", label: "Offline Sync" },
       { key: "zatca", label: "ZATCA Onboarding" },
+      { key: "notifications", label: "Notification Preferences" },
       { key: "audit", label: "Audit Log" },
     ],
   },
@@ -175,6 +177,7 @@ interface NotificationItem {
   title: string;
   detail: string;
   link: string;
+  read: boolean;
 }
 
 function NotificationBell() {
@@ -182,23 +185,40 @@ function NotificationBell() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[] | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
 
-  useEffect(() => {
+  function load() {
     if (!token || !companyId) return;
-    let cancelled = false;
     apiRequest<{ count: number; items: NotificationItem[] }>("/api/notifications", { token, companyId })
-      .then((r) => {
-        if (!cancelled) setItems(r.items);
-      })
-      .catch(() => {
-        if (!cancelled) setItems([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token, companyId]);
+      .then((r) => setItems(r.items))
+      .catch(() => setItems([]));
+  }
 
-  const count = items?.length ?? 0;
+  useEffect(load, [token, companyId]);
+
+  const count = items?.filter((i) => !i.read).length ?? 0;
+
+  async function openItem(item: NotificationItem) {
+    setOpen(false);
+    navigate(item.link);
+    if (!item.read) {
+      await apiRequest(`/api/notifications/${encodeURIComponent(item.id)}/read`, { method: "POST", token, companyId });
+      load();
+    }
+  }
+
+  async function enablePush() {
+    setPushError(null);
+    setPushBusy(true);
+    try {
+      await subscribeToPush(token, companyId);
+    } catch (err) {
+      setPushError(err instanceof Error ? err.message : "Failed to enable push notifications");
+    } finally {
+      setPushBusy(false);
+    }
+  }
 
   return (
     <div className="relative">
@@ -224,11 +244,8 @@ function NotificationBell() {
             {items?.map((item) => (
               <button
                 key={item.id}
-                onClick={() => {
-                  setOpen(false);
-                  navigate(item.link);
-                }}
-                className="flex w-full items-start gap-2 px-3 py-2 text-start hover:bg-slate-50 dark:hover:bg-slate-700"
+                onClick={() => openItem(item)}
+                className={`flex w-full items-start gap-2 px-3 py-2 text-start hover:bg-slate-50 dark:hover:bg-slate-700 ${item.read ? "opacity-50" : ""}`}
               >
                 {item.type === "requisition_pending" ? (
                   <ClipboardList size={15} className="mt-0.5 shrink-0 text-blue-500" />
@@ -242,6 +259,14 @@ function NotificationBell() {
               </button>
             ))}
           </div>
+          {isPushSupported() && (
+            <div className="border-t border-slate-100 px-3 py-2 dark:border-slate-700">
+              {pushError && <p className="mb-1 text-xs text-red-600 dark:text-red-400">{pushError}</p>}
+              <button onClick={enablePush} disabled={pushBusy} className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50 dark:text-brand-400">
+                {pushBusy ? "Enabling..." : "Enable browser push notifications"}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
