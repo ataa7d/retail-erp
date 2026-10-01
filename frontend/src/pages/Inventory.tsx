@@ -200,14 +200,14 @@ function StockTab() {
     }) ?? null;
 
   const columns: Column<StockRow>[] = [
-    { key: "code", header: "Item", render: (r) => <span className="font-mono text-xs text-slate-500">{r.itemCode}</span> },
+    { key: "code", header: "Item", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.itemCode}</span> },
     {
       key: "name",
       header: "Name",
       render: (r) => (
         <div>
-          <div className="font-medium text-slate-900">{r.itemName}</div>
-          {r.variantDetail && <div className="text-xs text-slate-400">{r.variantDetail}</div>}
+          <div className="font-medium text-slate-900 dark:text-slate-100">{r.itemName}</div>
+          {r.variantDetail && <div className="text-xs text-slate-400 dark:text-slate-500">{r.variantDetail}</div>}
         </div>
       ),
     },
@@ -231,7 +231,7 @@ function StockTab() {
         <select
           value={storeId}
           onChange={(e) => setStoreId(e.target.value)}
-          className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm focus:border-brand-400 focus:outline-none"
+          className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-sm focus:border-brand-400 focus:outline-none"
         >
           {stores?.map((s) => (
             <option key={s.id} value={s.id}>
@@ -323,7 +323,7 @@ export function NewTransferForm({ onClose, onCreated }: { onClose: () => void; o
           <TextInput value={reasonCode} onChange={(e) => setReasonCode(e.target.value)} placeholder="Optional" />
         </Field>
       </div>
-      <p className="mb-3 text-xs text-slate-400">
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
         Effective immediately — two linked movements, the destination costed at exactly what the goods left the source at. No draft/post step.
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Transfer Stock" />
@@ -337,7 +337,7 @@ function TransfersTab() {
 
   const columns: Column<Transfer>[] = [
     { key: "date", header: "Date", render: (r) => new Date(r.movement_at).toLocaleString() },
-    { key: "item", header: "Item", render: (r) => <span>{r.item_name_en} <span className="text-xs text-slate-400">({r.variant_code})</span></span> },
+    { key: "item", header: "Item", render: (r) => <span>{r.item_name_en} <span className="text-xs text-slate-400 dark:text-slate-500">({r.variant_code})</span></span> },
     { key: "from", header: "From", render: (r) => r.source_store_name },
     { key: "to", header: "To", render: (r) => r.dest_store_name },
     // stock_movements stores the outbound leg's qty/cost as negative (a
@@ -512,14 +512,14 @@ export function NewInventoryTransferForm({ onClose, onCreated }: { onClose: () =
           onChange={(e) => setScanValue(e.target.value)}
           onKeyDown={handleScan}
           placeholder="Scan barcode or UPC, then Enter..."
-          className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          className="w-full rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
         />
       </Field>
       {scanMessage && (
         <p className={`-mt-2 mb-2 text-xs ${scanMessage.type === "error" ? "text-red-600" : "text-emerald-600"}`}>{scanMessage.text}</p>
       )}
 
-      <div className="mb-2 mt-3 text-sm font-medium text-slate-700">Lines</div>
+      <div className="mb-2 mt-3 text-sm font-medium text-slate-700 dark:text-slate-200">Lines</div>
       <div className="space-y-2">
         {lines.map((line, i) => (
           <div key={i} className="flex items-center gap-2">
@@ -540,7 +540,7 @@ export function NewInventoryTransferForm({ onClose, onCreated }: { onClose: () =
               type="button"
               onClick={() => removeLine(i)}
               disabled={lines.length === 1}
-              className="flex-none rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600 disabled:opacity-30"
+              className="flex-none rounded p-1.5 text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-red-600 disabled:opacity-30"
             >
               <X size={14} />
             </button>
@@ -555,7 +555,7 @@ export function NewInventoryTransferForm({ onClose, onCreated }: { onClose: () =
         <Plus size={13} /> Add line
       </button>
 
-      <p className="mb-3 text-xs text-slate-400">
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
         Created as a draft — nothing moves until it's posted. Each line's destination is costed at exactly what the goods left the source at.
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Create Draft" />
@@ -596,28 +596,28 @@ export function InventoryTransferDetailModal({
     }
   }
 
-  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+  if (!detail) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <div className="font-mono text-xs text-slate-500">{detail.document_number}</div>
-          <div className="text-sm text-slate-700">
+          <div className="font-mono text-xs text-slate-500 dark:text-slate-400">{detail.document_number}</div>
+          <div className="text-sm text-slate-700 dark:text-slate-200">
             {detail.source_store_name_en} → {detail.dest_store_name_en} · {new Date(detail.transfer_date).toLocaleDateString()}
           </div>
         </div>
         <StatusBadge status={detail.document_status} />
       </div>
-      {detail.notes && <p className="mb-3 text-xs text-slate-500">{detail.notes}</p>}
+      {detail.notes && <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">{detail.notes}</p>}
 
-      <div className="mb-3 space-y-1 rounded-md border border-slate-200 p-2">
+      <div className="mb-3 space-y-1 rounded-md border border-slate-200 dark:border-slate-700 p-2">
         {detail.lines.map((line) => (
           <div key={line.id} className="flex items-center justify-between text-sm">
-            <span className="text-slate-700">
-              {line.item_name_en} <span className="text-xs text-slate-400">({line.variant_code})</span>
+            <span className="text-slate-700 dark:text-slate-200">
+              {line.item_name_en} <span className="text-xs text-slate-400 dark:text-slate-500">({line.variant_code})</span>
             </span>
-            <span className="font-medium text-slate-900">{Number(line.qty).toLocaleString()}</span>
+            <span className="font-medium text-slate-900 dark:text-slate-100">{Number(line.qty).toLocaleString()}</span>
           </div>
         ))}
       </div>
@@ -642,7 +642,7 @@ function TransferOrdersTab() {
   const { data, error } = useApiList<InventoryTransferOrder>("/api/inventory-transfers");
 
   const columns: Column<InventoryTransferOrder>[] = [
-    { key: "number", header: "IT #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "number", header: "IT #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
     { key: "date", header: "Date", render: (r) => new Date(r.transfer_date).toLocaleDateString() },
     { key: "from", header: "From", render: (r) => r.source_store_name_en },
     { key: "to", header: "To", render: (r) => r.dest_store_name_en },
@@ -751,17 +751,17 @@ export function NewStocktakeForm({ onClose, onCreated }: { onClose: () => void; 
         </SelectInput>
       </Field>
 
-      <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Items to count ({selected.size} selected)</div>
-      <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2">
+      <div className="mb-2 mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">Items to count ({selected.size} selected)</div>
+      <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-700 p-2">
         {allVariants.map((v) => (
-          <label key={v.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50">
+          <label key={v.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
             <input type="checkbox" checked={selected.has(v.id)} onChange={() => toggle(v.id)} />
             {v.itemName} — {v.variant_code}
           </label>
         ))}
       </div>
 
-      <p className="mb-3 mt-3 text-xs text-slate-400">Snapshots current system quantity now; enter counted quantities afterward from the list.</p>
+      <p className="mb-3 mt-3 text-xs text-slate-400 dark:text-slate-500">Snapshots current system quantity now; enter counted quantities afterward from the list.</p>
       <FormActions error={error} submitting={submitting} submitLabel="Start Stocktake" />
     </form>
   );
@@ -842,7 +842,7 @@ export function CountStocktakeForm({ stocktakeId, onClose, onPosted }: { stockta
     }
   }
 
-  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+  if (!detail) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
   return (
     <form onSubmit={handleSubmit}>
@@ -853,22 +853,22 @@ export function CountStocktakeForm({ stocktakeId, onClose, onPosted }: { stockta
           onChange={(e) => setScanValue(e.target.value)}
           onKeyDown={handleScan}
           placeholder="Scan barcode, then Enter..."
-          className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          className="w-full rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
         />
       </Field>
       {scanMessage && (
         <p className={`-mt-2 mb-2 text-xs ${scanMessage.type === "error" ? "text-red-600" : "text-emerald-600"}`}>{scanMessage.text}</p>
       )}
-      <p className="-mt-1 mb-3 text-xs text-slate-400">The first scan resets every count below to zero and counts up as you scan.</p>
+      <p className="-mt-1 mb-3 text-xs text-slate-400 dark:text-slate-500">The first scan resets every count below to zero and counts up as you scan.</p>
       <div className="mb-3 space-y-2">
         {detail.lines.map((line) => {
           const counted = Number(counts[line.id] ?? 0);
           const variance = counted - Number(line.snapshot_qty);
           return (
-            <div key={line.id} className="flex items-center justify-between gap-2 rounded-md border border-slate-200 p-2">
+            <div key={line.id} className="flex items-center justify-between gap-2 rounded-md border border-slate-200 dark:border-slate-700 p-2">
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm text-slate-900">{line.item_name_en}</div>
-                <div className="text-xs text-slate-400">
+                <div className="truncate text-sm text-slate-900 dark:text-slate-100">{line.item_name_en}</div>
+                <div className="text-xs text-slate-400 dark:text-slate-500">
                   {line.variant_code} · system qty {Number(line.snapshot_qty).toLocaleString()}
                 </div>
               </div>
@@ -891,7 +891,7 @@ export function CountStocktakeForm({ stocktakeId, onClose, onPosted }: { stockta
           );
         })}
       </div>
-      <p className="mb-3 text-xs text-slate-400">
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
         Posting books any variance as stock movements plus a journal against Inventory Adjustments (5110).
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Save Counts & Post" />
@@ -904,7 +904,7 @@ function AdjustmentsTab() {
   const { data, error } = useApiList<Stocktake>("/api/stocktakes");
 
   const columns: Column<Stocktake>[] = [
-    { key: "number", header: "ST #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "number", header: "ST #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
     { key: "store", header: "Store", render: (r) => r.store_name_en },
     { key: "date", header: "Date", render: (r) => new Date(r.stocktake_date).toLocaleDateString() },
     { key: "lines", header: "Items", render: (r) => r.line_count, numeric: true },
@@ -948,7 +948,7 @@ export default function Inventory() {
   );
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold text-slate-900">{t("nav.inventory")}</h1>
+      <h1 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{t("nav.inventory")}</h1>
       <Tabs tabs={tabs} initialActive={(location.state as { fromTab?: string } | null)?.fromTab} />
     </div>
   );

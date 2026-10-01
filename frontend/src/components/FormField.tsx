@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 export function Field({ label, children, required }: { label: string; children: ReactNode; required?: boolean }) {
   return (
     <label className="mb-3 block min-w-0">
-      <span className="mb-1 block text-sm font-medium text-slate-700">
+      <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
         {label}
-        {required && <span className="text-red-500"> *</span>}
+        {required && <span className="text-red-500 dark:text-red-400"> *</span>}
       </span>
       {children}
     </label>
@@ -18,7 +18,7 @@ export function Field({ label, children, required }: { label: string; children: 
 // blows out a two-column form row (found and fixed once already in the
 // journal-line editor — baking it in here so it can't happen again).
 const inputClass =
-  "w-full min-w-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100";
+  "w-full min-w-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-brand-500/20";
 
 export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${inputClass} ${props.className ?? ""}`} />;
@@ -31,7 +31,7 @@ export function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>
 export function FormActions({ error, submitting, submitLabel = "Save" }: { error: string | null; submitting: boolean; submitLabel?: string }) {
   return (
     <div className="mt-4">
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
       <button
         type="submit"
         disabled={submitting}

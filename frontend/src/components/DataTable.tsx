@@ -20,7 +20,7 @@ interface DataTableProps<T> {
 export default function DataTable<T>({ columns, rows, getRowKey, emptyIcon: EmptyIcon, emptyText, onRowClick }: DataTableProps<T>) {
   if (rows.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-2 p-12 text-center text-slate-400">
+      <div className="flex flex-col items-center gap-2 p-12 text-center text-slate-400 dark:text-slate-500">
         <EmptyIcon size={32} strokeWidth={1.5} />
         <p className="text-sm">{emptyText}</p>
       </div>
@@ -28,9 +28,9 @@ export default function DataTable<T>({ columns, rows, getRowKey, emptyIcon: Empt
   }
 
   return (
-    <table className="w-full text-sm">
+    <table className="w-full text-sm text-slate-700 dark:text-slate-200">
       <thead>
-        <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-400">
+        <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-400 dark:border-slate-700 dark:text-slate-500">
           {columns.map((col) => (
             <th key={col.key} className={`px-4 py-2.5 ${col.numeric ? "text-end" : "text-start"}`}>
               {col.header}
@@ -43,7 +43,7 @@ export default function DataTable<T>({ columns, rows, getRowKey, emptyIcon: Empt
           <tr
             key={getRowKey(row)}
             onClick={onRowClick ? () => onRowClick(row) : undefined}
-            className={`border-b border-slate-50 last:border-0 hover:bg-slate-50 ${onRowClick ? "cursor-pointer" : ""}`}
+            className={`border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800 ${onRowClick ? "cursor-pointer" : ""}`}
           >
             {columns.map((col) => (
               <td key={col.key} className={`px-4 py-2.5 ${col.numeric ? "text-end tabular-nums" : ""}`}>

@@ -272,7 +272,7 @@ function NewItemForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
           <TextInput type="number" min={0} step="0.001" value={weightKg} onChange={(e) => setWeightKg(e.target.value)} />
         </Field>
       </div>
-      <p className="mb-3 text-xs text-slate-400">
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
         Creates the item with a single default variant. Additional color/size variants can be added afterward from the item's detail view.
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Create Item" />
@@ -386,7 +386,7 @@ function AddBarcodeForm({ variantId, onClose, onCreated }: { variantId: string; 
           ))}
         </SelectInput>
       </Field>
-      <label className="mb-3 flex items-center gap-2 text-sm text-slate-600">
+      <label className="mb-3 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
         <input type="checkbox" checked={isPrimary} onChange={(e) => setIsPrimary(e.target.checked)} />
         Primary barcode for this unit
       </label>
@@ -439,7 +439,7 @@ function ClassifyItemForm({ item, onChanged }: { item: Item; onChanged: () => vo
   }
 
   return (
-    <div className="mb-4 grid grid-cols-2 gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-5">
+    <div className="mb-4 grid grid-cols-2 gap-3 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3 sm:grid-cols-5">
       <Field label="Brand">
         <SelectInput value={brandId} onChange={(e) => setBrandId(e.target.value)}>
           <option value="">None</option>
@@ -506,7 +506,7 @@ function ClassifyItemForm({ item, onChanged }: { item: Item; onChanged: () => vo
         <button
           onClick={save}
           disabled={saving}
-          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+          className="rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50"
         >
           {saving ? "Saving..." : "Save Classification"}
         </button>
@@ -587,12 +587,12 @@ function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) 
     <div>
       <ClassifyItemForm item={item} onChanged={onChanged} />
       <div className="mb-4 flex items-center justify-between">
-        <div className="text-sm text-slate-500">
+        <div className="text-sm text-slate-500 dark:text-slate-400">
           <span className="font-mono text-xs">{item.item_code}</span> · {item.variants.length} variant{item.variants.length === 1 ? "" : "s"}
         </div>
         <button
           onClick={() => setShowAddVariant(true)}
-          className="flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          className="flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
         >
           <Plus size={13} /> Add Variant
         </button>
@@ -600,12 +600,12 @@ function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) 
 
       <div className="space-y-2">
         {item.variants.map((v) => (
-          <div key={v.id} className="rounded-md border border-slate-200 p-3">
+          <div key={v.id} className="rounded-md border border-slate-200 dark:border-slate-700 p-3">
             <div className="mb-2 flex items-center justify-between">
               <div>
-                <span className="font-mono text-sm text-slate-900">{v.variant_code}</span>
+                <span className="font-mono text-sm text-slate-900 dark:text-slate-100">{v.variant_code}</span>
                 {(v.color || v.size) && (
-                  <span className="ms-2 text-xs text-slate-500">{[v.color, v.size].filter(Boolean).join(" / ")}</span>
+                  <span className="ms-2 text-xs text-slate-500 dark:text-slate-400">{[v.color, v.size].filter(Boolean).join(" / ")}</span>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -621,7 +621,7 @@ function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) 
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               {(v.barcodes ?? []).map((b) => (
-                <span key={b.id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                <span key={b.id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-xs text-slate-600 dark:text-slate-300">
                   <BarcodeIcon size={11} /> {b.barcode} ({unitLabel(b.unitOfMeasureId)}){b.isPrimary ? "" : " alt"}
                 </span>
               ))}
@@ -629,15 +629,15 @@ function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) 
                 + Barcode
               </button>
             </div>
-            <div className="mt-2 flex items-center gap-2 border-t border-slate-100 pt-2">
-              <label className="text-xs text-slate-500">Reorder point</label>
+            <div className="mt-2 flex items-center gap-2 border-t border-slate-100 dark:border-slate-800 pt-2">
+              <label className="text-xs text-slate-500 dark:text-slate-400">Reorder point</label>
               <input
                 type="number"
                 min={0}
                 step="0.001"
                 value={reorderDrafts[v.id] ?? v.reorder_point}
                 onChange={(e) => setReorderDrafts((prev) => ({ ...prev, [v.id]: e.target.value }))}
-                className="w-20 rounded border border-slate-200 px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
+                className="w-20 rounded border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
               />
               <button
                 onClick={() => saveReorderPoint(v)}
@@ -646,26 +646,26 @@ function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) 
               >
                 {savingReorderId === v.id ? "Saving..." : "Save"}
               </button>
-              <span className="text-xs text-slate-400">0 = no low-stock alert</span>
+              <span className="text-xs text-slate-400 dark:text-slate-500">0 = no low-stock alert</span>
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
-              <label className="text-xs text-slate-500">Standard cost</label>
+            <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-slate-100 dark:border-slate-800 pt-2">
+              <label className="text-xs text-slate-500 dark:text-slate-400">Standard cost</label>
               <input
                 type="number"
                 min={0}
                 step="0.01"
                 value={costDraft(v).standardCost}
                 onChange={(e) => setCostDrafts((prev) => ({ ...prev, [v.id]: { ...costDraft(v), standardCost: e.target.value } }))}
-                className="w-20 rounded border border-slate-200 px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
+                className="w-20 rounded border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
               />
-              <label className="text-xs text-slate-500">Weight (kg)</label>
+              <label className="text-xs text-slate-500 dark:text-slate-400">Weight (kg)</label>
               <input
                 type="number"
                 min={0}
                 step="0.001"
                 value={costDraft(v).weightKg}
                 onChange={(e) => setCostDrafts((prev) => ({ ...prev, [v.id]: { ...costDraft(v), weightKg: e.target.value } }))}
-                className="w-20 rounded border border-slate-200 px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
+                className="w-20 rounded border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
               />
               <button
                 onClick={() => saveAttributes(v)}
@@ -770,7 +770,7 @@ function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImpor
 
   return (
     <div>
-      <p className="mb-3 text-sm text-slate-600">
+      <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
         Upload a CSV to create many items/variants at once. Each row creates a new item the first time its item_code is
         seen (or adds a variant to an existing one). Leave item_code blank to have one generated automatically — an
         internal barcode is always generated automatically for every new variant. variant_code and name_en are still
@@ -783,7 +783,7 @@ function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImpor
       >
         <Download size={14} /> Download CSV template
       </button>
-      <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="mb-3 block w-full text-sm text-slate-600" />
+      <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="mb-3 block w-full text-sm text-slate-600 dark:text-slate-300" />
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
       <button
         type="button"
@@ -795,9 +795,9 @@ function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImpor
       </button>
 
       {summary && (
-        <div className="mt-4 border-t border-slate-200 pt-4">
+        <div className="mt-4 border-t border-slate-200 dark:border-slate-700 pt-4">
           <div className="mb-3 flex gap-4 text-sm">
-            <span className="text-slate-500">Total: {summary.totalRows}</span>
+            <span className="text-slate-500 dark:text-slate-400">Total: {summary.totalRows}</span>
             <span className="font-medium text-green-700">Created: {summary.created}</span>
             {summary.failed > 0 && <span className="font-medium text-red-600">Failed: {summary.failed}</span>}
           </div>
@@ -805,8 +805,8 @@ function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImpor
             <div className="max-h-64 overflow-y-auto rounded-md border border-red-100">
               {failedRows.map((r) => (
                 <div key={r.row} className="border-b border-red-50 px-3 py-1.5 text-xs last:border-b-0">
-                  <span className="font-mono text-slate-500">row {r.row}</span>{" "}
-                  <span className="text-slate-700">
+                  <span className="font-mono text-slate-500 dark:text-slate-400">row {r.row}</span>{" "}
+                  <span className="text-slate-700 dark:text-slate-200">
                     {r.itemCode || "?"} / {r.variantCode || "?"}
                   </span>
                   <span className="text-red-600"> — {r.message}</span>
@@ -828,11 +828,11 @@ function ItemsTab() {
   const [detailItemId, setDetailItemId] = useState<string | null>(null);
 
   const columns: Column<Item>[] = [
-    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.item_code}</span> },
+    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.item_code}</span> },
     {
       key: "name",
       header: i18n.language.startsWith("ar") ? "الاسم" : "Name",
-      render: (r) => <span className="font-medium text-slate-900">{i18n.language.startsWith("ar") ? r.name_ar : r.name_en}</span>,
+      render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{i18n.language.startsWith("ar") ? r.name_ar : r.name_en}</span>,
     },
     { key: "variants", header: "Variants", render: (r) => r.variants.length, numeric: true },
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.is_active ? "active" : "inactive"} /> },
@@ -858,7 +858,7 @@ function ItemsTab() {
         toolbarExtra={
           <button
             onClick={() => setShowImport(true)}
-            className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             <Upload size={14} /> Bulk Import
           </button>
@@ -995,8 +995,8 @@ function ClassificationTab({
   const parentName = (id: string | null | undefined) => data?.find((c) => c.id === id)?.name_en ?? "-";
 
   const columns: Column<ClassificationEntity & { parent_id?: string | null }>[] = [
-    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.code}</span> },
-    { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900">{r.name_en}</span> },
+    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.code}</span> },
+    { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{r.name_en}</span> },
     { key: "name_ar", header: "الاسم", render: (r) => <span dir="rtl">{r.name_ar}</span> },
     ...(showParent
       ? [{ key: "parent", header: "Parent", render: (r: ClassificationEntity & { parent_id?: string | null }) => parentName(r.parent_id) }]
@@ -1170,25 +1170,25 @@ function PrintLabelsModal({ variants, onClose }: { variants: VariantRow[]; onClo
         </p>
       )}
 
-      <label className="mb-3 flex items-center gap-2 text-sm text-slate-700">
+      <label className="mb-3 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
         <input type="checkbox" checked={showPrice} onChange={(e) => setShowPrice(e.target.checked)} />
         Show price (from the default price list) on each label
       </label>
 
-      <div className="mb-4 max-h-64 space-y-1.5 overflow-y-auto rounded-md border border-slate-200 p-2">
+      <div className="mb-4 max-h-64 space-y-1.5 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-700 p-2">
         {printable.map((v) => (
           <div key={v.id} className="flex items-center justify-between gap-2 text-sm">
-            <span className="min-w-0 truncate text-slate-700">
-              {v.name_en} <span className="text-xs text-slate-400">({v.variant_code})</span>
+            <span className="min-w-0 truncate text-slate-700 dark:text-slate-200">
+              {v.name_en} <span className="text-xs text-slate-400 dark:text-slate-500">({v.variant_code})</span>
             </span>
             <div className="flex flex-none items-center gap-1.5">
-              <span className="text-xs text-slate-400">Copies</span>
+              <span className="text-xs text-slate-400 dark:text-slate-500">Copies</span>
               <input
                 type="number"
                 min={0}
                 value={copies[v.id] ?? 1}
                 onChange={(e) => setCopies((prev) => ({ ...prev, [v.id]: Number(e.target.value) }))}
-                className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-end text-xs tabular-nums focus:border-brand-400 focus:outline-none"
+                className="w-16 rounded border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 text-end text-xs tabular-nums focus:border-brand-400 focus:outline-none"
               />
             </div>
           </div>
@@ -1205,14 +1205,14 @@ function PrintLabelsModal({ variants, onClose }: { variants: VariantRow[]; onClo
 
       <div id="barcode-print-area" className="hidden print:grid print:grid-cols-3 print:gap-3">
         {labels.map((v, i) => (
-          <div key={`${v.id}-${i}`} className="flex flex-col items-center border border-dashed border-slate-300 p-2 text-center">
-            <div className="w-full truncate text-[10px] font-medium text-slate-900">{v.name_en}</div>
-            <div className="text-[9px] text-slate-500">
+          <div key={`${v.id}-${i}`} className="flex flex-col items-center border border-dashed border-slate-300 dark:border-slate-600 p-2 text-center">
+            <div className="w-full truncate text-[10px] font-medium text-slate-900 dark:text-slate-100">{v.name_en}</div>
+            <div className="text-[9px] text-slate-500 dark:text-slate-400">
               {[v.color, v.size].filter(Boolean).join(" / ") || v.variant_code}
             </div>
             <LabelBarcodeSvg value={v.primary_barcode!} />
-            <div className="font-mono text-[9px] text-slate-700">{v.primary_barcode}</div>
-            {showPrice && priceMap[v.id] && <div className="mt-0.5 text-xs font-semibold text-slate-900">{Number(priceMap[v.id]).toFixed(2)}</div>}
+            <div className="font-mono text-[9px] text-slate-700 dark:text-slate-200">{v.primary_barcode}</div>
+            {showPrice && priceMap[v.id] && <div className="mt-0.5 text-xs font-semibold text-slate-900 dark:text-slate-100">{Number(priceMap[v.id]).toFixed(2)}</div>}
           </div>
         ))}
       </div>
@@ -1388,15 +1388,15 @@ function AllVariantsTab() {
 
   function sortIndicator(col: VariantSortColumn) {
     if (sortBy !== col) return null;
-    return <span className="ms-1 text-slate-400">{sortDir === "asc" ? "▲" : "▼"}</span>;
+    return <span className="ms-1 text-slate-400 dark:text-slate-500">{sortDir === "asc" ? "▲" : "▼"}</span>;
   }
 
   const totalPages = result ? Math.max(1, Math.ceil(result.total / result.pageSize)) : 1;
 
-  const thClass = "cursor-pointer select-none whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400 hover:text-slate-600";
-  const filterInputClass = "w-full rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-brand-400 focus:outline-none";
+  const thClass = "cursor-pointer select-none whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300";
+  const filterInputClass = "w-full rounded border border-slate-200 dark:border-slate-700 px-1.5 py-1 text-xs focus:border-brand-400 focus:outline-none";
 
-  const editableInputClass = "w-20 rounded border border-transparent bg-transparent px-1 py-0.5 text-end text-xs tabular-nums hover:border-slate-200 focus:border-brand-400 focus:bg-white focus:outline-none";
+  const editableInputClass = "w-20 rounded border border-transparent bg-transparent px-1 py-0.5 text-end text-xs tabular-nums hover:border-slate-200 dark:border-slate-700 focus:border-brand-400 focus:bg-white dark:bg-slate-800 focus:outline-none";
 
   return (
     <div>
@@ -1405,23 +1405,23 @@ function AllVariantsTab() {
           value={filters.search}
           onChange={(e) => updateFilter("search", e.target.value)}
           placeholder="Search item code, name, or variant code..."
-          className="min-w-64 flex-1 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm focus:border-brand-400 focus:bg-white focus:outline-none"
+          className="min-w-64 flex-1 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-sm focus:border-brand-400 focus:bg-white dark:bg-slate-800 focus:outline-none"
         />
         {(Object.keys(filters) as Array<keyof VariantFilters>).some((k) => filters[k]) && (
           <button
             onClick={() => setFilters(EMPTY_VARIANT_FILTERS)}
-            className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+            className="rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             Clear filters
           </button>
         )}
-        <span className="text-sm text-slate-500">
+        <span className="text-sm text-slate-500 dark:text-slate-400">
           {result ? `${result.total.toLocaleString()} variant${result.total === 1 ? "" : "s"}` : loading ? "Loading..." : ""}
         </span>
         {Object.keys(selected).length > 0 && (
           <button
             onClick={() => setShowPrintLabels(true)}
-            className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            className="flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             <Printer size={13} /> Print Labels ({Object.keys(selected).length})
           </button>
@@ -1430,10 +1430,10 @@ function AllVariantsTab() {
 
       {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-100">
+            <tr className="border-b border-slate-100 dark:border-slate-800">
               <th className="px-2 py-2">
                 <input
                   type="checkbox"
@@ -1444,18 +1444,18 @@ function AllVariantsTab() {
               <th className={thClass} onClick={() => toggleSort("variantCode")}>Variant Code{sortIndicator("variantCode")}</th>
               <th className={thClass} onClick={() => toggleSort("itemCode")}>Item Code{sortIndicator("itemCode")}</th>
               <th className={thClass} onClick={() => toggleSort("name")}>Name{sortIndicator("name")}</th>
-              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400">Brand</th>
-              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400">Category</th>
-              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400">Season</th>
-              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400">Group</th>
+              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Brand</th>
+              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Category</th>
+              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Season</th>
+              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Group</th>
               <th className={thClass} onClick={() => toggleSort("color")}>Color{sortIndicator("color")}</th>
               <th className={thClass} onClick={() => toggleSort("size")}>Size{sortIndicator("size")}</th>
-              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400">Barcode</th>
+              <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Barcode</th>
               <th className={`${thClass} text-end`} onClick={() => toggleSort("standardCost")}>Cost{sortIndicator("standardCost")}</th>
               <th className={`${thClass} text-end`} onClick={() => toggleSort("reorderPoint")}>Reorder{sortIndicator("reorderPoint")}</th>
               <th className={thClass} onClick={() => toggleSort("status")}>Status{sortIndicator("status")}</th>
             </tr>
-            <tr className="border-b border-slate-100 bg-slate-50">
+            <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800">
               <th className="px-2 py-1.5" />
               <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.variantCode} onChange={(e) => updateFilter("variantCode", e.target.value)} /></th>
               <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.itemCode} onChange={(e) => updateFilter("itemCode", e.target.value)} /></th>
@@ -1501,26 +1501,26 @@ function AllVariantsTab() {
           <tbody>
             {result?.rows.length === 0 && (
               <tr>
-                <td colSpan={14} className="px-4 py-12 text-center text-sm text-slate-400">
+                <td colSpan={14} className="px-4 py-12 text-center text-sm text-slate-400 dark:text-slate-500">
                   No variants match these filters.
                 </td>
               </tr>
             )}
             {result?.rows.map((r) => (
-              <tr key={r.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+              <tr key={r.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800">
                 <td className="px-2 py-2">
                   <input type="checkbox" checked={Boolean(selected[r.id])} onChange={() => toggleSelected(r)} />
                 </td>
-                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-700">{r.variant_code}</td>
-                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-500">{r.item_code}</td>
-                <td className="px-3 py-2 text-slate-900">{r.name_en}</td>
-                <td className="px-3 py-2 text-slate-600">{r.brand_name ?? "—"}</td>
-                <td className="px-3 py-2 text-slate-600">{r.category_name ?? "—"}</td>
-                <td className="px-3 py-2 text-slate-600">{r.season_name ?? "—"}</td>
-                <td className="px-3 py-2 text-slate-600">{r.group_name ?? "—"}</td>
-                <td className="px-3 py-2 text-slate-600">{r.color ?? "—"}</td>
-                <td className="px-3 py-2 text-slate-600">{r.size ?? "—"}</td>
-                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-500">{r.primary_barcode ?? "—"}</td>
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-700 dark:text-slate-200">{r.variant_code}</td>
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-500 dark:text-slate-400">{r.item_code}</td>
+                <td className="px-3 py-2 text-slate-900 dark:text-slate-100">{r.name_en}</td>
+                <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{r.brand_name ?? "—"}</td>
+                <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{r.category_name ?? "—"}</td>
+                <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{r.season_name ?? "—"}</td>
+                <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{r.group_name ?? "—"}</td>
+                <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{r.color ?? "—"}</td>
+                <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{r.size ?? "—"}</td>
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-500 dark:text-slate-400">{r.primary_barcode ?? "—"}</td>
                 <td className="px-1 py-1 text-end">
                   <input
                     type="number"
@@ -1563,7 +1563,7 @@ function AllVariantsTab() {
       </div>
 
       {result && result.total > 0 && (
-        <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
+        <div className="mt-3 flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
           <div className="flex items-center gap-2">
             <span>Rows per page</span>
             <select
@@ -1572,7 +1572,7 @@ function AllVariantsTab() {
                 setPageSize(Number(e.target.value));
                 setPage(1);
               }}
-              className="rounded border border-slate-200 px-2 py-1 text-xs"
+              className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1 text-xs"
             >
               {[25, 50, 100, 200].map((n) => (
                 <option key={n} value={n}>{n}</option>
@@ -1586,14 +1586,14 @@ function AllVariantsTab() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-30"
+              className="rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30"
             >
               Previous
             </button>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-30"
+              className="rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30"
             >
               Next
             </button>

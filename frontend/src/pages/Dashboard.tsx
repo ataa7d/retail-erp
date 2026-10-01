@@ -129,7 +129,7 @@ function CreateRequisitionFromLowStockForm({
           <TextInput type="date" required value={requisitionDate} onChange={(e) => setRequisitionDate(e.target.value)} />
         </Field>
       </div>
-      <p className="mb-2 text-xs text-slate-400">
+      <p className="mb-2 text-xs text-slate-400 dark:text-slate-500">
         Qty on hand is summed across all stores -- double-check the suggested quantity makes sense for the store you pick.
       </p>
       <div className="mb-3 space-y-1.5">
@@ -137,18 +137,18 @@ function CreateRequisitionFromLowStockForm({
           const detail = [i.color, i.size].filter(Boolean).join(" / ");
           const line = lines[i.item_variant_id]!;
           return (
-            <div key={i.item_variant_id} className="flex items-center gap-2 rounded-md border border-slate-200 p-2">
+            <div key={i.item_variant_id} className="flex items-center gap-2 rounded-md border border-slate-200 dark:border-slate-700 p-2">
               <input
                 type="checkbox"
                 checked={line.selected}
                 onChange={(e) => updateLine(i.item_variant_id, { selected: e.target.checked })}
               />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm text-slate-900">
+                <div className="truncate text-sm text-slate-900 dark:text-slate-100">
                   {i.item_name_en}
-                  {detail && <span className="text-slate-400"> ({detail})</span>}
+                  {detail && <span className="text-slate-400 dark:text-slate-500"> ({detail})</span>}
                 </div>
-                <div className="text-xs text-slate-400">
+                <div className="text-xs text-slate-400 dark:text-slate-500">
                   {Number(i.qty_on_hand)} on hand · reorder point {Number(i.reorder_point)}
                 </div>
               </div>
@@ -207,10 +207,10 @@ export default function Dashboard() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-slate-900">
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
           {t("dashboard.welcome")}, {firstName}
         </h1>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           {i18n.language.startsWith("ar") ? company?.name_ar : company?.name_en}
         </p>
       </div>
@@ -291,10 +291,10 @@ export default function Dashboard() {
           <KpiTile to="/assets" label={t("nav.assets")} value={assetCount ?? "—"} icon={Building2} accent="slate" loading={assetCount === null} />
         )}
       </div>
-      <p className="mt-2 text-xs text-slate-400">Sales and stock figures are in {currency}.</p>
+      <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">Sales and stock figures are in {currency}.</p>
 
-      <div className="mt-8 rounded-xl border border-slate-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-slate-900">Your roles</h2>
+      <div className="mt-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
+        <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Your roles</h2>
         <div className="flex flex-wrap gap-2">
           {me?.roles.map((r) => (
             <span
@@ -311,7 +311,7 @@ export default function Dashboard() {
       {lowStockItems && lowStockItems.length > 0 && (
         <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
               <AlertTriangle size={15} className="text-amber-600" /> Low Stock ({lowStockItems.length})
             </h2>
             {canCreateRequisition && (
@@ -327,12 +327,12 @@ export default function Dashboard() {
             {lowStockItems.map((i) => {
               const detail = [i.color, i.size].filter(Boolean).join(" / ");
               return (
-                <div key={i.item_variant_id} className="flex items-center justify-between rounded-md bg-white px-3 py-1.5 text-sm">
-                  <span className="text-slate-700">
+                <div key={i.item_variant_id} className="flex items-center justify-between rounded-md bg-white dark:bg-slate-800 px-3 py-1.5 text-sm">
+                  <span className="text-slate-700 dark:text-slate-200">
                     {i.item_name_en}
-                    {detail && <span className="text-slate-400"> ({detail})</span>}
+                    {detail && <span className="text-slate-400 dark:text-slate-500"> ({detail})</span>}
                   </span>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
                     {Number(i.qty_on_hand)} on hand · reorder at {Number(i.reorder_point)}
                   </span>
                 </div>

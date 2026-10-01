@@ -234,11 +234,11 @@ function NewAccountForm({ accounts, onClose, onCreated }: { accounts: Account[];
           ))}
         </SelectInput>
       </Field>
-      <label className="mb-3 flex items-center gap-2 text-sm text-slate-700">
+      <label className="mb-3 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
         <input type="checkbox" checked={isHeader} onChange={(e) => setIsHeader(e.target.checked)} />
         This is a header/group account (organizes other accounts, never posted to directly)
       </label>
-      <p className="mb-3 text-xs text-slate-400">
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
         Type, normal balance, and code can't be changed after creation — every journal line and report groups by them.
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Create Account" />
@@ -276,7 +276,7 @@ function EditAccountForm({ account, onClose, onSaved }: { account: Account; onCl
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="mb-3 flex items-center justify-between text-sm text-slate-500">
+      <div className="mb-3 flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
         <span className="font-mono text-xs">{account.account_code}</span>
         <span className="capitalize">
           {account.account_type} · {account.normal_balance}
@@ -288,11 +288,11 @@ function EditAccountForm({ account, onClose, onSaved }: { account: Account; onCl
       <Field label="Name (Arabic)" required>
         <TextInput required dir="rtl" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
       </Field>
-      <label className="mb-3 flex items-center gap-2 text-sm text-slate-700">
+      <label className="mb-3 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
         <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
         Active
       </label>
-      <p className="mb-3 text-xs text-slate-400">
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
         Retire an account no longer used by unchecking Active instead of deleting it — its history stays intact.
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Save Account" />
@@ -305,12 +305,12 @@ function ChartOfAccountsTab() {
   const [showNew, setShowNew] = useState(false);
   const [editing, setEditing] = useState<Account | null>(null);
   const columns: Column<Account>[] = [
-    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.account_code}</span> },
+    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.account_code}</span> },
     {
       key: "name",
       header: "Name",
       render: (r) => (
-        <span className={`${r.is_header ? "font-semibold text-slate-900" : "ps-4 text-slate-700"} ${r.is_active ? "" : "text-slate-400"}`}>
+        <span className={`${r.is_header ? "font-semibold text-slate-900 dark:text-slate-100" : "ps-4 text-slate-700 dark:text-slate-200"} ${r.is_active ? "" : "text-slate-400 dark:text-slate-500"}`}>
           {r.name_en}
           {!r.is_active && " (inactive)"}
         </span>
@@ -418,7 +418,7 @@ function NewTaxCodeForm({ onClose, onCreated }: { onClose: () => void; onCreated
       <Field label="Rate (%)" required>
         <TextInput type="number" min={0} max={100} step="0.01" required value={rate} disabled={taxType !== "standard"} onChange={(e) => setRate(e.target.value)} />
       </Field>
-      {taxType !== "standard" && <p className="mb-3 text-xs text-slate-400">Zero-rated and exempt codes are always 0%.</p>}
+      {taxType !== "standard" && <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">Zero-rated and exempt codes are always 0%.</p>}
       <FormActions error={error} submitting={submitting} submitLabel="Create Tax Code" />
     </form>
   );
@@ -445,8 +445,8 @@ function TaxCodesTab() {
   }
 
   const columns: Column<TaxCode>[] = [
-    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.code}</span> },
-    { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900">{r.name_en}</span> },
+    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.code}</span> },
+    { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{r.name_en}</span> },
     { key: "type", header: "Type", render: (r) => <span className="capitalize">{r.tax_type.replace("_", " ")}</span> },
     { key: "rate", header: "Rate", render: (r) => `${Number(r.rate).toFixed(2)}%`, numeric: true },
     {
@@ -590,10 +590,10 @@ export function NewJournalForm({ onClose, onCreated }: { onClose: () => void; on
         <TextInput value={memo} onChange={(e) => setMemo(e.target.value)} />
       </Field>
 
-      <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Lines</div>
+      <div className="mb-2 mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">Lines</div>
       <div className="space-y-2">
         {lines.map((line, i) => (
-          <div key={i} className="rounded-md border border-slate-200 p-2">
+          <div key={i} className="rounded-md border border-slate-200 dark:border-slate-700 p-2">
             <div className="mb-1.5 flex items-center gap-1.5">
               <SelectInput value={line.accountId} onChange={(e) => updateLine(i, { accountId: e.target.value })} className="min-w-0 flex-1">
                 <option value="">Account...</option>
@@ -603,7 +603,7 @@ export function NewJournalForm({ onClose, onCreated }: { onClose: () => void; on
                   </option>
                 ))}
               </SelectInput>
-              <button type="button" onClick={() => removeLine(i)} className="shrink-0 rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500">
+              <button type="button" onClick={() => removeLine(i)} className="shrink-0 rounded p-1.5 text-slate-400 dark:text-slate-500 hover:bg-red-50 hover:text-red-500">
                 <Trash2 size={14} />
               </button>
             </div>
@@ -650,7 +650,7 @@ function JournalsTab() {
   const { data, error } = useApiList<Journal>("/api/journals");
 
   const columns: Column<Journal>[] = [
-    { key: "number", header: "Journal #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.journal_number}</span> },
+    { key: "number", header: "Journal #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.journal_number}</span> },
     { key: "date", header: "Date", render: (r) => new Date(r.journal_date).toLocaleDateString() },
     { key: "source", header: "Source", render: (r) => <span className="capitalize">{r.source_type.replace(/_/g, " ")}</span> },
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
@@ -717,13 +717,13 @@ function InvoiceAllocationPicker({
   }
 
   if (invoices.length === 0) {
-    return <p className="mb-3 text-xs text-slate-400">No open invoices for this customer/supplier — will post as unapplied cash.</p>;
+    return <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">No open invoices for this customer/supplier — will post as unapplied cash.</p>;
   }
 
   return (
-    <div className="mb-3 rounded border border-slate-200">
-      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2">
-        <span className="text-xs font-medium text-slate-600">Apply to open invoices (optional)</span>
+    <div className="mb-3 rounded border border-slate-200 dark:border-slate-700">
+      <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2">
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Apply to open invoices (optional)</span>
         <button type="button" className="text-xs font-medium text-blue-600 hover:underline" onClick={autoAllocateOldestFirst}>
           Auto-apply oldest first
         </button>
@@ -735,10 +735,10 @@ function InvoiceAllocationPicker({
           const open = Number(inv.open_amount);
           const value = allocations[invoiceId] ?? 0;
           return (
-            <div key={invoiceId} className="flex items-center gap-2 border-b border-slate-100 px-3 py-1.5 last:border-b-0">
+            <div key={invoiceId} className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 px-3 py-1.5 last:border-b-0">
               <div className="min-w-0 flex-1">
-                <div className="truncate font-mono text-xs text-slate-700">{inv.document_number}</div>
-                <div className="text-[11px] text-slate-400">
+                <div className="truncate font-mono text-xs text-slate-700 dark:text-slate-200">{inv.document_number}</div>
+                <div className="text-[11px] text-slate-400 dark:text-slate-500">
                   Due {new Date(inv.due_date).toLocaleDateString()} · Open {open.toFixed(2)}
                 </div>
               </div>
@@ -749,7 +749,7 @@ function InvoiceAllocationPicker({
                 step="0.01"
                 value={value || ""}
                 placeholder="0.00"
-                className="w-24 rounded border border-slate-300 px-2 py-1 text-right text-xs"
+                className="w-24 rounded border border-slate-300 dark:border-slate-600 px-2 py-1 text-right text-xs"
                 onChange={(e) => setLine(invoiceId, Math.min(open, Number(e.target.value) || 0))}
               />
               <button
@@ -763,7 +763,7 @@ function InvoiceAllocationPicker({
           );
         })}
       </div>
-      <div className={`flex justify-between border-t border-slate-200 px-3 py-1.5 text-xs ${remaining < 0 ? "text-red-600" : "text-slate-500"}`}>
+      <div className={`flex justify-between border-t border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs ${remaining < 0 ? "text-red-600" : "text-slate-500 dark:text-slate-400"}`}>
         <span>Applied: {totalAllocated.toFixed(2)}</span>
         <span>Unapplied: {remaining.toFixed(2)}</span>
       </div>
@@ -897,7 +897,7 @@ function CustomerReceiptsTab() {
   const { data, error } = useApiList<Receipt>("/api/customer-receipts");
 
   const columns: Column<Receipt>[] = [
-    { key: "number", header: "Receipt #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "number", header: "Receipt #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
     { key: "customer", header: "Customer", render: (r) => r.customer_name_en },
     { key: "date", header: "Date", render: (r) => new Date(r.receipt_date).toLocaleDateString() },
     { key: "amount", header: "Amount", render: (r) => Number(r.amount).toFixed(2), numeric: true },
@@ -1059,7 +1059,7 @@ function SupplierPaymentsTab() {
   const baseCurrency = useBaseCurrency();
 
   const columns: Column<Payment>[] = [
-    { key: "number", header: "Payment #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "number", header: "Payment #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
     { key: "supplier", header: "Supplier", render: (r) => r.supplier_name_en },
     { key: "date", header: "Date", render: (r) => new Date(r.payment_date).toLocaleDateString() },
     { key: "amount", header: "Amount", render: (r) => formatMoney(r.amount, r.currency !== baseCurrency ? r.currency : undefined), numeric: true },
@@ -1096,7 +1096,7 @@ function SupplierPaymentsTab() {
 function ArAgeingTab() {
   const { data, error } = useApiList<AgeingRow>("/api/ar-ageing");
   const columns: Column<AgeingRow>[] = [
-    { key: "number", header: "Invoice #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "number", header: "Invoice #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
     { key: "customer", header: "Customer", render: (r) => r.customer_name_en },
     { key: "due", header: "Due Date", render: (r) => new Date(r.due_date).toLocaleDateString() },
     { key: "open", header: "Open Amount", render: (r) => Number(r.open_amount).toFixed(2), numeric: true },
@@ -1120,7 +1120,7 @@ function ArAgeingTab() {
 function ApAgeingTab() {
   const { data, error } = useApiList<AgeingRow>("/api/ap-ageing");
   const columns: Column<AgeingRow>[] = [
-    { key: "number", header: "Invoice #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "number", header: "Invoice #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
     { key: "supplier", header: "Supplier", render: (r) => r.supplier_name_en },
     { key: "due", header: "Due Date", render: (r) => new Date(r.due_date).toLocaleDateString() },
     { key: "open", header: "Open Amount", render: (r) => formatMoney(r.open_amount, r.currency), numeric: true },
@@ -1182,7 +1182,7 @@ function NewExchangeRateForm({ onClose, onCreated }: { onClose: () => void; onCr
       <Field label="Rate" required>
         <TextInput type="number" min="0.00000001" step="any" required value={rate} onChange={(e) => setRate(e.target.value)} placeholder="3.75" />
       </Field>
-      <p className="mb-3 text-xs text-slate-400">
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
         How many units of the base currency one unit of this currency buys on this date. Re-entering the same currency and date corrects that day's rate.
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Save Rate" />
@@ -1196,14 +1196,14 @@ function ExchangeRatesTab() {
   const [showNew, setShowNew] = useState(false);
 
   const columns: Column<ExchangeRate>[] = [
-    { key: "currency", header: "Currency", render: (r) => <span className="font-medium text-slate-900">{r.currency}</span> },
+    { key: "currency", header: "Currency", render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{r.currency}</span> },
     { key: "date", header: "Date", render: (r) => new Date(r.rate_date).toLocaleDateString() },
     { key: "rate", header: `Rate (${baseCurrency} per 1 unit)`, render: (r) => Number(r.rate).toFixed(4), numeric: true },
   ];
 
   return (
     <>
-      <p className="mb-3 max-w-2xl text-sm text-slate-500">
+      <p className="mb-3 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
         Documents in a foreign currency snapshot the latest rate on or before their own date when posted, so correcting or adding a rate
         here never changes anything already posted. A document can also override this with its own rate (e.g. the bank's actual contract rate).
       </p>
@@ -1313,7 +1313,7 @@ function MatchStatementLineForm({
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="mb-3 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700">
+      <div className="mb-3 rounded-md bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200">
         {line.description || "(no description)"} · {Number(line.amount).toFixed(2)} · {new Date(line.statement_date).toLocaleDateString()}
       </div>
       <Field label="Matching Journal Line" required>
@@ -1327,7 +1327,7 @@ function MatchStatementLineForm({
           ))}
         </SelectInput>
       </Field>
-      {candidates?.length === 0 && <p className="mb-3 text-xs text-slate-400">No unmatched posted journal lines on this bank's GL account.</p>}
+      {candidates?.length === 0 && <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">No unmatched posted journal lines on this bank's GL account.</p>}
       <FormActions error={error} submitting={submitting} submitLabel="Match" />
     </form>
   );
@@ -1399,16 +1399,16 @@ function NewReconciliationForm({ bankAccountId, onClose, onCreated }: { bankAcco
         </Field>
       </div>
 
-      <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Matched lines up to this date ({eligible.length})</div>
-      <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2">
-        {eligible.length === 0 && <p className="p-2 text-xs text-slate-400">No matched, unreconciled lines on or before this date.</p>}
+      <div className="mb-2 mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">Matched lines up to this date ({eligible.length})</div>
+      <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-700 p-2">
+        {eligible.length === 0 && <p className="p-2 text-xs text-slate-400 dark:text-slate-500">No matched, unreconciled lines on or before this date.</p>}
         {eligible.map((l) => (
-          <label key={l.id} className="flex items-center justify-between gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50">
+          <label key={l.id} className="flex items-center justify-between gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
             <span className="flex items-center gap-2">
               <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} />
               {l.description || "(no description)"}
             </span>
-            <span className="tabular-nums text-slate-500">{Number(l.amount).toFixed(2)}</span>
+            <span className="tabular-nums text-slate-500 dark:text-slate-400">{Number(l.amount).toFixed(2)}</span>
           </label>
         ))}
       </div>
@@ -1424,7 +1424,7 @@ function NewReconciliationForm({ bankAccountId, onClose, onCreated }: { bankAcco
         <span>Declared Ending Balance: {Number(statementEndingBalance || 0).toFixed(2)}</span>
       </div>
 
-      <p className="mb-3 mt-2 text-xs text-slate-400">
+      <p className="mb-3 mt-2 text-xs text-slate-400 dark:text-slate-500">
         Posting requires the running total of every reconciled line for this account, up to this date, to equal the declared ending balance exactly.
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Post Reconciliation" />
@@ -1506,7 +1506,7 @@ function NewBankAccountForm({ onClose, onCreated }: { onClose: () => void; onCre
           ))}
         </SelectInput>
       </Field>
-      <p className="mb-3 text-xs text-slate-400">
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
         The GL account and currency can't be changed after creation — reconciliations tie back to this specific account.
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Create Bank Account" />
@@ -1545,8 +1545,8 @@ function EditBankAccountForm({ account, onClose, onSaved }: { account: FullBankA
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
-      <div className="mb-2 text-xs text-slate-500">Currency {account.currency} — GL account and currency can't be changed here.</div>
+    <form onSubmit={handleSubmit} className="mb-4 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
+      <div className="mb-2 text-xs text-slate-500 dark:text-slate-400">Currency {account.currency} — GL account and currency can't be changed here.</div>
       <Field label="Bank Name" required>
         <TextInput required value={bankName} onChange={(e) => setBankName(e.target.value)} />
       </Field>
@@ -1561,7 +1561,7 @@ function EditBankAccountForm({ account, onClose, onSaved }: { account: FullBankA
           <TextInput value={iban} onChange={(e) => setIban(e.target.value)} />
         </Field>
       </div>
-      <label className="mb-3 flex items-center gap-2 text-sm text-slate-700">
+      <label className="mb-3 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
         <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
         Active
       </label>
@@ -1587,7 +1587,7 @@ function BankAccountsModal({ onClose, onChanged }: { onClose: () => void; onChan
           <Plus size={14} /> New Bank Account
         </button>
       ) : (
-        <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+        <div className="mb-4 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
           <NewBankAccountForm onClose={() => setShowNew(false)} onCreated={refresh} />
         </div>
       )}
@@ -1596,12 +1596,12 @@ function BankAccountsModal({ onClose, onChanged }: { onClose: () => void; onChan
           editingId === a.id ? (
             <EditBankAccountForm key={a.id} account={a} onClose={() => setEditingId(null)} onSaved={refresh} />
           ) : (
-            <div key={a.id} className="flex items-center justify-between rounded-md border border-slate-100 px-3 py-2 text-sm">
+            <div key={a.id} className="flex items-center justify-between rounded-md border border-slate-100 dark:border-slate-800 px-3 py-2 text-sm">
               <div>
-                <div className="font-medium text-slate-900">
+                <div className="font-medium text-slate-900 dark:text-slate-100">
                   {a.bank_name} — {a.account_name}
                 </div>
-                <div className="text-xs text-slate-400">
+                <div className="text-xs text-slate-400 dark:text-slate-500">
                   {a.currency}
                   {a.account_number ? ` · ${a.account_number}` : ""}
                   {!a.is_active ? " · inactive" : ""}
@@ -1613,7 +1613,7 @@ function BankAccountsModal({ onClose, onChanged }: { onClose: () => void; onChan
             </div>
           ),
         )}
-        {accounts?.length === 0 && !showNew && <p className="text-sm text-slate-400">No bank accounts yet.</p>}
+        {accounts?.length === 0 && !showNew && <p className="text-sm text-slate-400 dark:text-slate-500">No bank accounts yet.</p>}
       </div>
     </Modal>
   );
@@ -1646,7 +1646,7 @@ function BankReconciliationTab() {
   if (!bankAccounts || bankAccounts.length === 0) {
     return (
       <div>
-        <p className="mb-3 text-sm text-slate-400">No bank accounts set up yet.</p>
+        <p className="mb-3 text-sm text-slate-400 dark:text-slate-500">No bank accounts set up yet.</p>
         <button
           onClick={() => setShowManageAccounts(true)}
           className="flex items-center gap-1.5 rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600"
@@ -1671,10 +1671,10 @@ function BankReconciliationTab() {
           ))}
         </SelectInput>
         <div className="flex gap-2">
-          <button onClick={() => setShowManageAccounts(true)} className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          <button onClick={() => setShowManageAccounts(true)} className="flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">
             Manage Accounts
           </button>
-          <button onClick={() => setShowAddLine(true)} className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          <button onClick={() => setShowAddLine(true)} className="flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">
             <Plus size={15} /> Statement Line
           </button>
           <button onClick={() => setShowReconcile(true)} className="flex items-center gap-1.5 rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600">
@@ -1683,14 +1683,14 @@ function BankReconciliationTab() {
         </div>
       </div>
 
-      <div className="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-900">Statement Lines</div>
+      <div className="mb-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
+        <div className="border-b border-slate-200 dark:border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-900 dark:text-slate-100">Statement Lines</div>
         {!lines || lines.length === 0 ? (
-          <p className="p-6 text-sm text-slate-400">No statement lines yet.</p>
+          <p className="p-6 text-sm text-slate-400 dark:text-slate-500">No statement lines yet.</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-400">
+              <tr className="border-b border-slate-100 dark:border-slate-800 text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
                 <th className="px-4 py-2.5 text-start">Date</th>
                 <th className="px-4 py-2.5 text-start">Description</th>
                 <th className="px-4 py-2.5 text-end">Amount</th>
@@ -1699,7 +1699,7 @@ function BankReconciliationTab() {
             </thead>
             <tbody>
               {lines.map((l) => (
-                <tr key={l.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+                <tr key={l.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800">
                   <td className="px-4 py-2.5">{new Date(l.statement_date).toLocaleDateString()}</td>
                   <td className="px-4 py-2.5">{l.description ?? "—"}</td>
                   <td className="px-4 py-2.5 text-end tabular-nums">{Number(l.amount).toFixed(2)}</td>
@@ -1723,14 +1723,14 @@ function BankReconciliationTab() {
         )}
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-900">Reconciliations</div>
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
+        <div className="border-b border-slate-200 dark:border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-900 dark:text-slate-100">Reconciliations</div>
         {!reconciliations || reconciliations.length === 0 ? (
-          <p className="p-6 text-sm text-slate-400">No reconciliations yet.</p>
+          <p className="p-6 text-sm text-slate-400 dark:text-slate-500">No reconciliations yet.</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-400">
+              <tr className="border-b border-slate-100 dark:border-slate-800 text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
                 <th className="px-4 py-2.5 text-start">Statement Date</th>
                 <th className="px-4 py-2.5 text-end">Ending Balance</th>
                 <th className="px-4 py-2.5 text-end">Lines</th>
@@ -1807,7 +1807,7 @@ function ClosePeriodConfirm({
 
   return (
     <div>
-      <p className="mb-4 text-sm text-slate-600">
+      <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
         {closing ? (
           <>
             Close <strong>{period.year_name} — Period {period.period_number}</strong> ({new Date(period.start_date).toLocaleDateString()} –{" "}
@@ -1853,7 +1853,7 @@ function CloseFiscalYearConfirm({ year, onClose, onDone }: { year: FiscalYear; o
 
   return (
     <div>
-      <p className="mb-4 text-sm text-slate-600">
+      <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
         Close fiscal year <strong>{year.year_name}</strong>? This generates closing entries zeroing every revenue/expense account into
         Retained Earnings, posts them into the year's last period, then closes that period and the year itself. All earlier periods must
         already be closed.
@@ -1881,17 +1881,17 @@ function PeriodCloseTab() {
     reloadPeriods();
   }
 
-  if (!years || !periods) return <p className="text-sm text-slate-400">Loading...</p>;
+  if (!years || !periods) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
   return (
     <div className="space-y-6">
       {years.map((year) => {
         const yearPeriods = periods.filter((p) => p.fiscal_year_id === year.id).sort((a, b) => a.period_number - b.period_number);
         return (
-          <div key={year.id} className="rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2.5">
+          <div key={year.id} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 px-4 py-2.5">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-slate-900">{year.year_name}</span>
+                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{year.year_name}</span>
                 <StatusBadge status={year.status} />
               </div>
               {year.status === "open" && (
@@ -1905,7 +1905,7 @@ function PeriodCloseTab() {
             </div>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-400">
+                <tr className="border-b border-slate-100 dark:border-slate-800 text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
                   <th className="px-4 py-2 text-start">Period</th>
                   <th className="px-4 py-2 text-start">Dates</th>
                   <th className="px-4 py-2 text-start">Status</th>
@@ -1914,9 +1914,9 @@ function PeriodCloseTab() {
               </thead>
               <tbody>
                 {yearPeriods.map((p) => (
-                  <tr key={p.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+                  <tr key={p.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800">
                     <td className="px-4 py-2">P{p.period_number}</td>
-                    <td className="px-4 py-2 text-slate-500">
+                    <td className="px-4 py-2 text-slate-500 dark:text-slate-400">
                       {new Date(p.start_date).toLocaleDateString()} – {new Date(p.end_date).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-2">
@@ -2023,7 +2023,7 @@ function NewBudgetForm({ onClose, onCreated }: { onClose: () => void; onCreated:
       <Field label="Budget Name" required>
         <TextInput required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. FY2026 Original Budget" />
       </Field>
-      <p className="mb-3 text-xs text-slate-400">
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
         Multiple named budgets can exist per fiscal year (an original plan, a mid-year revision) -- only an approved one counts toward
         the Budget vs Actual report.
       </p>
@@ -2097,44 +2097,44 @@ export function BudgetDetailModal({ budgetId, onChanged }: { budgetId: string; o
     }
   }
 
-  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+  if (!detail) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
   const isApproved = detail.status === "approved";
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <div className="text-sm font-medium text-slate-900">{detail.name}</div>
-          <div className="text-xs text-slate-500">{detail.year_name}</div>
+          <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{detail.name}</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">{detail.year_name}</div>
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={detail.status} />
           <button
             onClick={toggleStatus}
             disabled={busy}
-            className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            className="rounded-md border border-slate-200 dark:border-slate-700 px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
           >
             {isApproved ? "Reopen to Draft" : "Approve"}
           </button>
         </div>
       </div>
 
-      <div className="mb-3 max-h-56 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2">
-        {detail.lines.length === 0 && <p className="text-xs text-slate-400">No budget lines yet.</p>}
+      <div className="mb-3 max-h-56 space-y-1 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-700 p-2">
+        {detail.lines.length === 0 && <p className="text-xs text-slate-400 dark:text-slate-500">No budget lines yet.</p>}
         {detail.lines.map((l) => (
           <div key={l.id} className="flex items-center justify-between text-sm">
-            <span className="text-slate-600">
-              P{l.period_number} — {l.account_name_en} <span className="font-mono text-xs text-slate-400">({l.account_code})</span>
+            <span className="text-slate-600 dark:text-slate-300">
+              P{l.period_number} — {l.account_name_en} <span className="font-mono text-xs text-slate-400 dark:text-slate-500">({l.account_code})</span>
             </span>
-            <span className="font-medium tabular-nums text-slate-900">{Number(l.amount).toFixed(2)}</span>
+            <span className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{Number(l.amount).toFixed(2)}</span>
           </div>
         ))}
       </div>
 
       {isApproved ? (
-        <p className="text-xs text-slate-400">This budget is approved. Reopen it to draft to change amounts.</p>
+        <p className="text-xs text-slate-400 dark:text-slate-500">This budget is approved. Reopen it to draft to change amounts.</p>
       ) : (
-        <form onSubmit={setLine} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+        <form onSubmit={setLine} className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
           <div className="grid grid-cols-2 gap-2">
             <Field label="Period">
               <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
@@ -2180,7 +2180,7 @@ function BudgetsTab() {
   const [showNew, setShowNew] = useState(false);
 
   const columns: Column<Budget>[] = [
-    { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900">{r.name}</span> },
+    { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{r.name}</span> },
     { key: "year", header: "Fiscal Year", render: (r) => r.year_name },
     { key: "lines", header: "Lines", render: (r) => r.line_count, numeric: true },
     { key: "created", header: "Created", render: (r) => new Date(r.created_at).toLocaleDateString() },
@@ -2234,7 +2234,7 @@ export default function Accounting() {
   );
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold text-slate-900">{t("nav.accounting")}</h1>
+      <h1 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{t("nav.accounting")}</h1>
       <Tabs tabs={tabs} initialActive={(location.state as { fromTab?: string } | null)?.fromTab} />
     </div>
   );

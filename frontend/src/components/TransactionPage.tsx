@@ -19,15 +19,17 @@ export default function TransactionPage({ title, subtitle, backLabel = "Back", o
       <button
         type="button"
         onClick={onBack}
-        className="mb-3 flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-700"
+        className="mb-3 flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
       >
         <ArrowLeft size={16} /> {backLabel}
       </button>
       <div className="mb-4">
-        <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
-        {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{title}</h1>
+        {subtitle && <p className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>}
       </div>
-      <div className="max-w-4xl rounded-xl border border-slate-200 bg-white p-5 shadow-sm">{children}</div>
+      <div className="max-w-4xl rounded-xl border border-slate-200 bg-white p-5 text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+        {children}
+      </div>
     </div>
   );
 }

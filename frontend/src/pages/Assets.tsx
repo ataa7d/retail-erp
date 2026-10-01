@@ -114,7 +114,7 @@ function AcquireAssetForm({ onClose, onCreated }: { onClose: () => void; onCreat
           ))}
         </SelectInput>
       </Field>
-      <p className="mb-3 text-xs text-slate-400">Books a cash-purchase journal (Dr Fixed Asset / Cr Cash) immediately.</p>
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">Books a cash-purchase journal (Dr Fixed Asset / Cr Cash) immediately.</p>
       <FormActions error={error} submitting={submitting} submitLabel="Acquire Asset" />
     </form>
   );
@@ -165,7 +165,7 @@ function NewDepreciationRunForm({ onClose, onCreated }: { onClose: () => void; o
       <Field label="Run Date" required>
         <TextInput type="date" required value={runDate} onChange={(e) => setRunDate(e.target.value)} />
       </Field>
-      <p className="mb-3 text-xs text-slate-400">
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
         Computes straight-line depreciation for every active asset and posts the GL journal immediately.
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Create & Post" />
@@ -208,7 +208,7 @@ function DisposeAssetForm({ asset, onClose, onDisposed }: { asset: FixedAsset; o
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="mb-3 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
+      <div className="mb-3 rounded-md bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-600 dark:text-slate-300">
         Book value: {bookValue.toFixed(2)} (cost {Number(asset.acquisition_cost).toFixed(2)} − accum. depreciation{" "}
         {Number(asset.accumulated_depreciation).toFixed(2)})
       </div>
@@ -228,12 +228,12 @@ function DisposeAssetForm({ asset, onClose, onDisposed }: { asset: FixedAsset; o
           ))}
         </SelectInput>
       </Field>
-      <p className={`mb-3 text-xs ${gainLoss === 0 ? "text-slate-400" : gainLoss > 0 ? "text-emerald-600" : "text-red-600"}`}>
+      <p className={`mb-3 text-xs ${gainLoss === 0 ? "text-slate-400 dark:text-slate-500" : gainLoss > 0 ? "text-emerald-600" : "text-red-600"}`}>
         {gainLoss === 0
           ? "Proceeds exactly match book value — no gain or loss."
           : `${gainLoss > 0 ? "Gain" : "Loss"} on disposal: ${Math.abs(gainLoss).toFixed(2)}`}
       </p>
-      <p className="mb-3 text-xs text-slate-400">Removes accumulated depreciation, books proceeds, and posts the resulting gain/loss. Cannot be undone.</p>
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">Removes accumulated depreciation, books proceeds, and posts the resulting gain/loss. Cannot be undone.</p>
       <FormActions error={error} submitting={submitting} submitLabel="Dispose Asset" />
     </form>
   );
@@ -247,19 +247,19 @@ function AssetDetailModal({ asset, onClose, onDisposed }: { asset: FixedAsset; o
   return (
     <Modal title={i18n.language.startsWith("ar") ? asset.name_ar : asset.name_en} onClose={onClose}>
       <div className="mb-3 flex items-center justify-between text-sm">
-        <span className="font-mono text-xs text-slate-500">{asset.asset_code}</span>
+        <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{asset.asset_code}</span>
         <StatusBadge status={asset.status} />
       </div>
       <div className="space-y-1 text-sm">
-        <div className="flex justify-between text-slate-500">
+        <div className="flex justify-between text-slate-500 dark:text-slate-400">
           <span>Acquisition Cost</span>
           <span className="tabular-nums">{Number(asset.acquisition_cost).toFixed(2)}</span>
         </div>
-        <div className="flex justify-between text-slate-500">
+        <div className="flex justify-between text-slate-500 dark:text-slate-400">
           <span>Accumulated Depreciation</span>
           <span className="tabular-nums">{Number(asset.accumulated_depreciation).toFixed(2)}</span>
         </div>
-        <div className="flex justify-between text-base font-semibold text-slate-900">
+        <div className="flex justify-between text-base font-semibold text-slate-900 dark:text-slate-100">
           <span>Book Value</span>
           <span className="tabular-nums">{bookValue.toFixed(2)}</span>
         </div>
@@ -272,9 +272,9 @@ function AssetDetailModal({ asset, onClose, onDisposed }: { asset: FixedAsset; o
           <Trash2 size={14} /> Dispose Asset
         </button>
       )}
-      {asset.status !== "active" && <p className="mt-4 text-xs text-slate-400">This asset has already been disposed.</p>}
+      {asset.status !== "active" && <p className="mt-4 text-xs text-slate-400 dark:text-slate-500">This asset has already been disposed.</p>}
       {showDispose && (
-        <div className="mt-4 border-t border-slate-200 pt-4">
+        <div className="mt-4 border-t border-slate-200 dark:border-slate-700 pt-4">
           <DisposeAssetForm
             asset={asset}
             onClose={() => setShowDispose(false)}
@@ -296,11 +296,11 @@ function AssetsTab() {
   const [selected, setSelected] = useState<FixedAsset | null>(null);
 
   const columns: Column<FixedAsset>[] = [
-    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.asset_code}</span> },
+    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.asset_code}</span> },
     {
       key: "name",
       header: "Name",
-      render: (r) => <span className="font-medium text-slate-900">{i18n.language.startsWith("ar") ? r.name_ar : r.name_en}</span>,
+      render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{i18n.language.startsWith("ar") ? r.name_ar : r.name_en}</span>,
     },
     { key: "cost", header: "Cost", render: (r) => Number(r.acquisition_cost).toFixed(2), numeric: true },
     { key: "depr", header: "Accum. Depreciation", render: (r) => Number(r.accumulated_depreciation).toFixed(2), numeric: true },
@@ -339,7 +339,7 @@ function DepreciationRunsTab() {
   const [showNew, setShowNew] = useState(false);
 
   const columns: Column<DepreciationRun>[] = [
-    { key: "number", header: "Run #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "number", header: "Run #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
     { key: "date", header: "Run Date", render: (r) => new Date(r.run_date).toLocaleDateString() },
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
   ];
@@ -372,7 +372,7 @@ export default function Assets() {
   const { t } = useTranslation();
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold text-slate-900">{t("nav.assets")}</h1>
+      <h1 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{t("nav.assets")}</h1>
       <Tabs
         tabs={[
           { key: "assets", label: "Assets", content: <AssetsTab /> },

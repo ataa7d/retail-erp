@@ -395,7 +395,7 @@ function QuickAddItemModal({
             <TextInput type="number" min={0} step="0.01" value={standardCost} onChange={(e) => setStandardCost(e.target.value)} />
           </Field>
         </div>
-        <p className="mb-3 mt-2 text-xs text-slate-400">
+        <p className="mb-3 mt-2 text-xs text-slate-400 dark:text-slate-500">
           An internal barcode is generated automatically — no need to enter one. This has no GL impact by itself.
         </p>
         <FormActions error={error} submitting={submitting} submitLabel="Create Item" />
@@ -569,7 +569,7 @@ function BulkUploadItemsModal({
 
   return (
     <Modal title="Bulk Upload New Items" onClose={onClose}>
-      <p className="mb-3 text-sm text-slate-600">
+      <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
         Upload a CSV of new items to create them and add each one straight into this PO's lines, using the file's own
         order_qty and standard_cost. Leave item_code and barcode blank and the system generates both — variant_code and
         name_en are still required; a blank name_ar falls back to name_en so a sheet that hasn't been translated yet
@@ -586,7 +586,7 @@ function BulkUploadItemsModal({
         type="file"
         accept=".csv,text/csv"
         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        className="mb-3 block w-full text-sm text-slate-600"
+        className="mb-3 block w-full text-sm text-slate-600 dark:text-slate-300"
       />
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
       <button
@@ -599,7 +599,7 @@ function BulkUploadItemsModal({
       </button>
       {summary && (
         <div className="mt-4">
-          <p className="mb-2 text-sm text-slate-700">
+          <p className="mb-2 text-sm text-slate-700 dark:text-slate-200">
             {summary.created} item{summary.created === 1 ? "" : "s"} created and added to the PO
             {summary.failed > 0 ? `, ${summary.failed} row${summary.failed === 1 ? "" : "s"} failed` : ""}.
           </p>
@@ -615,7 +615,7 @@ function BulkUploadItemsModal({
           <button
             type="button"
             onClick={onClose}
-            className="mt-3 w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="mt-3 w-full rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             Done
           </button>
@@ -811,10 +811,10 @@ export function NewPurchaseOrderForm({
         </SelectInput>
       </Field>
 
-      <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Lines</div>
+      <div className="mb-2 mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">Lines</div>
       <div className="space-y-2">
         {lines.map((line, i) => (
-          <div key={i} className="rounded-md border border-slate-200 p-2">
+          <div key={i} className="rounded-md border border-slate-200 dark:border-slate-700 p-2">
             <div className="mb-1.5 flex items-center gap-1.5">
               <SelectInput value={line.itemVariantId} onChange={(e) => updateLine(i, { itemVariantId: e.target.value })} className="min-w-0 flex-1">
                 <option value="">Item variant...</option>
@@ -824,7 +824,7 @@ export function NewPurchaseOrderForm({
                   </option>
                 ))}
               </SelectInput>
-              <button type="button" onClick={() => removeLine(i)} className="shrink-0 rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500">
+              <button type="button" onClick={() => removeLine(i)} className="shrink-0 rounded p-1.5 text-slate-400 dark:text-slate-500 hover:bg-red-50 hover:text-red-500">
                 <Trash2 size={14} />
               </button>
             </div>
@@ -835,7 +835,7 @@ export function NewPurchaseOrderForm({
                 <TextInput type="number" min={0} step="0.01" placeholder="VAT %" value={line.vatRate} onChange={(e) => updateLine(i, { vatRate: e.target.value })} />
               </div>
             </div>
-            <label className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
+            <label className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
               <input type="checkbox" checked={line.priceIncludesVat} onChange={(e) => updateLine(i, { priceIncludesVat: e.target.checked })} />
               Price includes VAT
             </label>
@@ -853,11 +853,11 @@ export function NewPurchaseOrderForm({
           <Upload size={14} /> Bulk upload items
         </button>
       </div>
-      <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
+      <div className="mt-3 rounded-md bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200">
         Estimated Total: {formatMoney(totalGross, currency)}
       </div>
 
-      <p className="mb-3 mt-2 text-xs text-slate-400">
+      <p className="mb-3 mt-2 text-xs text-slate-400 dark:text-slate-500">
         Purchase orders don't post a GL journal — they're a commitment, not a financial transaction. Posting here approves and locks it for receiving.
         {currency !== baseCurrency && " Lines above are priced in the order's own currency."}
       </p>
@@ -1040,32 +1040,32 @@ export function NewGoodsReceiptForm({ onClose, onCreated }: { onClose: () => voi
 
       {poDetail && (
         <>
-          <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Scan to receive</div>
+          <div className="mb-2 mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">Scan to receive</div>
           <input
             type="text"
             value={scanValue}
             onChange={(e) => setScanValue(e.target.value)}
             onKeyDown={handleScan}
             placeholder="Scan barcode, then Enter..."
-            className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+            className="w-full rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
           />
           {scanMessage && (
             <p className={`mt-1 text-xs ${scanMessage.type === "error" ? "text-red-600" : "text-emerald-600"}`}>{scanMessage.text}</p>
           )}
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
             The first scan resets quantities below to zero and counts up as you scan. Only items on this PO can be scanned in, up to the
             ordered quantity. You can still type quantities directly instead.
           </p>
 
-          <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Lines to receive</div>
+          <div className="mb-2 mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">Lines to receive</div>
           <div className="space-y-2">
             {poDetail.lines.map((line) => {
               const remaining = Number(line.qty) - Number(line.received_qty);
               return (
-                <div key={line.id} className="flex items-center justify-between gap-2 rounded-md border border-slate-200 p-2">
+                <div key={line.id} className="flex items-center justify-between gap-2 rounded-md border border-slate-200 dark:border-slate-700 p-2">
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm text-slate-900">{line.item_name_en}</div>
-                    <div className="text-xs text-slate-400">
+                    <div className="truncate text-sm text-slate-900 dark:text-slate-100">{line.item_name_en}</div>
+                    <div className="text-xs text-slate-400 dark:text-slate-500">
                       {line.variant_code} · ordered {line.qty}, received {line.received_qty}
                     </div>
                   </div>
@@ -1087,7 +1087,7 @@ export function NewGoodsReceiptForm({ onClose, onCreated }: { onClose: () => voi
         </>
       )}
 
-      <p className="mb-3 mt-3 text-xs text-slate-400">
+      <p className="mb-3 mt-3 text-xs text-slate-400 dark:text-slate-500">
         Accrues Dr Inventory / Cr GRNI at the PO's price. Landed cost charges (freight, customs) aren't in this form yet.
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Receive & Post" />
@@ -1223,13 +1223,13 @@ export function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => 
 
       {grDetail && (
         <>
-          <div className="mb-2 mt-4 text-sm font-medium text-slate-700">
-            Lines {selectedPo && selectedPo.currency !== baseCurrency && <span className="font-normal text-slate-400">(priced in {selectedPo.currency})</span>}
+          <div className="mb-2 mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">
+            Lines {selectedPo && selectedPo.currency !== baseCurrency && <span className="font-normal text-slate-400 dark:text-slate-500">(priced in {selectedPo.currency})</span>}
           </div>
           <div className="space-y-2">
             {grDetail.lines.map((line) => (
-              <div key={line.id} className="rounded-md border border-slate-200 p-2">
-                <div className="mb-1.5 text-sm text-slate-900">{line.item_name_en} <span className="text-xs text-slate-400">({line.variant_code})</span></div>
+              <div key={line.id} className="rounded-md border border-slate-200 dark:border-slate-700 p-2">
+                <div className="mb-1.5 text-sm text-slate-900 dark:text-slate-100">{line.item_name_en} <span className="text-xs text-slate-400 dark:text-slate-500">({line.variant_code})</span></div>
                 <div className="flex gap-1.5">
                   <TextInput
                     type="number"
@@ -1266,7 +1266,7 @@ export function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => 
         </>
       )}
 
-      <p className="mb-3 mt-3 text-xs text-slate-400">
+      <p className="mb-3 mt-3 text-xs text-slate-400 dark:text-slate-500">
         Clears GRNI, books Purchase Price Variance if the price differs from the receipt, claims input VAT, credits Accounts Payable.
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Post Invoice" />
@@ -1280,8 +1280,8 @@ function GoodsReceiptsTab() {
   const baseCurrency = useBaseCurrency();
 
   const columns: Column<GoodsReceipt>[] = [
-    { key: "number", header: "GR #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
-    { key: "po", header: "PO #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.po_document_number}</span> },
+    { key: "number", header: "GR #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
+    { key: "po", header: "PO #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.po_document_number}</span> },
     { key: "supplier", header: "Supplier", render: (r) => r.supplier_name_en },
     { key: "date", header: "Receipt Date", render: (r) => new Date(r.receipt_date).toLocaleDateString() },
     { key: "currency", header: "Currency", render: (r) => (r.currency !== baseCurrency ? `${r.currency} @ ${Number(r.exchange_rate).toFixed(4)}` : "—") },
@@ -1313,7 +1313,7 @@ function SupplierInvoicesTab() {
   const baseCurrency = useBaseCurrency();
 
   const columns: Column<SupplierInvoice>[] = [
-    { key: "number", header: "Invoice #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "number", header: "Invoice #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
     { key: "supplierRef", header: "Supplier Ref", render: (r) => r.supplier_invoice_number },
     { key: "supplier", header: "Supplier", render: (r) => r.supplier_name_en },
     { key: "date", header: "Invoice Date", render: (r) => new Date(r.invoice_date).toLocaleDateString() },
@@ -1460,15 +1460,15 @@ export function NewSupplierCreditNoteForm({ onClose, onCreated }: { onClose: () 
 
       {returnableLines && (
         <>
-          <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Lines to return</div>
+          <div className="mb-2 mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">Lines to return</div>
           <div className="space-y-2">
             {returnableLines.map((line) => {
               const returnable = Number(line.returnable_qty);
               return (
-                <div key={line.source_line_id} className="flex items-center justify-between gap-2 rounded-md border border-slate-200 p-2">
+                <div key={line.source_line_id} className="flex items-center justify-between gap-2 rounded-md border border-slate-200 dark:border-slate-700 p-2">
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm text-slate-900">{line.item_name_en}</div>
-                    <div className="text-xs text-slate-400">
+                    <div className="truncate text-sm text-slate-900 dark:text-slate-100">{line.item_name_en}</div>
+                    <div className="text-xs text-slate-400 dark:text-slate-500">
                       {line.variant_code} · invoiced {Number(line.invoiced_qty).toLocaleString()}, returnable {returnable.toLocaleString()} @ {Number(line.unit_price).toFixed(2)}
                     </div>
                   </div>
@@ -1490,7 +1490,7 @@ export function NewSupplierCreditNoteForm({ onClose, onCreated }: { onClose: () 
         </>
       )}
 
-      <p className="mb-3 mt-3 text-xs text-slate-400">
+      <p className="mb-3 mt-3 text-xs text-slate-400 dark:text-slate-500">
         Reduces Accounts Payable and reverses input VAT; ships the returned stock back out of inventory at its current average cost (any gap from
         the invoiced price posts as a purchase price variance).
       </p>
@@ -1509,35 +1509,35 @@ export function CreditNoteDetailModal({ creditNoteId }: { creditNoteId: string }
     apiRequest<SupplierCreditNoteDetail>(`/api/supplier-credit-notes/${creditNoteId}`, { token, companyId }).then(setDetail);
   }, [creditNoteId, token, companyId]);
 
-  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+  if (!detail) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <div className="font-mono text-xs text-slate-500">{detail.document_number}</div>
-          <div className="text-sm text-slate-700">
+          <div className="font-mono text-xs text-slate-500 dark:text-slate-400">{detail.document_number}</div>
+          <div className="text-sm text-slate-700 dark:text-slate-200">
             {detail.supplier_name_en} · against invoice {detail.invoice_document_number} · {new Date(detail.credit_note_date).toLocaleDateString()}
           </div>
         </div>
         <StatusBadge status={detail.document_status} />
       </div>
-      <p className="mb-3 text-xs text-slate-500">{detail.reason}</p>
+      <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">{detail.reason}</p>
 
-      <div className="mb-3 space-y-1 rounded-md border border-slate-200 p-2">
+      <div className="mb-3 space-y-1 rounded-md border border-slate-200 dark:border-slate-700 p-2">
         {detail.lines.map((line) => (
           <div key={line.id} className="flex items-center justify-between text-sm">
-            <span className="text-slate-700">
-              {line.item_name_en} <span className="text-xs text-slate-400">({line.variant_code})</span>
+            <span className="text-slate-700 dark:text-slate-200">
+              {line.item_name_en} <span className="text-xs text-slate-400 dark:text-slate-500">({line.variant_code})</span>
             </span>
-            <span className="font-medium text-slate-900">
+            <span className="font-medium text-slate-900 dark:text-slate-100">
               {Number(line.qty).toLocaleString()} × {Number(line.unit_price).toFixed(2)}
             </span>
           </div>
         ))}
       </div>
 
-      <div className="text-sm font-medium text-slate-700">Total: {formatMoney(detail.gross_amount, baseCurrency)}</div>
+      <div className="text-sm font-medium text-slate-700 dark:text-slate-200">Total: {formatMoney(detail.gross_amount, baseCurrency)}</div>
     </div>
   );
 }
@@ -1547,8 +1547,8 @@ function PurchaseReturnsTab() {
   const { data, error } = useApiList<SupplierCreditNote>("/api/supplier-credit-notes");
 
   const columns: Column<SupplierCreditNote>[] = [
-    { key: "number", header: "SCN #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
-    { key: "invoice", header: "Against Invoice", render: (r) => <span className="font-mono text-xs text-slate-500">{r.invoice_document_number}</span> },
+    { key: "number", header: "SCN #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
+    { key: "invoice", header: "Against Invoice", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.invoice_document_number}</span> },
     { key: "supplier", header: "Supplier", render: (r) => r.supplier_name_en },
     { key: "date", header: "Date", render: (r) => new Date(r.credit_note_date).toLocaleDateString() },
     { key: "reason", header: "Reason", render: (r) => <span className="truncate">{r.reason}</span> },
@@ -1657,7 +1657,7 @@ export function NewRequisitionForm({ onClose, onCreated }: { onClose: () => void
         <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" />
       </Field>
 
-      <div className="mb-2 mt-3 text-sm font-medium text-slate-700">Lines</div>
+      <div className="mb-2 mt-3 text-sm font-medium text-slate-700 dark:text-slate-200">Lines</div>
       <div className="space-y-2">
         {lines.map((line, i) => (
           <div key={i} className="flex items-center gap-2">
@@ -1678,7 +1678,7 @@ export function NewRequisitionForm({ onClose, onCreated }: { onClose: () => void
               type="button"
               onClick={() => removeLine(i)}
               disabled={lines.length === 1}
-              className="flex-none rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600 disabled:opacity-30"
+              className="flex-none rounded p-1.5 text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-red-600 disabled:opacity-30"
             >
               <Trash2 size={14} />
             </button>
@@ -1689,7 +1689,7 @@ export function NewRequisitionForm({ onClose, onCreated }: { onClose: () => void
         <Plus size={13} /> Add line
       </button>
 
-      <p className="mb-3 text-xs text-slate-400">
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
         Submitted immediately for approval — no separate draft step. Someone else (not you) will need to approve it before it can become a purchase order.
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Submit for Approval" />
@@ -1780,12 +1780,12 @@ function ConvertRequisitionForm({ requisition, onClose, onConverted }: { requisi
         </Field>
       </div>
 
-      <div className="mb-2 mt-3 text-sm font-medium text-slate-700">Set pricing per line</div>
+      <div className="mb-2 mt-3 text-sm font-medium text-slate-700 dark:text-slate-200">Set pricing per line</div>
       <div className="space-y-2">
         {requisition.lines.map((line) => (
-          <div key={line.id} className="rounded-md border border-slate-200 p-2">
-            <div className="mb-1.5 text-sm text-slate-900">
-              {line.item_name_en} <span className="text-xs text-slate-400">({line.variant_code}) · qty {Number(line.qty).toLocaleString()}</span>
+          <div key={line.id} className="rounded-md border border-slate-200 dark:border-slate-700 p-2">
+            <div className="mb-1.5 text-sm text-slate-900 dark:text-slate-100">
+              {line.item_name_en} <span className="text-xs text-slate-400 dark:text-slate-500">({line.variant_code}) · qty {Number(line.qty).toLocaleString()}</span>
             </div>
             <div className="flex gap-1.5">
               <TextInput
@@ -1812,7 +1812,7 @@ function ConvertRequisitionForm({ requisition, onClose, onConverted }: { requisi
         ))}
       </div>
 
-      <p className="mb-3 mt-3 text-xs text-slate-400">Creates and approves (posts) a new purchase order for this supplier, pre-filled from the requisition's items and quantities.</p>
+      <p className="mb-3 mt-3 text-xs text-slate-400 dark:text-slate-500">Creates and approves (posts) a new purchase order for this supplier, pre-filled from the requisition's items and quantities.</p>
       <FormActions error={error} submitting={submitting} submitLabel="Create Purchase Order" />
     </form>
   );
@@ -1887,7 +1887,7 @@ export function RequisitionDetailModal({ requisitionId, onChanged }: { requisiti
     }
   }
 
-  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+  if (!detail) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
   const isOwnRequisition = me?.user.email === detail.requested_by_email;
   const canApprove = hasPermission("purchasing.requisition.approve") && !isOwnRequisition;
@@ -1896,26 +1896,26 @@ export function RequisitionDetailModal({ requisitionId, onChanged }: { requisiti
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <div className="font-mono text-xs text-slate-500">{detail.document_number}</div>
-          <div className="text-sm text-slate-700">
+          <div className="font-mono text-xs text-slate-500 dark:text-slate-400">{detail.document_number}</div>
+          <div className="text-sm text-slate-700 dark:text-slate-200">
             {detail.store_name_en} · requested by {detail.requested_by_email ?? "—"}
           </div>
         </div>
         <StatusBadge status={detail.document_status} />
       </div>
-      {detail.notes && <p className="mb-2 text-xs text-slate-500">{detail.notes}</p>}
+      {detail.notes && <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">{detail.notes}</p>}
       {detail.document_status === "rejected" && detail.rejection_reason && (
         <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">Rejected: {detail.rejection_reason}</p>
       )}
 
-      <div className="mb-3 space-y-1 rounded-md border border-slate-200 p-2">
+      <div className="mb-3 space-y-1 rounded-md border border-slate-200 dark:border-slate-700 p-2">
         {detail.lines.map((line) => (
           <div key={line.id} className="flex items-center justify-between text-sm">
-            <span className="text-slate-700">
-              {line.item_name_en} <span className="text-xs text-slate-400">({line.variant_code})</span>
-              {line.notes && <span className="ms-2 text-xs text-slate-400">— {line.notes}</span>}
+            <span className="text-slate-700 dark:text-slate-200">
+              {line.item_name_en} <span className="text-xs text-slate-400 dark:text-slate-500">({line.variant_code})</span>
+              {line.notes && <span className="ms-2 text-xs text-slate-400 dark:text-slate-500">— {line.notes}</span>}
             </span>
-            <span className="font-medium text-slate-900">{Number(line.qty).toLocaleString()}</span>
+            <span className="font-medium text-slate-900 dark:text-slate-100">{Number(line.qty).toLocaleString()}</span>
           </div>
         ))}
       </div>
@@ -1933,12 +1933,12 @@ export function RequisitionDetailModal({ requisitionId, onChanged }: { requisiti
         </div>
       )}
       {detail.document_status === "pending_approval" && !canApprove && (
-        <p className="mb-2 text-xs text-slate-400">
+        <p className="mb-2 text-xs text-slate-400 dark:text-slate-500">
           {isOwnRequisition ? "You cannot approve your own requisition." : "Awaiting approval from someone with requisition-approval rights."}
         </p>
       )}
       {detail.document_status === "pending_approval" && isOwnRequisition && (
-        <button onClick={withdraw} disabled={busy} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+        <button onClick={withdraw} disabled={busy} className="rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">
           {busy ? "Working..." : "Withdraw"}
         </button>
       )}
@@ -1951,7 +1951,7 @@ export function RequisitionDetailModal({ requisitionId, onChanged }: { requisiti
             <button type="submit" disabled={busy} className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">
               {busy ? "Working..." : "Confirm Rejection"}
             </button>
-            <button type="button" onClick={() => setShowReject(false)} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+            <button type="button" onClick={() => setShowReject(false)} className="rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
               Cancel
             </button>
           </div>
@@ -1974,7 +1974,7 @@ export function RequisitionDetailModal({ requisitionId, onChanged }: { requisiti
           }}
         />
       )}
-      {detail.document_status === "converted_to_po" && <p className="text-xs text-slate-400">Already converted into a purchase order.</p>}
+      {detail.document_status === "converted_to_po" && <p className="text-xs text-slate-400 dark:text-slate-500">Already converted into a purchase order.</p>}
     </div>
   );
 }
@@ -1984,7 +1984,7 @@ function RequisitionsTab() {
   const { data, error } = useApiList<PurchaseRequisition>("/api/purchase-requisitions");
 
   const columns: Column<PurchaseRequisition>[] = [
-    { key: "number", header: "PR #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "number", header: "PR #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
     { key: "store", header: "Store", render: (r) => r.store_name_en },
     { key: "date", header: "Date", render: (r) => new Date(r.requisition_date).toLocaleDateString() },
     { key: "requester", header: "Requested By", render: (r) => r.requested_by_email ?? "—" },
@@ -2031,14 +2031,14 @@ export function PoDetailModal({ poId }: { poId: string }) {
     });
   }, [poId, token, companyId]);
 
-  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+  if (!detail) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <div className="font-mono text-xs text-slate-500">{detail.document_number}</div>
-          <div className="text-sm text-slate-700">
+          <div className="font-mono text-xs text-slate-500 dark:text-slate-400">{detail.document_number}</div>
+          <div className="text-sm text-slate-700 dark:text-slate-200">
             {detail.supplier_name_en} · {new Date(detail.order_date).toLocaleDateString()}
           </div>
         </div>
@@ -2053,20 +2053,20 @@ export function PoDetailModal({ poId }: { poId: string }) {
         </button>
       )}
 
-      <div className="mb-3 space-y-1 rounded-md border border-slate-200 p-2">
+      <div className="mb-3 space-y-1 rounded-md border border-slate-200 dark:border-slate-700 p-2">
         {detail.lines.map((line) => (
           <div key={line.id} className="flex items-center justify-between text-sm">
-            <span className="text-slate-700">
-              {line.item_name_en} <span className="text-xs text-slate-400">({line.variant_code})</span>
+            <span className="text-slate-700 dark:text-slate-200">
+              {line.item_name_en} <span className="text-xs text-slate-400 dark:text-slate-500">({line.variant_code})</span>
             </span>
-            <span className="font-medium text-slate-900">
+            <span className="font-medium text-slate-900 dark:text-slate-100">
               {Number(line.qty).toLocaleString()} × {Number(line.unit_price).toFixed(2)}
             </span>
           </div>
         ))}
       </div>
 
-      <div className="text-sm font-medium text-slate-700">
+      <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
         Total: {formatMoney(detail.gross_amount, detail.currency !== baseCurrency ? detail.currency : undefined)}
       </div>
     </div>
@@ -2080,11 +2080,11 @@ function PurchaseOrdersTab() {
   const baseCurrency = useBaseCurrency();
 
   const columns: Column<PurchaseOrder>[] = [
-    { key: "number", header: "PO #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "number", header: "PO #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
     {
       key: "supplier",
       header: "Supplier",
-      render: (r) => <span className="font-medium text-slate-900">{i18n.language.startsWith("ar") ? r.supplier_name_ar : r.supplier_name_en}</span>,
+      render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{i18n.language.startsWith("ar") ? r.supplier_name_ar : r.supplier_name_en}</span>,
     },
     { key: "date", header: "Order Date", render: (r) => new Date(r.order_date).toLocaleDateString() },
     { key: "amount", header: "Total", render: (r) => formatMoney(r.gross_amount, r.currency !== baseCurrency ? r.currency : undefined), numeric: true },
@@ -2209,7 +2209,7 @@ function NewSupplierForm({ onClose, onCreated }: { onClose: () => void; onCreate
       <Field label="Invoicing Currency" required>
         <TextInput required value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={3} />
       </Field>
-      <p className="mb-3 text-xs text-slate-400">Pre-fills the currency on new purchase orders for this supplier — an overseas supplier is usually {baseCurrency !== "USD" ? "USD" : "EUR"} or similar.</p>
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">Pre-fills the currency on new purchase orders for this supplier — an overseas supplier is usually {baseCurrency !== "USD" ? "USD" : "EUR"} or similar.</p>
       <FormActions error={error} submitting={submitting} submitLabel="Create Supplier" />
     </form>
   );
@@ -2264,8 +2264,8 @@ function EditSupplierForm({ supplier, onClose, onSaved }: { supplier: Supplier; 
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
-      <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
+    <form onSubmit={handleSubmit} className="mb-4 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
+      <div className="mb-2 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
         <span className="font-mono">{supplier.supplier_code}</span>
         <span>{supplier.currency} — code and currency can't be changed here</span>
       </div>
@@ -2367,7 +2367,7 @@ function SupplierPriceCatalog({ supplier, onChanged }: { supplier: Supplier; onC
 
   return (
     <div>
-      <form onSubmit={setLinePrice} className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+      <form onSubmit={setLinePrice} className="mb-4 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
         <Field label="Item">
           <SelectInput required value={itemVariantId} onChange={(e) => setItemVariantId(e.target.value)}>
             <option value="">Select...</option>
@@ -2399,22 +2399,22 @@ function SupplierPriceCatalog({ supplier, onChanged }: { supplier: Supplier; onC
         </button>
       </form>
 
-      <p className="mb-2 text-xs text-slate-400">
+      <p className="mb-2 text-xs text-slate-400 dark:text-slate-500">
         Every purchase order placed with this supplier also updates these costs automatically to whatever was last ordered.
       </p>
-      {prices && prices.length === 0 && <p className="text-sm text-slate-400">No quoted prices on file yet.</p>}
+      {prices && prices.length === 0 && <p className="text-sm text-slate-400 dark:text-slate-500">No quoted prices on file yet.</p>}
       <div className="space-y-1.5">
         {prices?.map((p) => (
-          <div key={p.item_variant_id} className="flex items-center justify-between rounded-md border border-slate-100 px-3 py-2 text-sm">
+          <div key={p.item_variant_id} className="flex items-center justify-between rounded-md border border-slate-100 dark:border-slate-800 px-3 py-2 text-sm">
             <div>
-              <div className="text-slate-700">{variantLabel(p.item_variant_id)}</div>
-              <div className="text-xs text-slate-400">
+              <div className="text-slate-700 dark:text-slate-200">{variantLabel(p.item_variant_id)}</div>
+              <div className="text-xs text-slate-400 dark:text-slate-500">
                 {p.lead_time_days != null ? `${p.lead_time_days}d lead time` : "no lead time set"}
                 {p.moq ? ` · MOQ ${Number(p.moq)}` : ""}
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <span className="font-medium tabular-nums text-slate-900">
+              <span className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
                 {Number(p.unit_cost).toFixed(2)} {p.currency}
               </span>
               <button
@@ -2455,8 +2455,8 @@ function SuppliersTab() {
   }
 
   const columns: Column<Supplier>[] = [
-    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.supplier_code}</span> },
-    { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900">{r.name_en}</span> },
+    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.supplier_code}</span> },
+    { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{r.name_en}</span> },
     { key: "location", header: "Location", render: (r) => [r.city, r.country].filter(Boolean).join(", ") || "—" },
     { key: "currency", header: "Currency", render: (r) => r.currency },
     { key: "terms", header: "Payment Terms", render: (r) => `${r.payment_terms_days}d`, numeric: true },
@@ -2523,7 +2523,7 @@ function SuppliersTab() {
               Edit supplier details
             </button>
           )}
-          <div className="mb-2 text-sm font-medium text-slate-700">Cost Catalog</div>
+          <div className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-200">Cost Catalog</div>
           <SupplierPriceCatalog supplier={detailSupplier} onChanged={reload} />
         </Modal>
       )}
@@ -2606,17 +2606,17 @@ function ReorderSuggestionsTab() {
         </SelectInput>
       </Field>
 
-      {!storeId && <p className="mt-4 text-sm text-slate-400">Select a store to see what's below its reorder point there.</p>}
+      {!storeId && <p className="mt-4 text-sm text-slate-400 dark:text-slate-500">Select a store to see what's below its reorder point there.</p>}
 
       {storeId && suggestions && suggestions.length === 0 && (
-        <p className="mt-4 text-sm text-slate-400">Nothing at this store is below its reorder point right now.</p>
+        <p className="mt-4 text-sm text-slate-400 dark:text-slate-500">Nothing at this store is below its reorder point right now.</p>
       )}
 
       {storeId &&
         [...groups.values()].map((group) => (
-          <div key={group.supplierId} className="mt-4 rounded-lg border border-slate-200 p-3">
+          <div key={group.supplierId} className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
             <div className="mb-2 flex items-center justify-between">
-              <div className="text-sm font-medium text-slate-700">{group.supplierName}</div>
+              <div className="text-sm font-medium text-slate-700 dark:text-slate-200">{group.supplierName}</div>
               <button
                 onClick={() => openPoForGroup(group)}
                 className="rounded-md bg-brand-500 px-3 py-1 text-xs font-medium text-white hover:bg-brand-600"
@@ -2627,9 +2627,9 @@ function ReorderSuggestionsTab() {
             <div className="space-y-1.5">
               {group.rows.map((r) => (
                 <div key={r.item_variant_id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="min-w-0 truncate text-slate-600">
+                  <span className="min-w-0 truncate text-slate-600 dark:text-slate-300">
                     {r.item_name_en} — {r.variant_code}
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-400 dark:text-slate-500">
                       {" "}
                       (on hand {r.qty_on_hand}, reorder point {r.reorder_point}, {r.unit_cost} {r.currency}/unit
                       {r.moq && Number(r.moq) > 0 ? `, MOQ ${r.moq}` : ""})
@@ -2674,7 +2674,7 @@ export default function Purchasing() {
   const location = useLocation();
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold text-slate-900">{t("nav.purchasing")}</h1>
+      <h1 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{t("nav.purchasing")}</h1>
       <Tabs
         initialActive={(location.state as { fromTab?: string } | null)?.fromTab}
         tabs={[

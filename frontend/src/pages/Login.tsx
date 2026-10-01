@@ -36,26 +36,26 @@ export default function Login() {
           <span className="text-lg font-semibold tracking-tight">{t("app.title")}</span>
         </div>
 
-        <form onSubmit={handleSubmit} className="rounded-xl border border-white/10 bg-white p-8 shadow-2xl">
-          <h1 className="mb-6 text-lg font-semibold text-slate-900">{t("login.title")}</h1>
+        <form onSubmit={handleSubmit} className="rounded-xl border border-white/10 bg-white dark:bg-slate-800 p-8 shadow-2xl">
+          <h1 className="mb-6 text-lg font-semibold text-slate-900 dark:text-slate-100">{t("login.title")}</h1>
 
-          <label className="mb-1 block text-sm font-medium text-slate-700">{t("login.email")}</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">{t("login.email")}</label>
           <input
             type="email"
             required
             autoFocus
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="mb-4 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+            className="mb-4 w-full rounded-md border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
           />
 
-          <label className="mb-1 block text-sm font-medium text-slate-700">{t("login.password")}</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">{t("login.password")}</label>
           <input
             type="password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mb-4 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+            className="mb-4 w-full rounded-md border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
           />
 
           {error && <p className="mb-4 text-sm text-red-600">{error}</p>}

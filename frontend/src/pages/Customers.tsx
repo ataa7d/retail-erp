@@ -121,8 +121,8 @@ function NewCustomerForm({ onClose, onCreated }: { onClose: () => void; onCreate
       </Field>
 
       {isB2b && (
-        <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">B2B / ZATCA Standard-Invoice Terms</p>
+        <div className="mb-3 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">B2B / ZATCA Standard-Invoice Terms</p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="CR Number">
               <TextInput value={crNumber} onChange={(e) => setCrNumber(e.target.value)} />
@@ -285,9 +285,9 @@ function LoyaltyPanel({ customer, onChanged }: { customer: Customer; onChanged: 
   }
 
   return (
-    <div className="mt-4 border-t border-slate-200 pt-4">
-      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Loyalty Program</p>
-      <label className="mb-2 flex items-center gap-2 text-sm text-slate-700">
+    <div className="mt-4 border-t border-slate-200 dark:border-slate-700 pt-4">
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Loyalty Program</p>
+      <label className="mb-2 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
         <input type="checkbox" checked={isLoyaltyMember} onChange={(e) => setIsLoyaltyMember(e.target.checked)} />
         Enrolled in loyalty program
       </label>
@@ -306,20 +306,20 @@ function LoyaltyPanel({ customer, onChanged }: { customer: Customer; onChanged: 
       </button>
 
       {customer.is_loyalty_member && (
-        <div className="rounded-md border border-slate-200 p-2.5">
+        <div className="rounded-md border border-slate-200 dark:border-slate-700 p-2.5">
           <div className="mb-2 flex items-center justify-between text-sm">
-            <span className="text-slate-500">Current Balance</span>
-            <span className="font-semibold text-slate-900">{customer.loyalty_points_balance} points</span>
+            <span className="text-slate-500 dark:text-slate-400">Current Balance</span>
+            <span className="font-semibold text-slate-900 dark:text-slate-100">{customer.loyalty_points_balance} points</span>
           </div>
           {transactions === null ? (
-            <p className="text-xs text-slate-400">Loading history...</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Loading history...</p>
           ) : transactions.length === 0 ? (
-            <p className="text-xs text-slate-400">No point activity yet.</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">No point activity yet.</p>
           ) : (
             <div className="space-y-1">
               {transactions.map((t) => (
                 <div key={t.id} className="flex items-center justify-between text-xs">
-                  <span className="capitalize text-slate-600">
+                  <span className="capitalize text-slate-600 dark:text-slate-300">
                     {t.transaction_type}
                     {t.sales_invoice_number && ` (${t.sales_invoice_number})`}
                   </span>
@@ -347,13 +347,13 @@ export default function Customers() {
   const priceListLabel = (id: string | null) => (id ? priceLists?.find((pl) => pl.id === id)?.name_en ?? "—" : "—");
 
   const columns: Column<Customer>[] = [
-    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.customer_code}</span> },
+    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.customer_code}</span> },
     {
       key: "name",
       header: "Name",
-      render: (r) => <span className="font-medium text-slate-900">{i18n.language.startsWith("ar") ? r.name_ar : r.name_en}</span>,
+      render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{i18n.language.startsWith("ar") ? r.name_ar : r.name_en}</span>,
     },
-    { key: "type", header: "Type", render: (r) => <span className="capitalize text-slate-600">{r.customer_type}</span> },
+    { key: "type", header: "Type", render: (r) => <span className="capitalize text-slate-600 dark:text-slate-300">{r.customer_type}</span> },
     { key: "terms", header: "Payment Terms", render: (r) => `${r.payment_terms_days}d`, numeric: true },
     { key: "credit", header: "Credit Limit", render: (r) => (r.credit_limit ? Number(r.credit_limit).toFixed(2) : "—"), numeric: true },
     { key: "priceList", header: "Price List", render: (r) => priceListLabel(r.default_price_list_id) },

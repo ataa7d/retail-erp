@@ -49,8 +49,8 @@ export default function ListPage<T>({
     <div>
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{title}</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             {subtitle ?? (data ? `${filtered.length} of ${data.length}` : "Loading...")}
           </p>
         </div>
@@ -64,22 +64,22 @@ export default function ListPage<T>({
         )}
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-3">
-          <div className="flex min-w-48 flex-1 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm focus-within:border-brand-400 focus-within:bg-white">
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-3 dark:border-slate-700">
+          <div className="flex min-w-48 flex-1 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm focus-within:border-brand-400 focus-within:bg-white dark:border-slate-600 dark:bg-slate-900 dark:focus-within:bg-slate-900">
             <Search size={15} className="text-slate-400" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={searchPlaceholder}
-              className="w-full bg-transparent focus:outline-none"
+              className="w-full bg-transparent text-slate-900 focus:outline-none dark:text-slate-100"
             />
           </div>
           {toolbarExtra}
         </div>
 
-        {error && <p className="p-6 text-sm text-red-600">{error}</p>}
-        {!error && data === null && <p className="p-6 text-sm text-slate-400">Loading...</p>}
+        {error && <p className="p-6 text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {!error && data === null && <p className="p-6 text-sm text-slate-400 dark:text-slate-500">Loading...</p>}
         {!error && data !== null && (
           <DataTable columns={columns} rows={filtered} getRowKey={getRowKey} emptyIcon={emptyIcon} emptyText={emptyText} onRowClick={onRowClick} />
         )}

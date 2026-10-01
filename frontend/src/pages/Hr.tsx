@@ -215,7 +215,7 @@ function NewPayrollRunForm({ onClose, onCreated }: { onClose: () => void; onCrea
       <Field label="Run Date" required>
         <TextInput type="date" required value={runDate} onChange={(e) => setRunDate(e.target.value)} />
       </Field>
-      <p className="mb-3 text-xs text-slate-400">
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
         Computes gross pay and GOSI for every active employee eligible in this pay period, and posts the GL journal immediately.
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Create & Post Payroll Run" />
@@ -229,11 +229,11 @@ function EmployeesTab() {
   const [showNew, setShowNew] = useState(false);
 
   const columns: Column<Employee>[] = [
-    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.employee_code}</span> },
+    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.employee_code}</span> },
     {
       key: "name",
       header: "Name",
-      render: (r) => <span className="font-medium text-slate-900">{i18n.language.startsWith("ar") ? r.full_name_ar : r.full_name_en}</span>,
+      render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{i18n.language.startsWith("ar") ? r.full_name_ar : r.full_name_en}</span>,
     },
     { key: "hired", header: "Hired", render: (r) => new Date(r.hire_date).toLocaleDateString() },
     { key: "salary", header: "Basic Salary", render: (r) => Number(r.basic_salary).toFixed(2), numeric: true },
@@ -266,18 +266,18 @@ function EmployeesTab() {
 
 function PayslipRow({ line, run, company }: { line: PayrollRunLine; run: PayrollRunDetail; company: CompanyInfo | null }) {
   return (
-    <div className="flex items-center justify-between gap-2 border-t border-slate-100 py-2 text-sm first:border-t-0">
+    <div className="flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 py-2 text-sm first:border-t-0">
       <div className="min-w-0">
-        <div className="truncate font-medium text-slate-900">{line.full_name_en}</div>
-        <div className="text-xs text-slate-400">{line.employee_code}</div>
+        <div className="truncate font-medium text-slate-900 dark:text-slate-100">{line.full_name_en}</div>
+        <div className="text-xs text-slate-400 dark:text-slate-500">{line.employee_code}</div>
       </div>
       <div className="flex items-center gap-3">
-        <span className="tabular-nums text-slate-600">{Number(line.net_pay).toFixed(2)}</span>
+        <span className="tabular-nums text-slate-600 dark:text-slate-300">{Number(line.net_pay).toFixed(2)}</span>
         <button
           onClick={() => window.print()}
           disabled={!company}
           title={company ? "Print payslip" : "Loading company details..."}
-          className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 disabled:opacity-40"
+          className="rounded p-1.5 text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-brand-600 disabled:opacity-40"
         >
           <Printer size={14} />
         </button>
@@ -322,17 +322,17 @@ function PayrollRunDetailModal({ runId, onClose }: { runId: string; onClose: () 
   return (
     <Modal title={run?.document_number ?? "Payroll Run"} onClose={onClose}>
       {!run ? (
-        <p className="text-sm text-slate-400">Loading...</p>
+        <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>
       ) : (
         <div>
           <div className="mb-3 flex items-center justify-between text-sm">
-            <span className="text-slate-500">
+            <span className="text-slate-500 dark:text-slate-400">
               {new Date(run.pay_period_start).toLocaleDateString()} – {new Date(run.pay_period_end).toLocaleDateString()}
             </span>
             <StatusBadge status={run.document_status} />
           </div>
           {run.lines.length === 0 ? (
-            <p className="text-sm text-slate-400">No employees were eligible for this pay period.</p>
+            <p className="text-sm text-slate-400 dark:text-slate-500">No employees were eligible for this pay period.</p>
           ) : (
             <div>
               {run.lines.map((line) => (
@@ -352,7 +352,7 @@ function PayrollRunsTab() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const columns: Column<PayrollRun>[] = [
-    { key: "number", header: "Run #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "number", header: "Run #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
     { key: "period", header: "Pay Period", render: (r) => `${new Date(r.pay_period_start).toLocaleDateString()} – ${new Date(r.pay_period_end).toLocaleDateString()}` },
     { key: "runDate", header: "Run Date", render: (r) => new Date(r.run_date).toLocaleDateString() },
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.document_status} /> },
@@ -388,7 +388,7 @@ export default function Hr() {
   const { t } = useTranslation();
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold text-slate-900">{t("nav.hr")}</h1>
+      <h1 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{t("nav.hr")}</h1>
       <Tabs
         tabs={[
           { key: "employees", label: "Employees", content: <EmployeesTab /> },

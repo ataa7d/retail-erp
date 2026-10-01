@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Tailwind v4 is CSS-first -- there's no config file `darkMode: 'class'`
+   setting to flip. This custom variant is what makes `dark:` utility
+   classes respond to a `dark` class on <html> (toggled by ThemeProvider)
+   instead of the OS-level `prefers-color-scheme` media query. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   /* Enterprise blue, in the neighborhood of SAP Fiori's "Horizon" brand blue */
   --color-brand-50: #eaf3fe;
@@ -32,6 +38,11 @@ body {
   font-family: var(--font-sans);
   background: #f5f6f8;
   -webkit-font-smoothing: antialiased;
+}
+
+.dark body {
+  background: #0b1220;
+  color-scheme: dark;
 }
 
 /* Compact, data-dense tables read better with tabular figures for numbers */

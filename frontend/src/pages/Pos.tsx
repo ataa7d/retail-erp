@@ -198,23 +198,23 @@ function DevicePicker({ onSelected }: { onSelected: (deviceId: string) => void }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 p-6">
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
-        <h1 className="mb-1 text-lg font-semibold text-slate-900">Select This Terminal's Device</h1>
-        <p className="mb-4 text-sm text-slate-500">Choose the registered POS device this terminal will act as. Devices are managed under Administration → POS Devices.</p>
+      <div className="w-full max-w-md rounded-xl bg-white dark:bg-slate-800 p-6 shadow-2xl">
+        <h1 className="mb-1 text-lg font-semibold text-slate-900 dark:text-slate-100">Select This Terminal's Device</h1>
+        <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">Choose the registered POS device this terminal will act as. Devices are managed under Administration → POS Devices.</p>
         {error && <p className="mb-3 text-sm text-red-600">Failed to load devices.</p>}
         {devices && active.length === 0 && (
-          <p className="mb-3 text-sm text-slate-500">No active POS devices registered yet.</p>
+          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">No active POS devices registered yet.</p>
         )}
         <div className="space-y-2">
           {active.map((d) => (
             <button
               key={d.id}
               onClick={() => onSelected(d.id)}
-              className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-start hover:border-brand-400 hover:bg-brand-50"
+              className="flex w-full items-center justify-between rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-3 text-start hover:border-brand-400 hover:bg-brand-50"
             >
               <div>
-                <div className="font-medium text-slate-900">{d.device_name}</div>
-                <div className="text-xs text-slate-500">
+                <div className="font-medium text-slate-900 dark:text-slate-100">{d.device_name}</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">
                   {storeLabel(d.store_id)} · {d.series_prefix}
                 </div>
               </div>
@@ -222,7 +222,7 @@ function DevicePicker({ onSelected }: { onSelected: (deviceId: string) => void }
             </button>
           ))}
         </div>
-        <button onClick={() => navigate("/admin")} className="mt-4 text-xs font-medium text-slate-400 hover:text-slate-600">
+        <button onClick={() => navigate("/admin")} className="mt-4 text-xs font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">
           ← Back to Administration
         </button>
       </div>
@@ -257,13 +257,13 @@ function OpenShiftScreen({ device, onOpened }: { device: PosDevice; onOpened: (s
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 p-6">
-      <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl">
+      <div className="w-full max-w-sm rounded-xl bg-white dark:bg-slate-800 p-6 shadow-2xl">
         <Wallet size={28} className="mb-2 text-brand-500" />
-        <h1 className="mb-1 text-lg font-semibold text-slate-900">Open Cash Shift</h1>
-        <p className="mb-4 text-sm text-slate-500">
+        <h1 className="mb-1 text-lg font-semibold text-slate-900 dark:text-slate-100">Open Cash Shift</h1>
+        <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
           {device.device_name} needs an open shift before it can take sales. Count the float in the drawer and enter it below.
         </p>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Opening Float</label>
+        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Opening Float</label>
         <input
           type="number"
           min="0"
@@ -271,13 +271,13 @@ function OpenShiftScreen({ device, onOpened }: { device: PosDevice; onOpened: (s
           autoFocus
           value={openingFloat}
           onChange={(e) => setOpeningFloat(e.target.value)}
-          className="mb-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          className="mb-3 w-full rounded-md border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
         />
-        <label className="mb-1 block text-xs font-medium text-slate-600">Notes (optional)</label>
+        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Notes (optional)</label>
         <input
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          className="mb-4 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          className="mb-4 w-full rounded-md border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
         />
         {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
         <button
@@ -326,35 +326,35 @@ function CloseShiftModal({ shiftId, onClose, onClosed }: { shiftId: string; onCl
 
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/50 p-4">
-      <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl">
+      <div className="w-full max-w-sm rounded-xl bg-white dark:bg-slate-800 p-5 shadow-2xl">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-900">Close Cash Shift</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Close Cash Shift</h2>
+          <button onClick={onClose} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">
             <X size={18} />
           </button>
         </div>
 
         {!report ? (
-          <p className="text-sm text-slate-400">Loading...</p>
+          <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>
         ) : finalVariance === null ? (
           <>
-            <div className="mb-3 space-y-1 rounded-md border border-slate-200 p-2.5 text-sm">
-              <div className="flex justify-between text-slate-500">
+            <div className="mb-3 space-y-1 rounded-md border border-slate-200 dark:border-slate-700 p-2.5 text-sm">
+              <div className="flex justify-between text-slate-500 dark:text-slate-400">
                 <span>Opening Float</span>
-                <span className="tabular-nums text-slate-900">{Number(report.openingFloat).toFixed(2)}</span>
+                <span className="tabular-nums text-slate-900 dark:text-slate-100">{Number(report.openingFloat).toFixed(2)}</span>
               </div>
               {report.paymentTotals.map((p) => (
-                <div key={p.payment_method} className="flex justify-between text-slate-500">
+                <div key={p.payment_method} className="flex justify-between text-slate-500 dark:text-slate-400">
                   <span className="capitalize">{p.payment_method} sales</span>
-                  <span className="tabular-nums text-slate-900">{Number(p.total).toFixed(2)}</span>
+                  <span className="tabular-nums text-slate-900 dark:text-slate-100">{Number(p.total).toFixed(2)}</span>
                 </div>
               ))}
-              <div className="flex justify-between border-t border-slate-100 pt-1 font-medium text-slate-700">
+              <div className="flex justify-between border-t border-slate-100 dark:border-slate-800 pt-1 font-medium text-slate-700 dark:text-slate-200">
                 <span>Expected Cash</span>
                 <span className="tabular-nums">{report.expectedCash.toFixed(2)}</span>
               </div>
             </div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Counted Cash in Drawer</label>
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Counted Cash in Drawer</label>
             <input
               type="number"
               min="0"
@@ -362,13 +362,13 @@ function CloseShiftModal({ shiftId, onClose, onClosed }: { shiftId: string; onCl
               autoFocus
               value={counted}
               onChange={(e) => setCounted(e.target.value)}
-              className="mb-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+              className="mb-3 w-full rounded-md border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
             />
-            <label className="mb-1 block text-xs font-medium text-slate-600">Notes (optional)</label>
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Notes (optional)</label>
             <input
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="mb-4 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+              className="mb-4 w-full rounded-md border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
             />
             {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
             <button
@@ -381,8 +381,8 @@ function CloseShiftModal({ shiftId, onClose, onClosed }: { shiftId: string; onCl
           </>
         ) : (
           <>
-            <p className="mb-2 text-sm text-slate-600">Shift closed. Expected {report.expectedCash.toFixed(2)}, counted {Number(counted).toFixed(2)}.</p>
-            <p className={`mb-4 text-base font-semibold ${finalVariance === 0 ? "text-slate-700" : finalVariance < 0 ? "text-red-600" : "text-green-600"}`}>
+            <p className="mb-2 text-sm text-slate-600 dark:text-slate-300">Shift closed. Expected {report.expectedCash.toFixed(2)}, counted {Number(counted).toFixed(2)}.</p>
+            <p className={`mb-4 text-base font-semibold ${finalVariance === 0 ? "text-slate-700 dark:text-slate-200" : finalVariance < 0 ? "text-red-600" : "text-green-600"}`}>
               Variance: {finalVariance > 0 ? "+" : ""}
               {finalVariance.toFixed(2)}
             </p>
@@ -789,7 +789,7 @@ export default function Pos() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-slate-100">
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-100 dark:bg-slate-700">
       <header className="flex h-14 shrink-0 items-center gap-4 bg-slate-900 px-4 text-white">
         <div className="font-semibold">{device.device_name}</div>
         <div className="text-xs text-white/60">{device.series_prefix}</div>
@@ -799,7 +799,7 @@ export default function Pos() {
         </div>
         <button
           onClick={() => setShowCloseShift(true)}
-          className="flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white/20"
+          className="flex items-center gap-1 rounded-full bg-white dark:bg-slate-800/10 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white dark:bg-slate-800/20"
         >
           <Wallet size={12} /> Close Shift
         </button>
@@ -815,7 +815,7 @@ export default function Pos() {
         {held.length > 0 && (
           <button
             onClick={() => setShowHeld(true)}
-            className="flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white/20"
+            className="flex items-center gap-1 rounded-full bg-white dark:bg-slate-800/10 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white dark:bg-slate-800/20"
           >
             <PauseCircle size={12} /> {held.length} held
           </button>
@@ -843,8 +843,8 @@ export default function Pos() {
         {/* Product grid */}
         <div className="flex min-w-0 flex-1 flex-col p-4">
           <div className="mb-3 flex items-center gap-2">
-            <div className="flex flex-1 items-center rounded-lg border border-slate-300 bg-white px-3 py-2">
-              <Search size={16} className="me-2 text-slate-400" />
+            <div className="flex flex-1 items-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2">
+              <Search size={16} className="me-2 text-slate-400 dark:text-slate-500" />
               <input
                 autoFocus
                 value={search}
@@ -856,7 +856,7 @@ export default function Pos() {
             </div>
             <div
               title="Price list is set per till in Administration > POS Devices, not chosen at the register"
-              className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500"
+              className="shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-500 dark:text-slate-400"
             >
               {priceLists?.find((pl) => pl.id === effectivePriceListId)?.name_en ?? "No price list"}
             </div>
@@ -866,14 +866,14 @@ export default function Pos() {
               <button
                 key={g.variantId}
                 onClick={() => addToCart(g)}
-                className="flex flex-col items-start justify-between rounded-lg border border-slate-200 bg-white p-3 text-start shadow-sm hover:border-brand-400 hover:shadow-md"
+                className="flex flex-col items-start justify-between rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-start shadow-sm hover:border-brand-400 hover:shadow-md"
               >
-                <span className="text-sm font-medium text-slate-900">{g.label}</span>
+                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{g.label}</span>
                 <span className="mt-2 text-sm font-semibold text-brand-600">{g.price.toFixed(2)}</span>
               </button>
             ))}
             {items && filteredGrid.length === 0 && (
-              <div className="col-span-full flex flex-col items-center gap-2 p-12 text-slate-400">
+              <div className="col-span-full flex flex-col items-center gap-2 p-12 text-slate-400 dark:text-slate-500">
                 <ShoppingCart size={28} strokeWidth={1.5} />
                 <p className="text-sm">No matching items.</p>
               </div>
@@ -882,12 +882,12 @@ export default function Pos() {
         </div>
 
         {/* Cart / checkout panel */}
-        <div className="flex w-96 shrink-0 flex-col border-s border-slate-200 bg-white">
-          <div className="border-b border-slate-200 p-3">
+        <div className="flex w-96 shrink-0 flex-col border-s border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+          <div className="border-b border-slate-200 dark:border-slate-700 p-3">
             <select
               value={customerId}
               onChange={(e) => setCustomerId(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className="w-full rounded-md border border-slate-300 dark:border-slate-600 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
             >
               <option value="">Walk-in Customer</option>
               {customers?.map((c) => (
@@ -907,9 +907,9 @@ export default function Pos() {
             ) : (
               <div className="space-y-2">
                 {cart.map((l) => (
-                  <div key={l.itemVariantId} className="rounded-md border border-slate-100 p-2.5">
+                  <div key={l.itemVariantId} className="rounded-md border border-slate-100 dark:border-slate-800 p-2.5">
                     <div className="mb-1.5 flex items-start justify-between gap-2">
-                      <span className="text-sm font-medium text-slate-900">{l.label}</span>
+                      <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{l.label}</span>
                       <button onClick={() => removeLine(l.itemVariantId)} className="shrink-0 text-slate-300 hover:text-red-500">
                         <Trash2 size={14} />
                       </button>
@@ -918,14 +918,14 @@ export default function Pos() {
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => updateQty(l.itemVariantId, l.qty - 1)}
-                          className="flex h-6 w-6 items-center justify-center rounded border border-slate-300 text-slate-600 hover:bg-slate-50"
+                          className="flex h-6 w-6 items-center justify-center rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
                         >
                           <Minus size={12} />
                         </button>
                         <span className="w-6 text-center text-sm tabular-nums">{l.qty}</span>
                         <button
                           onClick={() => updateQty(l.itemVariantId, l.qty + 1)}
-                          className="flex h-6 w-6 items-center justify-center rounded border border-slate-300 text-slate-600 hover:bg-slate-50"
+                          className="flex h-6 w-6 items-center justify-center rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
                         >
                           <Plus size={12} />
                         </button>
@@ -936,9 +936,9 @@ export default function Pos() {
                         step="0.01"
                         value={l.unitPrice}
                         onChange={(e) => updatePrice(l.itemVariantId, Number(e.target.value))}
-                        className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-end text-xs tabular-nums focus:border-brand-500 focus:outline-none"
+                        className="w-16 rounded border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 text-end text-xs tabular-nums focus:border-brand-500 focus:outline-none"
                       />
-                      <span className="w-16 text-end text-sm font-medium tabular-nums text-slate-900">{(l.qty * l.unitPrice).toFixed(2)}</span>
+                      <span className="w-16 text-end text-sm font-medium tabular-nums text-slate-900 dark:text-slate-100">{(l.qty * l.unitPrice).toFixed(2)}</span>
                     </div>
                   </div>
                 ))}
@@ -946,17 +946,17 @@ export default function Pos() {
             )}
           </div>
 
-          <div className="border-t border-slate-200 p-3">
+          <div className="border-t border-slate-200 dark:border-slate-700 p-3">
             <div className="mb-2 space-y-1 text-sm">
-              <div className="flex justify-between text-slate-500">
+              <div className="flex justify-between text-slate-500 dark:text-slate-400">
                 <span>Net</span>
                 <span className="tabular-nums">{net.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-slate-500">
+              <div className="flex justify-between text-slate-500 dark:text-slate-400">
                 <span>VAT ({VAT_RATE}%)</span>
                 <span className="tabular-nums">{vat.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-base font-semibold text-slate-900">
+              <div className="flex justify-between text-base font-semibold text-slate-900 dark:text-slate-100">
                 <span>Total</span>
                 <span className="tabular-nums">{total.toFixed(2)}</span>
               </div>
@@ -966,7 +966,7 @@ export default function Pos() {
               <button
                 onClick={() => setPaymentMethod("cash")}
                 className={`rounded-md border px-2 py-1.5 text-sm font-medium ${
-                  paymentMethod === "cash" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600"
+                  paymentMethod === "cash" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
                 }`}
               >
                 Cash
@@ -974,7 +974,7 @@ export default function Pos() {
               <button
                 onClick={() => setPaymentMethod("card")}
                 className={`rounded-md border px-2 py-1.5 text-sm font-medium ${
-                  paymentMethod === "card" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600"
+                  paymentMethod === "card" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
                 }`}
               >
                 Card
@@ -984,7 +984,7 @@ export default function Pos() {
                 disabled={!online}
                 title={online ? undefined : "Gift cards need a live connection to redeem"}
                 className={`rounded-md border px-2 py-1.5 text-sm font-medium disabled:opacity-40 ${
-                  paymentMethod === "gift_card" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600"
+                  paymentMethod === "gift_card" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
                 }`}
               >
                 Gift Card
@@ -994,7 +994,7 @@ export default function Pos() {
                 disabled={!online}
                 title={online ? undefined : "Points need a live connection to redeem"}
                 className={`rounded-md border px-2 py-1.5 text-sm font-medium disabled:opacity-40 ${
-                  paymentMethod === "points" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600"
+                  paymentMethod === "points" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
                 }`}
               >
                 Points
@@ -1004,7 +1004,7 @@ export default function Pos() {
                 disabled={!online}
                 title={online ? undefined : "Deposits need a live connection to apply"}
                 className={`rounded-md border px-2 py-1.5 text-sm font-medium disabled:opacity-40 ${
-                  paymentMethod === "deposit" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600"
+                  paymentMethod === "deposit" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
                 }`}
               >
                 Deposit
@@ -1020,9 +1020,9 @@ export default function Pos() {
                   value={tendered}
                   onChange={(e) => setTendered(e.target.value)}
                   placeholder="Amount tendered"
-                  className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+                  className="w-full rounded-md border border-slate-300 dark:border-slate-600 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
                 />
-                {Number(tendered || 0) > 0 && <p className="mt-1 text-xs text-slate-500">Change due: {change.toFixed(2)}</p>}
+                {Number(tendered || 0) > 0 && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Change due: {change.toFixed(2)}</p>}
               </div>
             )}
 
@@ -1037,12 +1037,12 @@ export default function Pos() {
                       setGiftCardError(null);
                     }}
                     placeholder="Gift card number"
-                    className="min-w-0 flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+                    className="min-w-0 flex-1 rounded-md border border-slate-300 dark:border-slate-600 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
                   />
                   <button
                     onClick={checkGiftCard}
                     disabled={!giftCardNumber.trim() || checkingGiftCard}
-                    className="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    className="shrink-0 rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
                   >
                     {checkingGiftCard ? "..." : "Check"}
                   </button>
@@ -1084,12 +1084,12 @@ export default function Pos() {
                           setDepositError(null);
                         }}
                         placeholder="Deposit number"
-                        className="min-w-0 flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+                        className="min-w-0 flex-1 rounded-md border border-slate-300 dark:border-slate-600 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
                       />
                       <button
                         onClick={checkDeposit}
                         disabled={!depositNumber.trim() || checkingDeposit}
-                        className="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        className="shrink-0 rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
                       >
                         {checkingDeposit ? "..." : "Check"}
                       </button>
@@ -1124,7 +1124,7 @@ export default function Pos() {
             <button
               onClick={holdSale}
               disabled={cart.length === 0}
-              className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40"
             >
               <PauseCircle size={13} /> Hold Sale
             </button>
@@ -1134,10 +1134,10 @@ export default function Pos() {
 
       {receipt && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl">
+          <div className="w-full max-w-sm rounded-xl bg-white dark:bg-slate-800 p-5 shadow-2xl">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-900">Receipt</h2>
-              <button onClick={() => setReceipt(null)} className="text-slate-400 hover:text-slate-600">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Receipt</h2>
+              <button onClick={() => setReceipt(null)} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">
                 <X size={18} />
               </button>
             </div>
@@ -1146,23 +1146,23 @@ export default function Pos() {
                 Saved offline — will sync automatically once this terminal is back online.
               </p>
             )}
-            <p className="mb-2 font-mono text-xs text-slate-500">{receipt.documentNumber}</p>
-            <div className="mb-3 space-y-1 border-y border-dashed border-slate-200 py-2 text-sm">
+            <p className="mb-2 font-mono text-xs text-slate-500 dark:text-slate-400">{receipt.documentNumber}</p>
+            <div className="mb-3 space-y-1 border-y border-dashed border-slate-200 dark:border-slate-700 py-2 text-sm">
               {receipt.lines.map((l) => (
                 <div key={l.itemVariantId} className="flex justify-between">
-                  <span className="text-slate-600">
+                  <span className="text-slate-600 dark:text-slate-300">
                     {l.label} × {l.qty}
                   </span>
                   <span className="tabular-nums">{(l.qty * l.unitPrice).toFixed(2)}</span>
                 </div>
               ))}
             </div>
-            <div className="mb-4 flex justify-between text-base font-semibold text-slate-900">
+            <div className="mb-4 flex justify-between text-base font-semibold text-slate-900 dark:text-slate-100">
               <span>Total</span>
               <span className="tabular-nums">{receipt.total.toFixed(2)}</span>
             </div>
             {receipt.change > 0 && (
-              <div className="mb-4 flex justify-between text-sm text-slate-500">
+              <div className="mb-4 flex justify-between text-sm text-slate-500 dark:text-slate-400">
                 <span>Change</span>
                 <span className="tabular-nums">{receipt.change.toFixed(2)}</span>
               </div>
@@ -1170,12 +1170,12 @@ export default function Pos() {
             {receipt.zatcaQr && (
               <div className="mb-4 flex flex-col items-center gap-1">
                 <img src={receipt.zatcaQr} alt="ZATCA QR code" width={120} height={120} />
-                <p className="text-center text-xs text-slate-400">ZATCA simplified tax invoice QR</p>
+                <p className="text-center text-xs text-slate-400 dark:text-slate-500">ZATCA simplified tax invoice QR</p>
               </div>
             )}
             <button
               onClick={() => window.print()}
-              className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
             >
               <Printer size={14} /> Print Receipt
             </button>
@@ -1219,10 +1219,10 @@ export default function Pos() {
 
       {showHeld && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl">
+          <div className="w-full max-w-sm rounded-xl bg-white dark:bg-slate-800 p-5 shadow-2xl">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-900">Held Sales</h2>
-              <button onClick={() => setShowHeld(false)} className="text-slate-400 hover:text-slate-600">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Held Sales</h2>
+              <button onClick={() => setShowHeld(false)} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">
                 <X size={18} />
               </button>
             </div>
@@ -1232,14 +1232,14 @@ export default function Pos() {
               </p>
             )}
             <div className="max-h-80 space-y-2 overflow-y-auto">
-              {held.length === 0 && <p className="text-sm text-slate-400">No held sales.</p>}
+              {held.length === 0 && <p className="text-sm text-slate-400 dark:text-slate-500">No held sales.</p>}
               {held.map((h) => (
-                <div key={h.id} className="rounded-md border border-slate-200 p-2.5">
+                <div key={h.id} className="rounded-md border border-slate-200 dark:border-slate-700 p-2.5">
                   <div className="mb-1 flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-900">{h.customerLabel}</span>
-                    <span className="text-xs text-slate-400">{new Date(h.heldAt).toLocaleTimeString()}</span>
+                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{h.customerLabel}</span>
+                    <span className="text-xs text-slate-400 dark:text-slate-500">{new Date(h.heldAt).toLocaleTimeString()}</span>
                   </div>
-                  <div className="mb-2 text-xs text-slate-500">
+                  <div className="mb-2 text-xs text-slate-500 dark:text-slate-400">
                     {h.cart.length} item{h.cart.length === 1 ? "" : "s"} · {h.cart.reduce((s, l) => s + l.qty * l.unitPrice, 0).toFixed(2)}
                   </div>
                   <div className="flex gap-1.5">

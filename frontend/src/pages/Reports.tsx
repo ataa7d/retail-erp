@@ -46,7 +46,7 @@ function TrialBalanceTab() {
   const totalCredit = rows?.reduce((s, r) => s + Number(r.credit_balance ?? 0), 0) ?? 0;
 
   const columns: Column<ReportRow>[] = [
-    { key: "code", header: "Account", render: (r) => <span className="font-mono text-xs text-slate-500">{r.account_code}</span> },
+    { key: "code", header: "Account", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.account_code}</span> },
     { key: "name", header: "Name", render: (r) => (i18n.language.startsWith("ar") ? r.name_ar : r.name_en) },
     { key: "debit", header: "Debit", render: (r) => Number(r.debit_balance ?? 0).toFixed(2), numeric: true },
     { key: "credit", header: "Credit", render: (r) => Number(r.credit_balance ?? 0).toFixed(2), numeric: true },
@@ -55,17 +55,17 @@ function TrialBalanceTab() {
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
-        <label className="text-sm text-slate-600">As of</label>
-        <input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm" />
+        <label className="text-sm text-slate-600 dark:text-slate-300">As of</label>
+        <input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-sm" />
       </div>
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
         {rows === null ? (
-          <p className="p-6 text-sm text-slate-400">Loading...</p>
+          <p className="p-6 text-sm text-slate-400 dark:text-slate-500">Loading...</p>
         ) : (
           <>
             <DataTable columns={columns} rows={rows} getRowKey={(r) => r.account_code} emptyIcon={BarChart3} emptyText="No posted activity yet." />
             {rows.length > 0 && (
-              <div className="flex justify-end gap-8 border-t border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
+              <div className="flex justify-end gap-8 border-t border-slate-100 dark:border-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
                 <span>Total Debit: {totalDebit.toFixed(2)}</span>
                 <span>Total Credit: {totalCredit.toFixed(2)}</span>
                 {Math.abs(totalDebit - totalCredit) < 0.01 && <span className="text-green-600">Balanced ✓</span>}
@@ -98,7 +98,7 @@ function IncomeStatementTab() {
   const expense = rows?.filter((r) => r.account_type === "expense").reduce((s, r) => s + Number(r.amount ?? 0), 0) ?? 0;
 
   const columns: Column<ReportRow>[] = [
-    { key: "code", header: "Account", render: (r) => <span className="font-mono text-xs text-slate-500">{r.account_code}</span> },
+    { key: "code", header: "Account", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.account_code}</span> },
     { key: "name", header: "Name", render: (r) => (i18n.language.startsWith("ar") ? r.name_ar : r.name_en) },
     { key: "type", header: "Type", render: (r) => <span className="capitalize">{r.account_type}</span> },
     { key: "amount", header: "Amount", render: (r) => Number(r.amount ?? 0).toFixed(2), numeric: true },
@@ -107,19 +107,19 @@ function IncomeStatementTab() {
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
-        <label className="text-sm text-slate-600">From</label>
-        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm" />
-        <label className="text-sm text-slate-600">To</label>
-        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm" />
+        <label className="text-sm text-slate-600 dark:text-slate-300">From</label>
+        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-sm" />
+        <label className="text-sm text-slate-600 dark:text-slate-300">To</label>
+        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-sm" />
       </div>
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
         {rows === null ? (
-          <p className="p-6 text-sm text-slate-400">Loading...</p>
+          <p className="p-6 text-sm text-slate-400 dark:text-slate-500">Loading...</p>
         ) : (
           <>
             <DataTable columns={columns} rows={rows} getRowKey={(r) => r.account_code} emptyIcon={BarChart3} emptyText="No activity in this period." />
             {rows.length > 0 && (
-              <div className="flex justify-end gap-8 border-t border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
+              <div className="flex justify-end gap-8 border-t border-slate-100 dark:border-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
                 <span>Revenue: {revenue.toFixed(2)}</span>
                 <span>Expenses: {expense.toFixed(2)}</span>
                 <span className={revenue - expense >= 0 ? "text-green-600" : "text-red-600"}>Net Income: {(revenue - expense).toFixed(2)}</span>
@@ -151,7 +151,7 @@ function BalanceSheetTab() {
   const equity = rows?.filter((r) => r.account_type === "equity").reduce((s, r) => s + Number(r.balance ?? 0), 0) ?? 0;
 
   const columns: Column<ReportRow>[] = [
-    { key: "code", header: "Account", render: (r) => <span className="font-mono text-xs text-slate-500">{r.account_code}</span> },
+    { key: "code", header: "Account", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.account_code}</span> },
     { key: "name", header: "Name", render: (r) => (i18n.language.startsWith("ar") ? r.name_ar : r.name_en) },
     { key: "type", header: "Type", render: (r) => <span className="capitalize">{r.account_type}</span> },
     { key: "balance", header: "Balance", render: (r) => Number(r.balance ?? 0).toFixed(2), numeric: true },
@@ -160,17 +160,17 @@ function BalanceSheetTab() {
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
-        <label className="text-sm text-slate-600">As of</label>
-        <input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm" />
+        <label className="text-sm text-slate-600 dark:text-slate-300">As of</label>
+        <input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-sm" />
       </div>
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
         {rows === null ? (
-          <p className="p-6 text-sm text-slate-400">Loading...</p>
+          <p className="p-6 text-sm text-slate-400 dark:text-slate-500">Loading...</p>
         ) : (
           <>
             <DataTable columns={columns} rows={rows} getRowKey={(r) => r.account_code} emptyIcon={BarChart3} emptyText="No posted activity yet." />
             {rows.length > 0 && (
-              <div className="flex justify-end gap-8 border-t border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
+              <div className="flex justify-end gap-8 border-t border-slate-100 dark:border-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
                 <span>Assets: {assets.toFixed(2)}</span>
                 <span>Liabilities + Equity: {(liabilities + equity).toFixed(2)}</span>
                 {Math.abs(assets - (liabilities + equity)) < 0.01 && <span className="text-green-600">Balanced ✓</span>}
@@ -233,21 +233,21 @@ function CustomerStatementTab() {
   const columns: Column<StatementRow>[] = [
     { key: "date", header: "Date", render: (r) => new Date(r.txn_date).toLocaleDateString() },
     { key: "type", header: "Type", render: (r) => DOCUMENT_TYPE_LABEL[r.document_type] },
-    { key: "number", header: "Document #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
-    { key: "description", header: "Description", render: (r) => <span className="text-slate-600">{r.description}</span> },
+    { key: "number", header: "Document #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
+    { key: "description", header: "Description", render: (r) => <span className="text-slate-600 dark:text-slate-300">{r.description}</span> },
     { key: "debit", header: "Debit", render: (r) => (Number(r.debit) ? Number(r.debit).toFixed(2) : "—"), numeric: true },
     { key: "credit", header: "Credit", render: (r) => (Number(r.credit) ? Number(r.credit).toFixed(2) : "—"), numeric: true },
-    { key: "balance", header: "Balance", render: (r) => <span className="font-medium text-slate-900">{Number(r.running_balance).toFixed(2)}</span>, numeric: true },
+    { key: "balance", header: "Balance", render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{Number(r.running_balance).toFixed(2)}</span>, numeric: true },
   ];
 
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <label className="text-sm text-slate-600">Customer</label>
+        <label className="text-sm text-slate-600 dark:text-slate-300">Customer</label>
         <select
           value={customerId}
           onChange={(e) => setCustomerId(e.target.value)}
-          className="min-w-56 rounded-md border border-slate-200 px-2 py-1 text-sm"
+          className="min-w-56 rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-sm"
         >
           <option value="">Select a customer...</option>
           {customers?.map((c) => (
@@ -256,23 +256,23 @@ function CustomerStatementTab() {
             </option>
           ))}
         </select>
-        <label className="text-sm text-slate-600">From</label>
-        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm" />
-        <label className="text-sm text-slate-600">To</label>
-        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm" />
+        <label className="text-sm text-slate-600 dark:text-slate-300">From</label>
+        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-sm" />
+        <label className="text-sm text-slate-600 dark:text-slate-300">To</label>
+        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-sm" />
       </div>
 
-      {!customerId && <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-400">Select a customer to view their statement.</p>}
+      {!customerId && <p className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 text-sm text-slate-400 dark:text-slate-500">Select a customer to view their statement.</p>}
 
       {customerId && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
           {statement === null ? (
-            <p className="p-6 text-sm text-slate-400">Loading...</p>
+            <p className="p-6 text-sm text-slate-400 dark:text-slate-500">Loading...</p>
           ) : (
             <>
-              <div className="flex justify-between border-b border-slate-100 px-4 py-2.5 text-sm">
-                <span className="text-slate-500">Opening Balance</span>
-                <span className="font-medium text-slate-900">{Number(statement.openingBalance).toFixed(2)}</span>
+              <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 px-4 py-2.5 text-sm">
+                <span className="text-slate-500 dark:text-slate-400">Opening Balance</span>
+                <span className="font-medium text-slate-900 dark:text-slate-100">{Number(statement.openingBalance).toFixed(2)}</span>
               </div>
               <DataTable
                 columns={columns}
@@ -281,7 +281,7 @@ function CustomerStatementTab() {
                 emptyIcon={Receipt}
                 emptyText="No AR activity for this customer in this period."
               />
-              <div className="flex justify-between border-t border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
+              <div className="flex justify-between border-t border-slate-100 dark:border-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
                 <span>Closing Balance</span>
                 <span>{Number(statement.closingBalance).toFixed(2)}</span>
               </div>
@@ -368,45 +368,45 @@ function CashShiftDetailModal({ shiftId, onClose }: { shiftId: string; onClose: 
     apiRequest<ZReport>(`/api/cash-shifts/${shiftId}/z-report`, { token, companyId }).then(setZReport);
   }, [shiftId, token, companyId]);
 
-  if (!shift || !zReport) return <p className="text-sm text-slate-400">Loading...</p>;
+  if (!shift || !zReport) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <div className="text-sm font-medium text-slate-900">
-            {shift.device_name} <span className="font-mono text-xs text-slate-400">({shift.device_code})</span>
+          <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
+            {shift.device_name} <span className="font-mono text-xs text-slate-400 dark:text-slate-500">({shift.device_code})</span>
           </div>
-          <div className="text-xs text-slate-500">
+          <div className="text-xs text-slate-500 dark:text-slate-400">
             {shift.store_name_en} · opened by {shift.opened_by_email ?? "—"} at {new Date(shift.opened_at).toLocaleString()}
           </div>
         </div>
         <StatusBadge status={shift.status} />
       </div>
 
-      <div className="mb-3 space-y-1 rounded-md border border-slate-200 p-2 text-sm">
-        <div className="flex justify-between text-slate-500">
+      <div className="mb-3 space-y-1 rounded-md border border-slate-200 dark:border-slate-700 p-2 text-sm">
+        <div className="flex justify-between text-slate-500 dark:text-slate-400">
           <span>Opening Float</span>
-          <span className="tabular-nums text-slate-900">{Number(zReport.openingFloat).toFixed(2)}</span>
+          <span className="tabular-nums text-slate-900 dark:text-slate-100">{Number(zReport.openingFloat).toFixed(2)}</span>
         </div>
         {zReport.paymentTotals.map((p) => (
-          <div key={p.payment_method} className="flex justify-between text-slate-500">
+          <div key={p.payment_method} className="flex justify-between text-slate-500 dark:text-slate-400">
             <span className="capitalize">{p.payment_method} sales ({p.invoice_count})</span>
-            <span className="tabular-nums text-slate-900">{Number(p.total).toFixed(2)}</span>
+            <span className="tabular-nums text-slate-900 dark:text-slate-100">{Number(p.total).toFixed(2)}</span>
           </div>
         ))}
-        {zReport.paymentTotals.length === 0 && <p className="text-xs text-slate-400">No posted sales in this shift yet.</p>}
-        <div className="flex justify-between border-t border-slate-100 pt-1 font-medium text-slate-700">
+        {zReport.paymentTotals.length === 0 && <p className="text-xs text-slate-400 dark:text-slate-500">No posted sales in this shift yet.</p>}
+        <div className="flex justify-between border-t border-slate-100 dark:border-slate-800 pt-1 font-medium text-slate-700 dark:text-slate-200">
           <span>Expected Cash in Drawer</span>
           <span className="tabular-nums">{zReport.expectedCash.toFixed(2)}</span>
         </div>
         {zReport.closingFloatCounted !== null && (
           <>
-            <div className="flex justify-between text-slate-500">
+            <div className="flex justify-between text-slate-500 dark:text-slate-400">
               <span>Counted Cash</span>
-              <span className="tabular-nums text-slate-900">{Number(zReport.closingFloatCounted).toFixed(2)}</span>
+              <span className="tabular-nums text-slate-900 dark:text-slate-100">{Number(zReport.closingFloatCounted).toFixed(2)}</span>
             </div>
-            <div className={`flex justify-between font-semibold ${zReport.variance === 0 ? "text-slate-700" : Number(zReport.variance) < 0 ? "text-red-600" : "text-green-600"}`}>
+            <div className={`flex justify-between font-semibold ${zReport.variance === 0 ? "text-slate-700 dark:text-slate-200" : Number(zReport.variance) < 0 ? "text-red-600" : "text-green-600"}`}>
               <span>Variance</span>
               <span className="tabular-nums">{zReport.variance! > 0 ? "+" : ""}{zReport.variance!.toFixed(2)}</span>
             </div>
@@ -414,7 +414,7 @@ function CashShiftDetailModal({ shiftId, onClose }: { shiftId: string; onClose: 
         )}
       </div>
 
-      <div className="text-xs text-slate-400">
+      <div className="text-xs text-slate-400 dark:text-slate-500">
         {zReport.invoiceCount} posted invoice{zReport.invoiceCount === 1 ? "" : "s"}, gross sales {zReport.grossSalesTotal.toFixed(2)}.
         {shift.closed_at && ` Closed by ${shift.closed_by_email ?? "—"} at ${new Date(shift.closed_at).toLocaleString()}.`}
       </div>
@@ -443,7 +443,7 @@ function CashShiftsTab() {
 
   return (
     <>
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
         <DataTable
           columns={columns}
           rows={data ?? []}
@@ -481,20 +481,20 @@ function StockValuationTab() {
 
   const columns: Column<StockValuationRow>[] = [
     { key: "store", header: "Store", render: (r) => r.store_name_en },
-    { key: "item_code", header: "Item Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.item_code}</span> },
+    { key: "item_code", header: "Item Code", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.item_code}</span> },
     { key: "name", header: "Name", render: (r) => r.item_name_en },
     { key: "variant", header: "Variant", render: (r) => [r.color, r.size].filter(Boolean).join(" / ") || "—" },
     { key: "group", header: "Group", render: (r) => r.group_name_en ?? "—" },
     { key: "qty", header: "Qty on Hand", render: (r) => Number(r.qty_on_hand).toLocaleString(), numeric: true },
     { key: "cost", header: "Avg Cost", render: (r) => Number(r.avg_unit_cost).toFixed(2), numeric: true },
-    { key: "value", header: "Total Value", render: (r) => <span className="font-medium text-slate-900">{Number(r.total_value).toFixed(2)}</span>, numeric: true },
+    { key: "value", header: "Total Value", render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{Number(r.total_value).toFixed(2)}</span>, numeric: true },
   ];
 
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <label className="text-sm text-slate-600">Store</label>
-        <select value={storeId} onChange={(e) => setStoreId(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm">
+        <label className="text-sm text-slate-600 dark:text-slate-300">Store</label>
+        <select value={storeId} onChange={(e) => setStoreId(e.target.value)} className="rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-sm">
           <option value="">All Stores</option>
           {stores?.map((s) => (
             <option key={s.id} value={s.id}>
@@ -502,8 +502,8 @@ function StockValuationTab() {
             </option>
           ))}
         </select>
-        <label className="text-sm text-slate-600">Group</label>
-        <select value={groupId} onChange={(e) => setGroupId(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm">
+        <label className="text-sm text-slate-600 dark:text-slate-300">Group</label>
+        <select value={groupId} onChange={(e) => setGroupId(e.target.value)} className="rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-sm">
           <option value="">All Groups</option>
           {groups?.map((g) => (
             <option key={g.id} value={g.id}>
@@ -512,9 +512,9 @@ function StockValuationTab() {
           ))}
         </select>
       </div>
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
         {data === null ? (
-          <p className="p-6 text-sm text-slate-400">Loading...</p>
+          <p className="p-6 text-sm text-slate-400 dark:text-slate-500">Loading...</p>
         ) : (
           <>
             <DataTable
@@ -525,7 +525,7 @@ function StockValuationTab() {
               emptyText="No stock on hand matches these filters."
             />
             {data.rows.length > 0 && (
-              <div className="flex justify-end border-t border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
+              <div className="flex justify-end border-t border-slate-100 dark:border-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
                 <span>Total Inventory Value: {Number(data.totalValue).toFixed(2)}</span>
               </div>
             )}
@@ -580,7 +580,7 @@ function BudgetVsActualTab() {
   const totalActual = rows?.reduce((s, r) => s + Number(r.actual_amount), 0) ?? 0;
 
   const columns: Column<BudgetVsActualRow>[] = [
-    { key: "code", header: "Account", render: (r) => <span className="font-mono text-xs text-slate-500">{r.account_code}</span> },
+    { key: "code", header: "Account", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.account_code}</span> },
     { key: "name", header: "Name", render: (r) => (i18n.language.startsWith("ar") ? r.name_ar : r.name_en) },
     { key: "type", header: "Type", render: (r) => <span className="capitalize">{r.account_type}</span> },
     { key: "budget", header: "Budget", render: (r) => Number(r.budget_amount).toFixed(2), numeric: true },
@@ -604,8 +604,8 @@ function BudgetVsActualTab() {
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <label className="text-sm text-slate-600">Budget</label>
-        <select value={budgetId} onChange={(e) => setBudgetId(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm">
+        <label className="text-sm text-slate-600 dark:text-slate-300">Budget</label>
+        <select value={budgetId} onChange={(e) => setBudgetId(e.target.value)} className="rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-sm">
           {budgets?.length === 0 && <option value="">No budgets yet</option>}
           {budgets?.map((b) => (
             <option key={b.id} value={b.id}>
@@ -613,22 +613,22 @@ function BudgetVsActualTab() {
             </option>
           ))}
         </select>
-        <label className="text-sm text-slate-600">From</label>
-        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm" />
-        <label className="text-sm text-slate-600">To</label>
-        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm" />
+        <label className="text-sm text-slate-600 dark:text-slate-300">From</label>
+        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-sm" />
+        <label className="text-sm text-slate-600 dark:text-slate-300">To</label>
+        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-sm" />
       </div>
       {budgets?.length === 0 && (
-        <p className="mb-3 text-sm text-slate-400">No budgets exist yet — create one under Accounting → Budgets.</p>
+        <p className="mb-3 text-sm text-slate-400 dark:text-slate-500">No budgets exist yet — create one under Accounting → Budgets.</p>
       )}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
         {rows === null ? (
-          <p className="p-6 text-sm text-slate-400">{budgetId ? "Loading..." : ""}</p>
+          <p className="p-6 text-sm text-slate-400 dark:text-slate-500">{budgetId ? "Loading..." : ""}</p>
         ) : (
           <>
             <DataTable columns={columns} rows={rows} getRowKey={(r) => r.account_code} emptyIcon={Wallet} emptyText="No budget or actual activity in this range." />
             {rows.length > 0 && (
-              <div className="flex justify-end gap-8 border-t border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
+              <div className="flex justify-end gap-8 border-t border-slate-100 dark:border-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
                 <span>Total Budget: {totalBudget.toFixed(2)}</span>
                 <span>Total Actual: {totalActual.toFixed(2)}</span>
               </div>
@@ -673,11 +673,11 @@ function VatSummaryTab() {
 
   function Section({ title, sectionRows }: { title: string; sectionRows: VatSummaryRow[] }) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">{title}</div>
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
+        <div className="border-b border-slate-100 dark:border-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</div>
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-start text-xs text-slate-500">
+            <tr className="text-start text-xs text-slate-500 dark:text-slate-400">
               <th className="px-4 py-2 text-start font-medium">VAT Rate</th>
               <th className="px-4 py-2 text-end font-medium">Net Amount</th>
               <th className="px-4 py-2 text-end font-medium">VAT Amount</th>
@@ -686,13 +686,13 @@ function VatSummaryTab() {
           <tbody>
             {sectionRows.length === 0 && (
               <tr>
-                <td colSpan={3} className="px-4 py-4 text-center text-sm text-slate-400">
+                <td colSpan={3} className="px-4 py-4 text-center text-sm text-slate-400 dark:text-slate-500">
                   No activity in this range.
                 </td>
               </tr>
             )}
             {sectionRows.map((r) => (
-              <tr key={r.vat_rate} className="border-t border-slate-100">
+              <tr key={r.vat_rate} className="border-t border-slate-100 dark:border-slate-800">
                 <td className="px-4 py-2">{Number(r.vat_rate) === 0 ? "Zero-rated / Exempt" : `${Number(r.vat_rate)}%`}</td>
                 <td className="px-4 py-2 text-end tabular-nums">{Number(r.net_amount).toFixed(2)}</td>
                 <td className="px-4 py-2 text-end tabular-nums">{Number(r.vat_amount).toFixed(2)}</td>
@@ -707,32 +707,32 @@ function VatSummaryTab() {
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <label className="text-sm text-slate-600">From</label>
-        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm" />
-        <label className="text-sm text-slate-600">To</label>
-        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1 text-sm" />
+        <label className="text-sm text-slate-600 dark:text-slate-300">From</label>
+        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-sm" />
+        <label className="text-sm text-slate-600 dark:text-slate-300">To</label>
+        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-sm" />
       </div>
-      <p className="mb-3 text-xs text-slate-400">
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
         A working summary to support filing the periodic VAT return, not an official ZATCA form replica — it doesn't distinguish GCC
         sales, exports, or customs-cleared imports from domestic activity, since this app's schema doesn't capture those separately.
         Zero-rated and exempt supplies are also combined (both show as 0% here).
       </p>
       {rows === null ? (
-        <p className="p-6 text-sm text-slate-400">Loading...</p>
+        <p className="p-6 text-sm text-slate-400 dark:text-slate-500">Loading...</p>
       ) : (
         <div className="space-y-4">
           <Section title="Output VAT (Sales)" sectionRows={outputRows} />
           <Section title="Input VAT (Purchases)" sectionRows={inputRows} />
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-4 text-sm">
             <div className="flex justify-between">
-              <span className="text-slate-600">Total Output VAT</span>
-              <span className="tabular-nums font-medium text-slate-900">{outputVat.toFixed(2)}</span>
+              <span className="text-slate-600 dark:text-slate-300">Total Output VAT</span>
+              <span className="tabular-nums font-medium text-slate-900 dark:text-slate-100">{outputVat.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-600">Total Input VAT</span>
-              <span className="tabular-nums font-medium text-slate-900">{inputVat.toFixed(2)}</span>
+              <span className="text-slate-600 dark:text-slate-300">Total Input VAT</span>
+              <span className="tabular-nums font-medium text-slate-900 dark:text-slate-100">{inputVat.toFixed(2)}</span>
             </div>
-            <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
+            <div className="mt-2 flex justify-between border-t border-slate-200 dark:border-slate-700 pt-2 text-base font-semibold text-slate-900 dark:text-slate-100">
               <span>{netVat >= 0 ? "Net VAT Due" : "Net VAT Refundable"}</span>
               <span className="tabular-nums">{Math.abs(netVat).toFixed(2)}</span>
             </div>
@@ -747,7 +747,7 @@ export default function Reports() {
   const { t } = useTranslation();
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold text-slate-900">{t("nav.reports")}</h1>
+      <h1 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{t("nav.reports")}</h1>
       <Tabs
         tabs={[
           { key: "tb", label: "Trial Balance", content: <TrialBalanceTab /> },

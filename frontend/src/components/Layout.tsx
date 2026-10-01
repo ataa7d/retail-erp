@@ -20,8 +20,11 @@ import {
   Monitor,
   ClipboardList,
   AlertTriangle,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
+import { useTheme } from "../lib/theme";
 import { apiRequest } from "../lib/api";
 
 // Items now lives inside Inventory's tabs -- this link stays visible to
@@ -98,10 +101,14 @@ function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute end-0 top-10 z-20 w-80 rounded-lg border border-slate-200 bg-white py-1 text-sm text-slate-700 shadow-lg">
-          <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-500">Notifications</div>
-          {items === null && <div className="px-3 py-4 text-center text-xs text-slate-400">Loading...</div>}
-          {items?.length === 0 && <div className="px-3 py-4 text-center text-xs text-slate-400">You're all caught up.</div>}
+        <div className="absolute end-0 top-10 z-20 w-80 rounded-lg border border-slate-200 bg-white py-1 text-sm text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+          <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">
+            Notifications
+          </div>
+          {items === null && <div className="px-3 py-4 text-center text-xs text-slate-400 dark:text-slate-500">Loading...</div>}
+          {items?.length === 0 && (
+            <div className="px-3 py-4 text-center text-xs text-slate-400 dark:text-slate-500">You're all caught up.</div>
+          )}
           <div className="max-h-80 overflow-y-auto">
             {items?.map((item) => (
               <button
@@ -110,7 +117,7 @@ function NotificationBell() {
                   setOpen(false);
                   navigate(item.link);
                 }}
-                className="flex w-full items-start gap-2 px-3 py-2 text-start hover:bg-slate-50"
+                className="flex w-full items-start gap-2 px-3 py-2 text-start hover:bg-slate-50 dark:hover:bg-slate-700"
               >
                 {item.type === "requisition_pending" ? (
                   <ClipboardList size={15} className="mt-0.5 shrink-0 text-blue-500" />
@@ -118,8 +125,8 @@ function NotificationBell() {
                   <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-500" />
                 )}
                 <div className="min-w-0">
-                  <div className="truncate font-medium text-slate-900">{item.title}</div>
-                  <div className="truncate text-xs text-slate-500">{item.detail}</div>
+                  <div className="truncate font-medium text-slate-900 dark:text-slate-100">{item.title}</div>
+                  <div className="truncate text-xs text-slate-500 dark:text-slate-400">{item.detail}</div>
                 </div>
               </button>
             ))}
@@ -133,6 +140,7 @@ function NotificationBell() {
 export default function Layout() {
   const { t, i18n } = useTranslation();
   const { me, companies, companyId, logout, hasPermission } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -150,7 +158,7 @@ export default function Layout() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#f5f6f8]">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#f5f6f8] dark:bg-[#0b1220]">
       {/* Shell bar */}
       <header className="flex h-12 shrink-0 items-center gap-4 bg-shell-900 px-4 text-white shadow-sm">
         <div className="flex items-center gap-2 font-semibold tracking-tight">
@@ -166,6 +174,14 @@ export default function Layout() {
           />
         </div>
 
+        <button
+          onClick={toggleTheme}
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          className="rounded-full p-1.5 text-white/80 hover:bg-white/10"
+        >
+          {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+        </button>
+
         <NotificationBell />
 
         <div className="relative">
@@ -180,22 +196,25 @@ export default function Layout() {
           </button>
 
           {menuOpen && (
-            <div className="absolute end-0 top-10 z-20 w-56 rounded-lg border border-slate-200 bg-white py-1 text-sm text-slate-700 shadow-lg">
-              <div className="border-b border-slate-100 px-3 py-2">
-                <div className="truncate font-medium text-slate-900">{me?.user.email}</div>
-                <div className="truncate text-xs text-slate-500">{companyName}</div>
+            <div className="absolute end-0 top-10 z-20 w-56 rounded-lg border border-slate-200 bg-white py-1 text-sm text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+              <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-700">
+                <div className="truncate font-medium text-slate-900 dark:text-slate-100">{me?.user.email}</div>
+                <div className="truncate text-xs text-slate-500 dark:text-slate-400">{companyName}</div>
               </div>
-              <button onClick={toggleLanguage} className="flex w-full items-center gap-2 px-3 py-2 hover:bg-slate-50">
+              <button onClick={toggleLanguage} className="flex w-full items-center gap-2 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700">
                 <Globe size={15} /> {i18n.language.startsWith("ar") ? "English" : "العربية"}
               </button>
               <NavLink
                 to="/select-company"
                 onClick={() => setMenuOpen(false)}
-                className="flex w-full items-center gap-2 px-3 py-2 hover:bg-slate-50"
+                className="flex w-full items-center gap-2 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700"
               >
                 <Building size={15} /> {t("nav.switchCompany")}
               </NavLink>
-              <button onClick={handleLogout} className="flex w-full items-center gap-2 px-3 py-2 text-red-600 hover:bg-red-50">
+              <button
+                onClick={handleLogout}
+                className="flex w-full items-center gap-2 px-3 py-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+              >
                 <LogOut size={15} /> {t("nav.logout")}
               </button>
             </div>
@@ -205,7 +224,7 @@ export default function Layout() {
 
       <div className="flex min-h-0 flex-1">
         {/* Nav rail */}
-        <nav className="flex w-56 shrink-0 flex-col gap-0.5 overflow-y-auto border-e border-slate-200 bg-white p-2">
+        <nav className="flex w-56 shrink-0 flex-col gap-0.5 overflow-y-auto border-e border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900">
           {navItems
             .filter((item) => {
               if (!item.permission) return true;
@@ -223,8 +242,8 @@ export default function Layout() {
                   className={({ isActive }) =>
                     `flex items-center gap-2.5 rounded-md border-s-[3px] py-2 text-sm transition-colors ${indent ? "ms-4 ps-2 pe-2.5 text-[13px]" : "px-2.5"} ${
                       isActive
-                        ? "border-brand-500 bg-brand-50 font-medium text-brand-700"
-                        : "border-transparent text-slate-600 hover:bg-slate-50"
+                        ? "border-brand-500 bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+                        : "border-transparent text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
                     }`
                   }
                 >

@@ -115,7 +115,7 @@ function InviteUserForm({ onClose, onCreated }: { onClose: () => void; onCreated
       <Field label="Temporary Password" required>
         <TextInput type="text" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" />
       </Field>
-      <p className="mb-3 text-xs text-slate-400">
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
         If this email already belongs to a user elsewhere in the group, this just grants them access to this company instead of creating a duplicate.
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Invite User" />
@@ -185,14 +185,14 @@ function UserDetailModal({ userId, onClose, onChanged }: { userId: string; onClo
     }
   }
 
-  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+  if (!detail) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <div className="font-medium text-slate-900">{detail.email}</div>
-          <div className="text-xs text-slate-500">{detail.full_name_en}</div>
+          <div className="font-medium text-slate-900 dark:text-slate-100">{detail.email}</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">{detail.full_name_en}</div>
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={detail.has_company_access ? "active" : "inactive"} />
@@ -204,14 +204,14 @@ function UserDetailModal({ userId, onClose, onChanged }: { userId: string; onClo
 
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 
-      <div className="mb-3 text-sm font-medium text-slate-700">Role assignments</div>
+      <div className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-200">Role assignments</div>
       <div className="mb-3 space-y-1.5">
-        {detail.roleAssignments.length === 0 && <p className="text-xs text-slate-400">No roles assigned yet.</p>}
+        {detail.roleAssignments.length === 0 && <p className="text-xs text-slate-400 dark:text-slate-500">No roles assigned yet.</p>}
         {detail.roleAssignments.map((a) => (
-          <div key={a.id} className="flex items-center justify-between rounded-md border border-slate-100 px-3 py-2 text-sm">
-            <span className="text-slate-700">
+          <div key={a.id} className="flex items-center justify-between rounded-md border border-slate-100 dark:border-slate-800 px-3 py-2 text-sm">
+            <span className="text-slate-700 dark:text-slate-200">
               {a.role_name}
-              {a.store_name_en && <span className="ms-1 text-xs text-slate-400">· {a.store_name_en} only</span>}
+              {a.store_name_en && <span className="ms-1 text-xs text-slate-400 dark:text-slate-500">· {a.store_name_en} only</span>}
             </span>
             <button onClick={() => removeAssignment(a.id)} disabled={busy} className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50">
               Remove
@@ -220,8 +220,8 @@ function UserDetailModal({ userId, onClose, onChanged }: { userId: string; onClo
         ))}
       </div>
 
-      <form onSubmit={assignRole} className="rounded-md border border-slate-200 bg-slate-50 p-3">
-        <div className="mb-2 text-xs font-medium text-slate-600">Assign a role</div>
+      <form onSubmit={assignRole} className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
+        <div className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-300">Assign a role</div>
         <div className="grid grid-cols-2 gap-2">
           <SelectInput required value={roleId} onChange={(e) => setRoleId(e.target.value)}>
             <option value="">Select role...</option>
@@ -254,7 +254,7 @@ function UsersTab() {
   const [openId, setOpenId] = useState<string | null>(null);
 
   const columns: Column<AdminUser>[] = [
-    { key: "email", header: "Email", render: (r) => <span className="font-medium text-slate-900">{r.email}</span> },
+    { key: "email", header: "Email", render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{r.email}</span> },
     { key: "name", header: "Name", render: (r) => r.full_name_en },
     { key: "roles", header: "Roles", render: (r) => (r.roles.length ? r.roles.join(", ") : "—") },
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.user_is_active && r.has_company_access ? "active" : "inactive"} /> },
@@ -320,7 +320,7 @@ function NewRoleForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
       <Field label="Description">
         <TextInput value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
       </Field>
-      <p className="mb-3 text-xs text-slate-400">Permissions are set afterward from the role's detail view.</p>
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">Permissions are set afterward from the role's detail view.</p>
       <FormActions error={error} submitting={submitting} submitLabel="Create Role" />
     </form>
   );
@@ -386,7 +386,7 @@ function RoleDetailModal({ roleId, onClose, onChanged }: { roleId: string; onClo
     }
   }
 
-  if (!role || !catalog) return <p className="text-sm text-slate-400">Loading...</p>;
+  if (!role || !catalog) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
   const grouped = new Map<string, Permission[]>();
   for (const p of catalog) {
@@ -399,8 +399,8 @@ function RoleDetailModal({ roleId, onClose, onChanged }: { roleId: string; onClo
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <div className="font-medium text-slate-900">{role.name}</div>
-          {role.description && <div className="text-xs text-slate-500">{role.description}</div>}
+          <div className="font-medium text-slate-900 dark:text-slate-100">{role.name}</div>
+          {role.description && <div className="text-xs text-slate-500 dark:text-slate-400">{role.description}</div>}
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={role.is_active ? "active" : "inactive"} />
@@ -415,14 +415,14 @@ function RoleDetailModal({ roleId, onClose, onChanged }: { roleId: string; onClo
       <div className="mb-3 max-h-96 space-y-3 overflow-y-auto">
         {[...grouped.entries()].map(([module, perms]) => (
           <div key={module}>
-            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{module}</div>
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{module}</div>
             <div className="space-y-1">
               {perms.map((p) => (
-                <label key={p.code} className="flex items-start gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50">
+                <label key={p.code} className="flex items-start gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
                   <input type="checkbox" className="mt-0.5" checked={selected.has(p.code)} onChange={() => toggle(p.code)} />
                   <span>
-                    <span className="text-slate-800">{p.description}</span>
-                    <span className="ms-1.5 font-mono text-xs text-slate-400">{p.code}</span>
+                    <span className="text-slate-800 dark:text-slate-100">{p.description}</span>
+                    <span className="ms-1.5 font-mono text-xs text-slate-400 dark:text-slate-500">{p.code}</span>
                   </span>
                 </label>
               ))}
@@ -444,7 +444,7 @@ function RolesTab() {
   const [openId, setOpenId] = useState<string | null>(null);
 
   const columns: Column<Role>[] = [
-    { key: "name", header: "Role", render: (r) => <span className="font-medium text-slate-900">{r.name}</span> },
+    { key: "name", header: "Role", render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{r.name}</span> },
     { key: "description", header: "Description", render: (r) => r.description ?? "—" },
     { key: "permissions", header: "Permissions", render: (r) => r.permissions.length, numeric: true },
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.is_active ? "active" : "inactive"} /> },
@@ -485,8 +485,8 @@ function AuditLogTab() {
 
   const columns: Column<AuditLogEntry>[] = [
     { key: "action", header: "Action", render: (r) => <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${ACTION_STYLE[r.action]}`}>{r.action}</span> },
-    { key: "table", header: "Table", render: (r) => <span className="font-mono text-xs text-slate-600">{r.table_name}</span> },
-    { key: "row", header: "Row", render: (r) => <span className="font-mono text-xs text-slate-400">{r.row_id.slice(0, 8)}…</span> },
+    { key: "table", header: "Table", render: (r) => <span className="font-mono text-xs text-slate-600 dark:text-slate-300">{r.table_name}</span> },
+    { key: "row", header: "Row", render: (r) => <span className="font-mono text-xs text-slate-400 dark:text-slate-500">{r.row_id.slice(0, 8)}…</span> },
     { key: "when", header: "When", render: (r) => new Date(r.occurred_at).toLocaleString() },
   ];
 
@@ -589,7 +589,7 @@ function NewPosDeviceForm({ onClose, onCreated }: { onClose: () => void; onCreat
           placeholder={storeCode ? `${storeCode}-POS3-` : "ST01-POS3-"}
         />
       </Field>
-      <p className="mb-3 text-xs text-slate-400">
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
         Must look like <span className="font-mono">ST01-POS3-</span> — this prefix is permanent for the device and is prepended to every
         invoice/credit-note number it issues offline, so numbering never collides across devices.
       </p>
@@ -626,22 +626,22 @@ function StoreDefaultPriceLists() {
   if (!stores?.length) return null;
 
   return (
-    <div className="mb-4 rounded-lg border border-slate-200 p-3">
-      <div className="mb-2 text-sm font-medium text-slate-700">Store Default Price Lists</div>
-      <p className="mb-3 text-xs text-slate-400">
+    <div className="mb-4 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+      <div className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-200">Store Default Price Lists</div>
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
         Applies to any till at that store without its own price list override below. Falls back to the company default when unset.
       </p>
       <div className="space-y-1.5">
         {stores.map((s) => (
           <div key={s.id} className="flex items-center justify-between gap-2 text-sm">
-            <span className="text-slate-600">
-              {s.name_en} <span className="text-slate-400">({s.store_code})</span>
+            <span className="text-slate-600 dark:text-slate-300">
+              {s.name_en} <span className="text-slate-400 dark:text-slate-500">({s.store_code})</span>
             </span>
             <select
               value={s.default_price_list_id ?? ""}
               onChange={(e) => setDefault(s.id, e.target.value)}
               disabled={busyId === s.id}
-              className="rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
+              className="rounded-md border border-slate-300 dark:border-slate-600 px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
             >
               <option value="">Company default</option>
               {priceLists?.map((pl) => (
@@ -693,9 +693,9 @@ function PosDevicesTab() {
   }
 
   const columns: Column<PosDevice>[] = [
-    { key: "code", header: "Device", render: (r) => <span className="font-medium text-slate-900">{r.device_name}</span> },
+    { key: "code", header: "Device", render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{r.device_name}</span> },
     { key: "store", header: "Store", render: (r) => storeLabel(r.store_id) },
-    { key: "prefix", header: "Series Prefix", render: (r) => <span className="font-mono text-xs text-slate-500">{r.series_prefix}</span> },
+    { key: "prefix", header: "Series Prefix", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.series_prefix}</span> },
     {
       key: "price_list",
       header: "Price List",
@@ -708,7 +708,7 @@ function PosDevicesTab() {
           }}
           onClick={(e) => e.stopPropagation()}
           disabled={busyId === r.id}
-          className="rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
+          className="rounded-md border border-slate-300 dark:border-slate-600 px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
         >
           <option value="">Store default</option>
           {priceLists?.map((pl) => (
@@ -933,7 +933,7 @@ function OfflineSyncTab() {
   }
 
   const STATUS_STYLE: Record<QueuedInvoice["status"], string> = {
-    queued: "bg-slate-100 text-slate-600",
+    queued: "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300",
     synced: "bg-green-100 text-green-700",
     already_synced: "bg-amber-100 text-amber-700",
     error: "bg-red-100 text-red-600",
@@ -941,13 +941,13 @@ function OfflineSyncTab() {
 
   return (
     <div>
-      <p className="mb-4 max-w-2xl text-sm text-slate-500">
+      <p className="mb-4 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
         Simulates a POS device that has been taking sales while offline. Queue up a few draft invoices locally (nothing is sent to the
         server yet), then push the whole queue in one batch — exactly what a real device does when connectivity returns. Pushing the same
         queue twice demonstrates that a retried sync is idempotent rather than double-posting.
       </p>
 
-      <div className="mb-4 grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
+      <div className="mb-4 grid grid-cols-1 gap-3 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-4 sm:grid-cols-2">
         <Field label="POS Device" required>
           <SelectInput
             required
@@ -1007,10 +1007,10 @@ function OfflineSyncTab() {
       </div>
 
       {queue.length > 0 && (
-        <div className="mb-4 rounded-md border border-slate-200">
+        <div className="mb-4 rounded-md border border-slate-200 dark:border-slate-700">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-400">
+              <tr className="border-b border-slate-100 dark:border-slate-800 text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
                 <th className="px-4 py-2.5 text-start">Seq #</th>
                 <th className="px-4 py-2.5 text-start">Line</th>
                 <th className="px-4 py-2.5 text-end">Amount</th>
@@ -1047,47 +1047,47 @@ function OfflineSyncTab() {
         <button
           onClick={() => setQueue([])}
           disabled={queue.length === 0}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
         >
           Clear Queue
         </button>
         {pushError && <span className="text-sm text-red-600">{pushError}</span>}
       </div>
 
-      <div className="rounded-md border border-slate-200 p-4">
-        <h3 className="mb-2 text-sm font-semibold text-slate-900">Catalog Pull</h3>
-        <p className="mb-3 text-sm text-slate-500">
+      <div className="rounded-md border border-slate-200 dark:border-slate-700 p-4">
+        <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">Catalog Pull</h3>
+        <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
           Fetches the consolidated snapshot a device pulls before going offline again: items, customers, price lists, and stock balances
           for the selected device's store.
         </p>
         <button
           onClick={pullCatalog}
           disabled={!deviceId || pulling}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
         >
           {pulling ? "Pulling..." : "Pull Catalog Snapshot"}
         </button>
         {pullResult && (
           <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
             <div>
-              <div className="text-xs uppercase text-slate-400">Items</div>
-              <div className="font-medium text-slate-900">{pullResult.items}</div>
+              <div className="text-xs uppercase text-slate-400 dark:text-slate-500">Items</div>
+              <div className="font-medium text-slate-900 dark:text-slate-100">{pullResult.items}</div>
             </div>
             <div>
-              <div className="text-xs uppercase text-slate-400">Customers</div>
-              <div className="font-medium text-slate-900">{pullResult.customers}</div>
+              <div className="text-xs uppercase text-slate-400 dark:text-slate-500">Customers</div>
+              <div className="font-medium text-slate-900 dark:text-slate-100">{pullResult.customers}</div>
             </div>
             <div>
-              <div className="text-xs uppercase text-slate-400">Price Lists</div>
-              <div className="font-medium text-slate-900">{pullResult.priceLists}</div>
+              <div className="text-xs uppercase text-slate-400 dark:text-slate-500">Price Lists</div>
+              <div className="font-medium text-slate-900 dark:text-slate-100">{pullResult.priceLists}</div>
             </div>
             <div>
-              <div className="text-xs uppercase text-slate-400">Stock Balances</div>
-              <div className="font-medium text-slate-900">{pullResult.stockBalances}</div>
+              <div className="text-xs uppercase text-slate-400 dark:text-slate-500">Stock Balances</div>
+              <div className="font-medium text-slate-900 dark:text-slate-100">{pullResult.stockBalances}</div>
             </div>
             <div className="col-span-2 sm:col-span-4">
-              <div className="text-xs uppercase text-slate-400">Server Time</div>
-              <div className="font-mono text-xs text-slate-600">{pullResult.serverTime}</div>
+              <div className="text-xs uppercase text-slate-400 dark:text-slate-500">Server Time</div>
+              <div className="font-mono text-xs text-slate-600 dark:text-slate-300">{pullResult.serverTime}</div>
             </div>
           </div>
         )}
@@ -1172,14 +1172,14 @@ function ZatcaReadinessPanel() {
   }, []);
 
   return (
-    <div className="rounded-md border border-slate-200 p-4">
+    <div className="rounded-md border border-slate-200 dark:border-slate-700 p-4">
       <div className="mb-1 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-900">5. Production Go-Live Readiness</h3>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">5. Production Go-Live Readiness</h3>
         <button onClick={reload} disabled={loading} className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50">
           <RefreshCw size={12} className={loading ? "animate-spin" : ""} /> Refresh
         </button>
       </div>
-      <p className="mb-3 text-xs text-slate-500">
+      <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
         A live check against this company's own data and onboarding state — not a static checklist. Every item below
         is computed fresh each time; nothing here can confirm ZATCA's own approval, only what's true on this side.
       </p>
@@ -1198,11 +1198,11 @@ function ZatcaReadinessPanel() {
           </div>
           <div className="space-y-2">
             {report.checks.map((c) => (
-              <div key={c.id} className="flex items-start gap-2 border-t border-slate-100 pt-2 first:border-t-0 first:pt-0">
+              <div key={c.id} className="flex items-start gap-2 border-t border-slate-100 dark:border-slate-800 pt-2 first:border-t-0 first:pt-0">
                 <ReadinessStatusIcon status={c.status} />
                 <div className="min-w-0">
-                  <div className="text-xs font-medium text-slate-800">{c.label}</div>
-                  <div className="text-xs text-slate-500">{c.detail}</div>
+                  <div className="text-xs font-medium text-slate-800 dark:text-slate-100">{c.label}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">{c.detail}</div>
                 </div>
               </div>
             ))}
@@ -1243,7 +1243,7 @@ function OnboardingStepper({ status }: { status: string }) {
                   ? "bg-green-100 text-green-700"
                   : state === "current"
                     ? "bg-brand-50 text-brand-700 ring-1 ring-brand-300"
-                    : "bg-slate-100 text-slate-400"
+                    : "bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500"
               }`}
             >
               {state === "done" ? <CheckCircle2 size={13} /> : <Circle size={13} />}
@@ -1332,9 +1332,9 @@ function ZatcaOnboardingTab() {
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 
       <div className="space-y-4">
-        <div className="rounded-md border border-slate-200 p-4">
-          <h3 className="mb-1 text-sm font-semibold text-slate-900">1. Generate CSR</h3>
-          <p className="mb-3 text-xs text-slate-500">
+        <div className="rounded-md border border-slate-200 dark:border-slate-700 p-4">
+          <h3 className="mb-1 text-sm font-semibold text-slate-900 dark:text-slate-100">1. Generate CSR</h3>
+          <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
             Creates a fresh secp256k1 keypair for this company's EGS unit and a CSR carrying ZATCA's required fields.
             The private key is encrypted at rest and never leaves the server.
           </p>
@@ -1380,9 +1380,9 @@ function ZatcaOnboardingTab() {
           </button>
         </div>
 
-        <div className="rounded-md border border-slate-200 p-4">
-          <h3 className="mb-1 text-sm font-semibold text-slate-900">2. Request Compliance CSID</h3>
-          <p className="mb-3 text-xs text-slate-500">
+        <div className="rounded-md border border-slate-200 dark:border-slate-700 p-4">
+          <h3 className="mb-1 text-sm font-semibold text-slate-900 dark:text-slate-100">2. Request Compliance CSID</h3>
+          <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
             Exchanges the CSR above for a compliance certificate, using the one-time OTP from your ZATCA Fatoora
             portal (Onboarding → Generate OTP). The OTP is single-use and never stored.
           </p>
@@ -1398,9 +1398,9 @@ function ZatcaOnboardingTab() {
           </div>
         </div>
 
-        <div className="rounded-md border border-slate-200 p-4">
-          <h3 className="mb-1 text-sm font-semibold text-slate-900">3. Compliance Checks</h3>
-          <p className="mb-3 text-xs text-slate-500">
+        <div className="rounded-md border border-slate-200 dark:border-slate-700 p-4">
+          <h3 className="mb-1 text-sm font-semibold text-slate-900 dark:text-slate-100">3. Compliance Checks</h3>
+          <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
             Submits one of your own posted documents to ZATCA for validation against the compliance certificate.
             Run this once per document type you'll issue (standard/simplified invoice, standard/simplified credit
             note) before requesting the production CSID.
@@ -1434,10 +1434,10 @@ function ZatcaOnboardingTab() {
           </button>
 
           {checks.length > 0 && (
-            <div className="space-y-1 border-t border-slate-100 pt-2">
+            <div className="space-y-1 border-t border-slate-100 dark:border-slate-800 pt-2">
               {checks.map((c) => (
                 <div key={c.id} className="flex items-center justify-between text-xs">
-                  <span className="text-slate-600">
+                  <span className="text-slate-600 dark:text-slate-300">
                     {c.document_type.replace(/_/g, " ")} · {new Date(c.submitted_at).toLocaleString()}
                   </span>
                   <StatusBadge status={c.passed ? "active" : "inactive"} />
@@ -1447,9 +1447,9 @@ function ZatcaOnboardingTab() {
           )}
         </div>
 
-        <div className="rounded-md border border-slate-200 p-4">
-          <h3 className="mb-1 text-sm font-semibold text-slate-900">4. Request Production CSID</h3>
-          <p className="mb-3 text-xs text-slate-500">
+        <div className="rounded-md border border-slate-200 dark:border-slate-700 p-4">
+          <h3 className="mb-1 text-sm font-semibold text-slate-900 dark:text-slate-100">4. Request Production CSID</h3>
+          <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
             Exchanges the compliance certificate for the real production certificate, once compliance checks have
             passed. This is the credential real invoice reporting/clearance would use.
           </p>
@@ -1532,17 +1532,17 @@ function CompanyProfileTab() {
     }
   }
 
-  if (!company) return <p className="text-sm text-slate-400">Loading...</p>;
+  if (!company) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
   return (
     <div className="max-w-lg">
       <form onSubmit={handleSubmit}>
         <div className="mb-3 grid grid-cols-2 gap-3">
           <Field label="Company Code">
-            <TextInput value={company.company_code} disabled className="bg-slate-50 text-slate-400" />
+            <TextInput value={company.company_code} disabled className="bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500" />
           </Field>
           <Field label="Base Currency">
-            <TextInput value={company.base_currency} disabled className="bg-slate-50 text-slate-400" />
+            <TextInput value={company.base_currency} disabled className="bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500" />
           </Field>
         </div>
         <Field label="Name (English)" required>
@@ -1562,7 +1562,7 @@ function CompanyProfileTab() {
         <Field label="Address">
           <TextInput disabled={!canManage} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Used as the seller address fallback on printed invoices" />
         </Field>
-        {!canManage && <p className="mb-3 text-xs text-slate-400">You don't have permission to edit the company profile.</p>}
+        {!canManage && <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">You don't have permission to edit the company profile.</p>}
         {canManage && (
           <>
             {saved && <p className="mb-3 text-sm text-emerald-600">Saved.</p>}
@@ -1650,7 +1650,7 @@ function BranchForm({ branch, onClose, onSaved }: { branch: Branch | null; onClo
         <Field label="Name (Arabic)" required>
           <TextInput required dir="rtl" value={nameAr} onChange={(e) => setNameAr(e.target.value)} />
         </Field>
-        <p className="mb-3 text-xs text-slate-400">
+        <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
           CR/VAT number here override the company's own for ZATCA purposes — leave blank to fall back to the company's registration.
         </p>
         <div className="grid grid-cols-2 gap-3">
@@ -1765,16 +1765,16 @@ function BranchesStoresTab() {
     <div className="space-y-6">
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <div className="text-sm font-medium text-slate-700">Branches</div>
+          <div className="text-sm font-medium text-slate-700 dark:text-slate-200">Branches</div>
           {canManage && (
             <button onClick={() => setEditingBranch("new")} className="flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
               <Plus size={14} /> New Branch
             </button>
           )}
         </div>
-        <div className="overflow-hidden rounded-lg border border-slate-200">
+        <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-xs text-slate-500">
+            <thead className="bg-slate-50 dark:bg-slate-800 text-xs text-slate-500 dark:text-slate-400">
               <tr>
                 <th className="px-3 py-2 text-start font-medium">Code</th>
                 <th className="px-3 py-2 text-start font-medium">Name</th>
@@ -1785,11 +1785,11 @@ function BranchesStoresTab() {
             </thead>
             <tbody>
               {branches?.map((b) => (
-                <tr key={b.id} className="border-t border-slate-100">
+                <tr key={b.id} className="border-t border-slate-100 dark:border-slate-800">
                   <td className="px-3 py-2 font-mono text-xs">{b.branch_code}</td>
                   <td className="px-3 py-2">{b.name_en}</td>
-                  <td className="px-3 py-2 text-slate-500">{b.city ?? "—"}</td>
-                  <td className="px-3 py-2 text-slate-500">{b.vat_registration_number ?? b.cr_number ?? "—"}</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{b.city ?? "—"}</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{b.vat_registration_number ?? b.cr_number ?? "—"}</td>
                   <td className="px-3 py-2 text-end">
                     {canManage && (
                       <button onClick={() => setEditingBranch(b)} className="text-xs font-medium text-brand-600 hover:text-brand-700">
@@ -1801,7 +1801,7 @@ function BranchesStoresTab() {
               ))}
               {branches?.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-4 text-center text-slate-400">
+                  <td colSpan={5} className="px-3 py-4 text-center text-slate-400 dark:text-slate-500">
                     No branches yet.
                   </td>
                 </tr>
@@ -1813,7 +1813,7 @@ function BranchesStoresTab() {
 
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <div className="text-sm font-medium text-slate-700">Stores</div>
+          <div className="text-sm font-medium text-slate-700 dark:text-slate-200">Stores</div>
           {canManage && (
             <button
               onClick={() => setEditingStore("new")}
@@ -1824,9 +1824,9 @@ function BranchesStoresTab() {
             </button>
           )}
         </div>
-        <div className="overflow-hidden rounded-lg border border-slate-200">
+        <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-xs text-slate-500">
+            <thead className="bg-slate-50 dark:bg-slate-800 text-xs text-slate-500 dark:text-slate-400">
               <tr>
                 <th className="px-3 py-2 text-start font-medium">Code</th>
                 <th className="px-3 py-2 text-start font-medium">Name</th>
@@ -1838,12 +1838,12 @@ function BranchesStoresTab() {
             </thead>
             <tbody>
               {stores?.map((s) => (
-                <tr key={s.id} className="border-t border-slate-100">
+                <tr key={s.id} className="border-t border-slate-100 dark:border-slate-800">
                   <td className="px-3 py-2 font-mono text-xs">{s.store_code}</td>
                   <td className="px-3 py-2">{s.name_en}</td>
-                  <td className="px-3 py-2 text-slate-500">{branchLabel(s.branch_id)}</td>
-                  <td className="px-3 py-2 capitalize text-slate-500">{s.store_type}</td>
-                  <td className="px-3 py-2 text-slate-500">{s.city ?? "—"}</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{branchLabel(s.branch_id)}</td>
+                  <td className="px-3 py-2 capitalize text-slate-500 dark:text-slate-400">{s.store_type}</td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{s.city ?? "—"}</td>
                   <td className="px-3 py-2 text-end">
                     {canManage && (
                       <button onClick={() => setEditingStore(s)} className="text-xs font-medium text-brand-600 hover:text-brand-700">
@@ -1855,7 +1855,7 @@ function BranchesStoresTab() {
               ))}
               {stores?.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-4 text-center text-slate-400">
+                  <td colSpan={6} className="px-3 py-4 text-center text-slate-400 dark:text-slate-500">
                     No stores yet.
                   </td>
                 </tr>
@@ -1888,7 +1888,7 @@ export default function Admin() {
   const { t } = useTranslation();
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold text-slate-900">{t("nav.admin")}</h1>
+      <h1 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{t("nav.admin")}</h1>
       <Tabs
         tabs={[
           { key: "company", label: "Company Profile", content: <CompanyProfileTab /> },

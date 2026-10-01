@@ -10,14 +10,17 @@ interface ModalProps {
 export default function Modal({ title, onClose, children }: ModalProps) {
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
-          <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
-          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+      <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-2xl dark:bg-slate-800">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-slate-700">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
+          <button
+            onClick={onClose}
+            className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+          >
             <X size={18} />
           </button>
         </div>
-        <div className="p-5">{children}</div>
+        <div className="p-5 text-slate-700 dark:text-slate-200">{children}</div>
       </div>
     </div>
   );

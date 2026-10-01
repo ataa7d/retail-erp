@@ -93,7 +93,7 @@ interface FullCreditNote {
 
 function ZatcaQrPanel({ status, qr, qrError }: { status: string; qr: string | null; qrError: string | null }) {
   if (status !== "posted") {
-    return <p className="mt-3 text-xs text-slate-400">The ZATCA QR code is generated once this document is posted.</p>;
+    return <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">The ZATCA QR code is generated once this document is posted.</p>;
   }
   if (qrError) {
     return (
@@ -104,9 +104,9 @@ function ZatcaQrPanel({ status, qr, qrError }: { status: string; qr: string | nu
   }
   if (!qr) return null;
   return (
-    <div className="mt-3 flex flex-col items-center gap-1 border-t border-dashed border-slate-200 pt-3">
+    <div className="mt-3 flex flex-col items-center gap-1 border-t border-dashed border-slate-200 dark:border-slate-700 pt-3">
       <img src={qr} alt="ZATCA QR code" width={140} height={140} />
-      <p className="text-center text-xs text-slate-400">ZATCA Phase 1 QR — scan to verify seller, VAT number, timestamp and totals.</p>
+      <p className="text-center text-xs text-slate-400 dark:text-slate-500">ZATCA Phase 1 QR — scan to verify seller, VAT number, timestamp and totals.</p>
     </div>
   );
 }
@@ -135,7 +135,7 @@ function XmlDownloadButton({ status, path }: { status: string; path: string }) {
       <button
         onClick={handleDownload}
         disabled={downloading}
-        className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        className="w-full rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
       >
         {downloading ? "Preparing..." : "Download ZATCA XML (Phase 2, unsigned)"}
       </button>
@@ -191,7 +191,7 @@ function VoidInvoiceForm({ invoiceId, onClose, onVoided }: { invoiceId: string; 
         >
           {submitting ? "Voiding..." : "Confirm Void"}
         </button>
-        <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+        <button type="button" onClick={onClose} className="rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
           Cancel
         </button>
       </div>
@@ -214,20 +214,20 @@ export function SalesInvoiceDetailModal({ invoiceId, onVoided }: { invoiceId: st
   return (
     <>
       {!detail ? (
-        <p className="text-sm text-slate-400">Loading...</p>
+        <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>
       ) : (
         <div>
           <div className="mb-3 flex items-center justify-between text-sm">
-            <span className="font-mono text-xs text-slate-500">{detail.document_number}</span>
+            <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{detail.document_number}</span>
             <StatusBadge status={isVoided ? "voided" : detail.document_status} />
           </div>
-          <div className="mb-3 text-xs capitalize text-slate-500">
+          <div className="mb-3 text-xs capitalize text-slate-500 dark:text-slate-400">
             {detail.invoice_channel} · {detail.zatca_invoice_category}
           </div>
-          <div className="space-y-1 border-y border-dashed border-slate-200 py-2 text-sm">
+          <div className="space-y-1 border-y border-dashed border-slate-200 dark:border-slate-700 py-2 text-sm">
             {detail.lines.map((l) => (
               <div key={l.id} className="flex justify-between">
-                <span className="text-slate-600">
+                <span className="text-slate-600 dark:text-slate-300">
                   {l.item_description} × {l.qty}
                 </span>
                 <span className="tabular-nums">{Number(l.gross_amount).toFixed(2)}</span>
@@ -235,15 +235,15 @@ export function SalesInvoiceDetailModal({ invoiceId, onVoided }: { invoiceId: st
             ))}
           </div>
           <div className="mt-2 space-y-1 text-sm">
-            <div className="flex justify-between text-slate-500">
+            <div className="flex justify-between text-slate-500 dark:text-slate-400">
               <span>Net</span>
               <span className="tabular-nums">{Number(detail.net_amount).toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-slate-500">
+            <div className="flex justify-between text-slate-500 dark:text-slate-400">
               <span>VAT</span>
               <span className="tabular-nums">{Number(detail.vat_amount).toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-base font-semibold text-slate-900">
+            <div className="flex justify-between text-base font-semibold text-slate-900 dark:text-slate-100">
               <span>Total</span>
               <span className="tabular-nums">{Number(detail.gross_amount).toFixed(2)}</span>
             </div>
@@ -253,7 +253,7 @@ export function SalesInvoiceDetailModal({ invoiceId, onVoided }: { invoiceId: st
           {detail.document_status === "posted" && (
             <button
               onClick={() => window.print()}
-              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
             >
               <Printer size={14} /> Print Invoice
             </button>
@@ -318,18 +318,18 @@ export function CreditNoteDetailModal({ creditNoteId }: { creditNoteId: string }
   return (
     <>
       {!detail ? (
-        <p className="text-sm text-slate-400">Loading...</p>
+        <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>
       ) : (
         <div>
           <div className="mb-3 flex items-center justify-between text-sm">
-            <span className="font-mono text-xs text-slate-500">{detail.document_number}</span>
+            <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{detail.document_number}</span>
             <StatusBadge status={detail.document_status} />
           </div>
-          <div className="mb-3 text-xs text-slate-500">{detail.reason}</div>
-          <div className="space-y-1 border-y border-dashed border-slate-200 py-2 text-sm">
+          <div className="mb-3 text-xs text-slate-500 dark:text-slate-400">{detail.reason}</div>
+          <div className="space-y-1 border-y border-dashed border-slate-200 dark:border-slate-700 py-2 text-sm">
             {detail.lines.map((l) => (
               <div key={l.id} className="flex justify-between">
-                <span className="text-slate-600">
+                <span className="text-slate-600 dark:text-slate-300">
                   {l.item_description} × {l.qty}
                 </span>
                 <span className="tabular-nums">{Number(l.gross_amount).toFixed(2)}</span>
@@ -337,15 +337,15 @@ export function CreditNoteDetailModal({ creditNoteId }: { creditNoteId: string }
             ))}
           </div>
           <div className="mt-2 space-y-1 text-sm">
-            <div className="flex justify-between text-slate-500">
+            <div className="flex justify-between text-slate-500 dark:text-slate-400">
               <span>Net</span>
               <span className="tabular-nums">{Number(detail.net_amount).toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-slate-500">
+            <div className="flex justify-between text-slate-500 dark:text-slate-400">
               <span>VAT</span>
               <span className="tabular-nums">{Number(detail.vat_amount).toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-base font-semibold text-slate-900">
+            <div className="flex justify-between text-base font-semibold text-slate-900 dark:text-slate-100">
               <span>Total</span>
               <span className="tabular-nums">{Number(detail.gross_amount).toFixed(2)}</span>
             </div>
@@ -642,7 +642,7 @@ export function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => voi
               const projected = outstanding + totalGross;
               const over = projected > limit;
               return (
-                <p className={`mt-1 text-xs ${over ? "text-red-600" : "text-slate-400"}`}>
+                <p className={`mt-1 text-xs ${over ? "text-red-600" : "text-slate-400 dark:text-slate-500"}`}>
                   {over ? "Over credit limit: " : "Available credit: "}
                   {formatMoney(Math.max(0, limit - outstanding), "SAR")} of {formatMoney(limit, "SAR")}
                   {totalGross > 0 && ` — this invoice would leave ${formatMoney(limit - projected, "SAR")}`}
@@ -677,10 +677,10 @@ export function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => voi
         </Field>
       </div>
 
-      <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Lines</div>
+      <div className="mb-2 mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">Lines</div>
       <div className="space-y-2">
         {lines.map((line, i) => (
-          <div key={i} className="rounded-md border border-slate-200 p-2">
+          <div key={i} className="rounded-md border border-slate-200 dark:border-slate-700 p-2">
             <div className="mb-1.5 flex items-center gap-1.5">
               <SelectInput value={line.itemVariantId} onChange={(e) => updateLine(i, { itemVariantId: e.target.value })} className="min-w-0 flex-1">
                 <option value="">Item variant...</option>
@@ -690,7 +690,7 @@ export function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => voi
                   </option>
                 ))}
               </SelectInput>
-              <button type="button" onClick={() => removeLine(i)} className="shrink-0 rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500">
+              <button type="button" onClick={() => removeLine(i)} className="shrink-0 rounded p-1.5 text-slate-400 dark:text-slate-500 hover:bg-red-50 hover:text-red-500">
                 <Trash2 size={14} />
               </button>
             </div>
@@ -701,7 +701,7 @@ export function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => voi
                 <TextInput type="number" min={0} step="0.01" placeholder="VAT %" value={line.vatRate} onChange={(e) => updateLine(i, { vatRate: e.target.value })} />
               </div>
             </div>
-            <label className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
+            <label className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
               <input type="checkbox" checked={line.priceIncludesVat} onChange={(e) => updateLine(i, { priceIncludesVat: e.target.checked })} />
               Price includes VAT
             </label>
@@ -712,11 +712,11 @@ export function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => voi
         <Plus size={14} /> Add line
       </button>
 
-      <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">Total: {totalGross.toFixed(2)}</div>
+      <div className="mt-3 rounded-md bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200">Total: {totalGross.toFixed(2)}</div>
 
       {invoiceChannel === "pos" && (
         <>
-          <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Payments</div>
+          <div className="mb-2 mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">Payments</div>
           <div className="space-y-2">
             {payments.map((p, i) => (
               <div key={i} className="flex items-center gap-1.5">
@@ -730,10 +730,10 @@ export function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => voi
                 <div className="w-28 flex-none">
                   <TextInput type="number" min={0} step="0.01" placeholder="Amount" value={p.amount} onChange={(e) => updatePayment(i, { amount: e.target.value })} />
                 </div>
-                <button type="button" onClick={() => fillRemaining(i)} className="shrink-0 rounded-md border border-slate-200 px-2 py-1.5 text-xs text-slate-500 hover:bg-slate-50">
+                <button type="button" onClick={() => fillRemaining(i)} className="shrink-0 rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-xs text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">
                   Fill
                 </button>
-                <button type="button" onClick={() => removePayment(i)} className="shrink-0 rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500">
+                <button type="button" onClick={() => removePayment(i)} className="shrink-0 rounded p-1.5 text-slate-400 dark:text-slate-500 hover:bg-red-50 hover:text-red-500">
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -862,18 +862,18 @@ export function NewCreditNoteForm({ onClose, onCreated }: { onClose: () => void;
 
       {invoiceDetail && (
         <>
-          <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Lines to return</div>
+          <div className="mb-2 mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">Lines to return</div>
           <div className="space-y-2">
             {invoiceDetail.lines.map((line) => (
-              <div key={line.id} className="flex items-center gap-2 rounded-md border border-slate-200 p-2">
+              <div key={line.id} className="flex items-center gap-2 rounded-md border border-slate-200 dark:border-slate-700 p-2">
                 <input
                   type="checkbox"
                   checked={lineData[line.id]?.selected ?? false}
                   onChange={(e) => setLineData((prev) => ({ ...prev, [line.id]: { ...prev[line.id]!, selected: e.target.checked } }))}
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm text-slate-900">{line.item_description}</div>
-                  <div className="text-xs text-slate-400">sold {line.qty} @ {Number(line.unit_price).toFixed(2)}</div>
+                  <div className="truncate text-sm text-slate-900 dark:text-slate-100">{line.item_description}</div>
+                  <div className="text-xs text-slate-400 dark:text-slate-500">sold {line.qty} @ {Number(line.unit_price).toFixed(2)}</div>
                 </div>
                 <div className="w-24 flex-none">
                   <TextInput
@@ -892,7 +892,7 @@ export function NewCreditNoteForm({ onClose, onCreated }: { onClose: () => void;
         </>
       )}
 
-      <p className="mb-3 mt-3 text-xs text-slate-400">Recalculated fresh from qty/price — never scaled from the original line, and can't exceed what was sold.</p>
+      <p className="mb-3 mt-3 text-xs text-slate-400 dark:text-slate-500">Recalculated fresh from qty/price — never scaled from the original line, and can't exceed what was sold.</p>
       <FormActions error={error} submitting={submitting} submitLabel="Post Credit Note" />
     </form>
   );
@@ -904,7 +904,7 @@ function SalesInvoicesTab() {
   const { data, error } = useApiList<SalesInvoice>("/api/sales-invoices");
 
   const columns: Column<SalesInvoice>[] = [
-    { key: "number", header: "Invoice #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "number", header: "Invoice #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
     { key: "channel", header: "Channel", render: (r) => <span className="capitalize">{r.invoice_channel}</span> },
     {
       key: "customer",
@@ -947,8 +947,8 @@ function CreditNotesTab() {
   const { data, error } = useApiList<CreditNote>("/api/credit-notes");
 
   const columns: Column<CreditNote>[] = [
-    { key: "number", header: "CN #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
-    { key: "invoice", header: "Original Invoice", render: (r) => <span className="font-mono text-xs text-slate-500">{r.original_invoice_number}</span> },
+    { key: "number", header: "CN #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
+    { key: "invoice", header: "Original Invoice", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.original_invoice_number}</span> },
     { key: "customer", header: "Customer", render: (r) => r.customer_name_en ?? "Walk-in" },
     { key: "date", header: "Date", render: (r) => new Date(r.credit_note_date).toLocaleDateString() },
     { key: "amount", header: "Total", render: (r) => Number(r.gross_amount).toFixed(2), numeric: true },
@@ -1179,10 +1179,10 @@ export function NewQuotationForm({ onClose, onCreated }: { onClose: () => void; 
         <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" />
       </Field>
 
-      <div className="mb-2 mt-4 text-sm font-medium text-slate-700">Lines</div>
+      <div className="mb-2 mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">Lines</div>
       <div className="space-y-2">
         {lines.map((line, i) => (
-          <div key={i} className="rounded-md border border-slate-200 p-2">
+          <div key={i} className="rounded-md border border-slate-200 dark:border-slate-700 p-2">
             <div className="mb-1.5 flex items-center gap-1.5">
               <SelectInput value={line.itemVariantId} onChange={(e) => updateLine(i, { itemVariantId: e.target.value })} className="min-w-0 flex-1">
                 <option value="">Item variant...</option>
@@ -1192,7 +1192,7 @@ export function NewQuotationForm({ onClose, onCreated }: { onClose: () => void; 
                   </option>
                 ))}
               </SelectInput>
-              <button type="button" onClick={() => removeLine(i)} className="shrink-0 rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500">
+              <button type="button" onClick={() => removeLine(i)} className="shrink-0 rounded p-1.5 text-slate-400 dark:text-slate-500 hover:bg-red-50 hover:text-red-500">
                 <Trash2 size={14} />
               </button>
             </div>
@@ -1203,7 +1203,7 @@ export function NewQuotationForm({ onClose, onCreated }: { onClose: () => void; 
                 <TextInput type="number" min={0} step="0.01" placeholder="VAT %" value={line.vatRate} onChange={(e) => updateLine(i, { vatRate: e.target.value })} />
               </div>
             </div>
-            <label className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
+            <label className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
               <input type="checkbox" checked={line.priceIncludesVat} onChange={(e) => updateLine(i, { priceIncludesVat: e.target.checked })} />
               Price includes VAT
             </label>
@@ -1214,7 +1214,7 @@ export function NewQuotationForm({ onClose, onCreated }: { onClose: () => void; 
         <Plus size={14} /> Add line
       </button>
 
-      <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">Total: {totalGross.toFixed(2)}</div>
+      <div className="mt-3 rounded-md bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200">Total: {totalGross.toFixed(2)}</div>
 
       <FormActions error={error} submitting={submitting} submitLabel="Create & Send Quotation" />
     </form>
@@ -1249,7 +1249,7 @@ function ConvertQuotationForm({ quotation, onClose, onConverted }: { quotation: 
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-3 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3">
+    <form onSubmit={handleSubmit} className="mt-3 space-y-2 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
       <Field label="Invoice Date" required>
         <TextInput type="date" required value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
       </Field>
@@ -1264,7 +1264,7 @@ function ConvertQuotationForm({ quotation, onClose, onConverted }: { quotation: 
         </SelectInput>
       </Field>
       <FormActions error={error} submitting={submitting} submitLabel="Create & Post Invoice" />
-      <button type="button" onClick={onClose} className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+      <button type="button" onClick={onClose} className="w-full rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
         Cancel
       </button>
     </form>
@@ -1345,7 +1345,7 @@ export function QuotationDetailModal({ quotationId, onChanged }: { quotationId: 
     }
   }
 
-  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+  if (!detail) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
   const isOwnQuotation = me?.user.email === detail.created_by_email;
   const canDecide = hasPermission("sales.quotation.decide");
@@ -1355,30 +1355,30 @@ export function QuotationDetailModal({ quotationId, onChanged }: { quotationId: 
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <div className="font-mono text-xs text-slate-500">{detail.document_number}</div>
-          <div className="text-sm text-slate-700">
+          <div className="font-mono text-xs text-slate-500 dark:text-slate-400">{detail.document_number}</div>
+          <div className="text-sm text-slate-700 dark:text-slate-200">
             created by {detail.created_by_email ?? "—"}
-            {detail.valid_until && <span className="text-slate-400"> · valid until {new Date(detail.valid_until).toLocaleDateString()}</span>}
+            {detail.valid_until && <span className="text-slate-400 dark:text-slate-500"> · valid until {new Date(detail.valid_until).toLocaleDateString()}</span>}
           </div>
         </div>
         <StatusBadge status={detail.document_status} />
       </div>
-      {detail.notes && <p className="mb-2 text-xs text-slate-500">{detail.notes}</p>}
+      {detail.notes && <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">{detail.notes}</p>}
       {detail.document_status === "rejected" && detail.rejection_reason && (
         <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">Rejected: {detail.rejection_reason}</p>
       )}
 
-      <div className="mb-3 space-y-1 border-y border-dashed border-slate-200 py-2 text-sm">
+      <div className="mb-3 space-y-1 border-y border-dashed border-slate-200 dark:border-slate-700 py-2 text-sm">
         {detail.lines.map((l) => (
           <div key={l.id} className="flex justify-between">
-            <span className="text-slate-600">
+            <span className="text-slate-600 dark:text-slate-300">
               {l.item_description} × {l.qty}
             </span>
             <span className="tabular-nums">{Number(l.gross_amount).toFixed(2)}</span>
           </div>
         ))}
       </div>
-      <div className="mb-3 flex justify-between text-base font-semibold text-slate-900">
+      <div className="mb-3 flex justify-between text-base font-semibold text-slate-900 dark:text-slate-100">
         <span>Total</span>
         <span className="tabular-nums">{Number(detail.gross_amount).toFixed(2)}</span>
       </div>
@@ -1398,7 +1398,7 @@ export function QuotationDetailModal({ quotationId, onChanged }: { quotationId: 
             </>
           )}
           {isOwnQuotation && (
-            <button onClick={withdraw} disabled={busy} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+            <button onClick={withdraw} disabled={busy} className="rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">
               {busy ? "Working..." : "Withdraw"}
             </button>
           )}
@@ -1413,7 +1413,7 @@ export function QuotationDetailModal({ quotationId, onChanged }: { quotationId: 
             <button type="submit" disabled={busy} className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">
               {busy ? "Working..." : "Confirm Rejection"}
             </button>
-            <button type="button" onClick={() => setShowReject(false)} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+            <button type="button" onClick={() => setShowReject(false)} className="rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
               Cancel
             </button>
           </div>
@@ -1436,7 +1436,7 @@ export function QuotationDetailModal({ quotationId, onChanged }: { quotationId: 
           }}
         />
       )}
-      {detail.document_status === "converted_to_invoice" && <p className="text-xs text-slate-400">Already converted into a sales invoice.</p>}
+      {detail.document_status === "converted_to_invoice" && <p className="text-xs text-slate-400 dark:text-slate-500">Already converted into a sales invoice.</p>}
     </div>
   );
 }
@@ -1446,7 +1446,7 @@ function QuotationsTab() {
   const { data, error } = useApiList<SalesQuotation>("/api/sales-quotations");
 
   const columns: Column<SalesQuotation>[] = [
-    { key: "number", header: "Quotation #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "number", header: "Quotation #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
     { key: "customer", header: "Customer", render: (r) => r.customer_name_en },
     { key: "date", header: "Date", render: (r) => new Date(r.quotation_date).toLocaleDateString() },
     { key: "amount", header: "Total", render: (r) => Number(r.gross_amount).toFixed(2), numeric: true },
@@ -1551,15 +1551,15 @@ function NewPriceListForm({ onClose, onCreated }: { onClose: () => void; onCreat
           </SelectInput>
         </Field>
       </div>
-      <label className="mb-2 flex items-center gap-2 text-sm text-slate-600">
+      <label className="mb-2 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
         <input type="checkbox" checked={priceIncludesVat} onChange={(e) => setPriceIncludesVat(e.target.checked)} />
         Prices include VAT
       </label>
-      <label className="mb-3 flex items-center gap-2 text-sm text-slate-600">
+      <label className="mb-3 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
         <input type="checkbox" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />
         Make this the default price list
       </label>
-      <p className="mb-3 text-xs text-slate-400">Only one price list can be default per company — making this one default clears the current default.</p>
+      <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">Only one price list can be default per company — making this one default clears the current default.</p>
       <FormActions error={error} submitting={submitting} submitLabel="Create Price List" />
     </form>
   );
@@ -1630,7 +1630,7 @@ function PriceListDetail({ list, onChanged }: { list: PriceListRow; onChanged: (
 
   return (
     <div>
-      <div className="mb-4 flex items-end gap-2 rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-4 flex items-end gap-2 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
         <div className="min-w-0 flex-1">
           <Field label="Default Tax Code">
             <SelectInput value={taxCodeDraft} onChange={(e) => setTaxCodeDraft(e.target.value)}>
@@ -1646,12 +1646,12 @@ function PriceListDetail({ list, onChanged }: { list: PriceListRow; onChanged: (
         <button
           onClick={saveTaxCode}
           disabled={savingTaxCode || taxCodeDraft === (list.default_tax_code_id ?? "")}
-          className="mb-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+          className="mb-3 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50"
         >
           {savingTaxCode ? "Saving..." : "Save"}
         </button>
       </div>
-      <form onSubmit={setLinePrice} className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+      <form onSubmit={setLinePrice} className="mb-4 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_120px]">
           <Field label="Item">
             <SelectInput required value={itemVariantId} onChange={(e) => setItemVariantId(e.target.value)}>
@@ -1677,13 +1677,13 @@ function PriceListDetail({ list, onChanged }: { list: PriceListRow; onChanged: (
         </button>
       </form>
 
-      {prices && prices.length === 0 && <p className="text-sm text-slate-400">No prices set on this list yet.</p>}
+      {prices && prices.length === 0 && <p className="text-sm text-slate-400 dark:text-slate-500">No prices set on this list yet.</p>}
       <div className="space-y-1.5">
         {prices?.map((p) => (
-          <div key={p.item_variant_id} className="flex items-center justify-between rounded-md border border-slate-100 px-3 py-2 text-sm">
-            <span className="text-slate-700">{variantLabel(p.item_variant_id)}</span>
+          <div key={p.item_variant_id} className="flex items-center justify-between rounded-md border border-slate-100 dark:border-slate-800 px-3 py-2 text-sm">
+            <span className="text-slate-700 dark:text-slate-200">{variantLabel(p.item_variant_id)}</span>
             <div className="flex items-center gap-3">
-              <span className="font-medium tabular-nums text-slate-900">{Number(p.price).toFixed(2)}</span>
+              <span className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{Number(p.price).toFixed(2)}</span>
               <button
                 onClick={() => removeLine(p.item_variant_id)}
                 disabled={busyVariantId === p.item_variant_id}
@@ -1727,8 +1727,8 @@ function PriceListsTab() {
   }
 
   const columns: Column<PriceListRow>[] = [
-    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500">{r.code}</span> },
-    { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900">{r.name_en}</span> },
+    { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.code}</span> },
+    { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{r.name_en}</span> },
     { key: "currency", header: "Currency", render: (r) => r.currency },
     { key: "vat", header: "VAT", render: (r) => (r.price_includes_vat ? "Inclusive" : "Exclusive") },
     { key: "tax_code", header: "Tax Code", render: (r) => taxCodeLabel(r.default_tax_code_id) },
@@ -1905,7 +1905,7 @@ function IssueGiftCardForm({ onClose, onIssued }: { onClose: () => void; onIssue
         </SelectInput>
       </Field>
       {!openPeriodId && <p className="mb-2 text-xs text-red-600">No open fiscal period — cannot issue right now.</p>}
-      <p className="mb-3 mt-2 text-xs text-slate-400">
+      <p className="mb-3 mt-2 text-xs text-slate-400 dark:text-slate-500">
         Books Dr {paymentMethod} / Cr Gift Card Liability — a gift card sale is not revenue until the card is redeemed against a real sale.
       </p>
       <FormActions error={error} submitting={submitting || !openPeriodId} submitLabel="Issue Gift Card" />
@@ -1921,37 +1921,37 @@ function GiftCardDetailModal({ cardId, onClose }: { cardId: string; onClose: () 
     apiRequest<GiftCardDetail>(`/api/gift-cards/${cardId}`, { token, companyId }).then(setDetail);
   }, [cardId, token, companyId]);
 
-  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+  if (!detail) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <div className="font-mono text-sm text-slate-900">{detail.card_number}</div>
-          <div className="text-xs text-slate-500">
+          <div className="font-mono text-sm text-slate-900 dark:text-slate-100">{detail.card_number}</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">
             {detail.store_name_en}
             {detail.customer_name_en && ` · ${detail.customer_name_en}`}
           </div>
         </div>
         <StatusBadge status={detail.status} />
       </div>
-      <div className="mb-3 grid grid-cols-2 gap-2 rounded-md border border-slate-200 p-2 text-sm">
+      <div className="mb-3 grid grid-cols-2 gap-2 rounded-md border border-slate-200 dark:border-slate-700 p-2 text-sm">
         <div>
-          <div className="text-xs text-slate-400">Initial Value</div>
-          <div className="font-medium text-slate-900">{Number(detail.initial_value).toFixed(2)}</div>
+          <div className="text-xs text-slate-400 dark:text-slate-500">Initial Value</div>
+          <div className="font-medium text-slate-900 dark:text-slate-100">{Number(detail.initial_value).toFixed(2)}</div>
         </div>
         <div>
-          <div className="text-xs text-slate-400">Current Balance</div>
-          <div className="font-medium text-slate-900">{Number(detail.balance).toFixed(2)}</div>
+          <div className="text-xs text-slate-400 dark:text-slate-500">Current Balance</div>
+          <div className="font-medium text-slate-900 dark:text-slate-100">{Number(detail.balance).toFixed(2)}</div>
         </div>
       </div>
-      <div className="mb-1 text-sm font-medium text-slate-700">Transaction History</div>
+      <div className="mb-1 text-sm font-medium text-slate-700 dark:text-slate-200">Transaction History</div>
       <div className="space-y-1">
         {detail.transactions.map((t) => (
-          <div key={t.id} className="flex items-center justify-between rounded border border-slate-100 px-2 py-1.5 text-sm">
+          <div key={t.id} className="flex items-center justify-between rounded border border-slate-100 dark:border-slate-800 px-2 py-1.5 text-sm">
             <div>
-              <span className="capitalize text-slate-700">{t.transaction_type}</span>
-              {t.sales_invoice_number && <span className="ms-1.5 text-xs text-slate-400">({t.sales_invoice_number})</span>}
+              <span className="capitalize text-slate-700 dark:text-slate-200">{t.transaction_type}</span>
+              {t.sales_invoice_number && <span className="ms-1.5 text-xs text-slate-400 dark:text-slate-500">({t.sales_invoice_number})</span>}
             </div>
             <span className={`tabular-nums font-medium ${Number(t.amount) < 0 ? "text-red-600" : "text-green-600"}`}>
               {Number(t.amount) > 0 ? "+" : ""}
@@ -1971,7 +1971,7 @@ function GiftCardsTab() {
   const [detailId, setDetailId] = useState<string | null>(null);
 
   const columns: Column<GiftCard>[] = [
-    { key: "number", header: "Card #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.card_number}</span> },
+    { key: "number", header: "Card #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.card_number}</span> },
     { key: "store", header: "Store", render: (r) => r.store_name_en },
     { key: "customer", header: "Customer", render: (r) => r.customer_name_en ?? "—" },
     { key: "initial", header: "Initial Value", render: (r) => Number(r.initial_value).toFixed(2), numeric: true },
@@ -2124,7 +2124,7 @@ function RecordDepositForm({ onClose, onRecorded }: { onClose: () => void; onRec
         </Field>
       </div>
       {!openPeriodId && <p className="mb-2 text-xs text-red-600">No open fiscal period — cannot record right now.</p>}
-      <p className="mb-3 mt-2 text-xs text-slate-400">
+      <p className="mb-3 mt-2 text-xs text-slate-400 dark:text-slate-500">
         Books Dr {paymentMethod} / Cr Customer Deposits — a deposit is not revenue until it's applied to a real sale.
       </p>
       <FormActions error={error} submitting={submitting || !openPeriodId} submitLabel="Record Deposit" />
@@ -2140,37 +2140,37 @@ function CustomerDepositDetailModal({ depositId, onClose }: { depositId: string;
     apiRequest<CustomerDepositDetail>(`/api/customer-deposits/${depositId}`, { token, companyId }).then(setDetail);
   }, [depositId, token, companyId]);
 
-  if (!detail) return <p className="text-sm text-slate-400">Loading...</p>;
+  if (!detail) return <p className="text-sm text-slate-400 dark:text-slate-500">Loading...</p>;
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <div className="font-mono text-sm text-slate-900">{detail.document_number}</div>
-          <div className="text-xs text-slate-500">
+          <div className="font-mono text-sm text-slate-900 dark:text-slate-100">{detail.document_number}</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">
             {detail.store_name_en} · {detail.customer_name_en}
             {detail.reference && ` · ${detail.reference}`}
           </div>
         </div>
         <StatusBadge status={detail.status} />
       </div>
-      <div className="mb-3 grid grid-cols-2 gap-2 rounded-md border border-slate-200 p-2 text-sm">
+      <div className="mb-3 grid grid-cols-2 gap-2 rounded-md border border-slate-200 dark:border-slate-700 p-2 text-sm">
         <div>
-          <div className="text-xs text-slate-400">Initial Value</div>
-          <div className="font-medium text-slate-900">{Number(detail.initial_value).toFixed(2)}</div>
+          <div className="text-xs text-slate-400 dark:text-slate-500">Initial Value</div>
+          <div className="font-medium text-slate-900 dark:text-slate-100">{Number(detail.initial_value).toFixed(2)}</div>
         </div>
         <div>
-          <div className="text-xs text-slate-400">Current Balance</div>
-          <div className="font-medium text-slate-900">{Number(detail.balance).toFixed(2)}</div>
+          <div className="text-xs text-slate-400 dark:text-slate-500">Current Balance</div>
+          <div className="font-medium text-slate-900 dark:text-slate-100">{Number(detail.balance).toFixed(2)}</div>
         </div>
       </div>
-      <div className="mb-1 text-sm font-medium text-slate-700">Transaction History</div>
+      <div className="mb-1 text-sm font-medium text-slate-700 dark:text-slate-200">Transaction History</div>
       <div className="space-y-1">
         {detail.transactions.map((t) => (
-          <div key={t.id} className="flex items-center justify-between rounded border border-slate-100 px-2 py-1.5 text-sm">
+          <div key={t.id} className="flex items-center justify-between rounded border border-slate-100 dark:border-slate-800 px-2 py-1.5 text-sm">
             <div>
-              <span className="capitalize text-slate-700">{t.transaction_type}</span>
-              {t.sales_invoice_number && <span className="ms-1.5 text-xs text-slate-400">({t.sales_invoice_number})</span>}
+              <span className="capitalize text-slate-700 dark:text-slate-200">{t.transaction_type}</span>
+              {t.sales_invoice_number && <span className="ms-1.5 text-xs text-slate-400 dark:text-slate-500">({t.sales_invoice_number})</span>}
             </div>
             <span className={`tabular-nums font-medium ${Number(t.amount) < 0 ? "text-red-600" : "text-green-600"}`}>
               {Number(t.amount) > 0 ? "+" : ""}
@@ -2190,7 +2190,7 @@ function CustomerDepositsTab() {
   const [detailId, setDetailId] = useState<string | null>(null);
 
   const columns: Column<CustomerDeposit>[] = [
-    { key: "number", header: "Deposit #", render: (r) => <span className="font-mono text-xs text-slate-500">{r.document_number}</span> },
+    { key: "number", header: "Deposit #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
     { key: "customer", header: "Customer", render: (r) => r.customer_name_en },
     { key: "reference", header: "Reference", render: (r) => r.reference ?? "—" },
     { key: "initial", header: "Initial Value", render: (r) => Number(r.initial_value).toFixed(2), numeric: true },
@@ -2245,7 +2245,7 @@ export default function Sales() {
   );
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold text-slate-900">{t("nav.sales")}</h1>
+      <h1 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{t("nav.sales")}</h1>
       <Tabs tabs={tabs} initialActive={(location.state as { fromTab?: string } | null)?.fromTab} />
     </div>
   );
