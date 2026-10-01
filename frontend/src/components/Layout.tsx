@@ -42,13 +42,18 @@ import GlobalSearch from "./GlobalSearch";
 // that tab via the same `state: { fromTab }` mechanism every "New X" page
 // and Dashboard KPI tile already uses -- no new routing concept, just
 // surfacing the existing one one level higher, in the sidebar itself.
+// Each module carries its own accent color (mirrored from the Dashboard's
+// KPI tile palette) so the sidebar reads as a set of distinct departments
+// at a glance instead of one repeated brand-blue highlight -- color as a
+// wayfinding device, not just decoration.
 const navItems = [
-  { to: "/", label: "nav.dashboard", permission: null, icon: LayoutDashboard },
+  { to: "/", label: "nav.dashboard", permission: null, icon: LayoutDashboard, color: "brand" },
   {
     to: "/sales",
     label: "nav.sales",
     permission: "sales.pos_invoice.create",
     icon: Receipt,
+    color: "violet",
     subItems: [
       { key: "quotations", label: "Quotations" },
       { key: "invoices", label: "Sales Invoices" },
@@ -68,6 +73,7 @@ const navItems = [
     label: "nav.inventory",
     permission: ["inventory.adjustment.post", "inventory.items.manage"],
     icon: Warehouse,
+    color: "teal",
     subItems: [
       { key: "items", label: "Items" },
       { key: "stock", label: "Stock" },
@@ -81,6 +87,7 @@ const navItems = [
     label: "nav.purchasing",
     permission: "purchasing.po.create",
     icon: ShoppingCart,
+    color: "amber",
     subItems: [
       { key: "requisitions", label: "Requisitions" },
       { key: "reorder", label: "Reorder Suggestions" },
@@ -96,6 +103,7 @@ const navItems = [
     label: "nav.accounting",
     permission: "accounting.journal.post",
     icon: Landmark,
+    color: "green",
     subItems: [
       { key: "coa", label: "Chart of Accounts" },
       { key: "customers", label: "Customers" },
@@ -116,6 +124,7 @@ const navItems = [
     label: "nav.reports",
     permission: "accounting.reports.view",
     icon: BarChart3,
+    color: "sky",
     subItems: [
       { key: "tb", label: "Trial Balance" },
       { key: "is", label: "Income Statement" },
@@ -132,6 +141,7 @@ const navItems = [
     label: "nav.hr",
     permission: "hr.employee.manage",
     icon: UserCog,
+    color: "pink",
     subItems: [
       { key: "employees", label: "Employees" },
       { key: "payroll", label: "Payroll Runs" },
@@ -142,6 +152,7 @@ const navItems = [
     label: "nav.assets",
     permission: "assets.fixed_asset.manage",
     icon: Building2,
+    color: "cyan",
     subItems: [
       { key: "assets", label: "Assets" },
       { key: "depreciation", label: "Depreciation Runs" },
@@ -152,6 +163,7 @@ const navItems = [
     label: "nav.admin",
     permission: "admin.users.manage",
     icon: ShieldCheck,
+    color: "indigo",
     subItems: [
       { key: "company", label: "Company Profile" },
       { key: "branches-stores", label: "Branches & Stores" },
@@ -165,6 +177,44 @@ const navItems = [
     ],
   },
 ] as const;
+
+// Static class strings (not template-built) so Tailwind's scanner picks
+// them all up -- one entry per navItem color above.
+const NAV_ACTIVE_CLASSES: Record<string, string> = {
+  brand: "border-brand-500 bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-300",
+  violet: "border-violet-500 bg-violet-50 font-medium text-violet-700 dark:bg-violet-500/15 dark:text-violet-300",
+  teal: "border-teal-500 bg-teal-50 font-medium text-teal-700 dark:bg-teal-500/15 dark:text-teal-300",
+  amber: "border-amber-500 bg-amber-50 font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  green: "border-green-500 bg-green-50 font-medium text-green-700 dark:bg-green-500/15 dark:text-green-300",
+  sky: "border-sky-500 bg-sky-50 font-medium text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
+  pink: "border-pink-500 bg-pink-50 font-medium text-pink-700 dark:bg-pink-500/15 dark:text-pink-300",
+  cyan: "border-cyan-500 bg-cyan-50 font-medium text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300",
+  indigo: "border-indigo-500 bg-indigo-50 font-medium text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300",
+};
+
+const NAV_SUBACTIVE_CLASSES: Record<string, string> = {
+  brand: "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-300",
+  violet: "bg-violet-50 font-medium text-violet-700 dark:bg-violet-500/15 dark:text-violet-300",
+  teal: "bg-teal-50 font-medium text-teal-700 dark:bg-teal-500/15 dark:text-teal-300",
+  amber: "bg-amber-50 font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  green: "bg-green-50 font-medium text-green-700 dark:bg-green-500/15 dark:text-green-300",
+  sky: "bg-sky-50 font-medium text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
+  pink: "bg-pink-50 font-medium text-pink-700 dark:bg-pink-500/15 dark:text-pink-300",
+  cyan: "bg-cyan-50 font-medium text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300",
+  indigo: "bg-indigo-50 font-medium text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300",
+};
+
+const NAV_ICON_CLASSES: Record<string, string> = {
+  brand: "text-brand-500 dark:text-brand-400",
+  violet: "text-violet-500 dark:text-violet-400",
+  teal: "text-teal-500 dark:text-teal-400",
+  amber: "text-amber-500 dark:text-amber-400",
+  green: "text-green-500 dark:text-green-400",
+  sky: "text-sky-500 dark:text-sky-400",
+  pink: "text-pink-500 dark:text-pink-400",
+  cyan: "text-cyan-500 dark:text-cyan-400",
+  indigo: "text-indigo-500 dark:text-indigo-400",
+};
 
 function initials(email: string): string {
   const name = email.split("@")[0] ?? "?";
@@ -385,12 +435,14 @@ export default function Layout() {
               const indent = "indent" in item && item.indent;
               const subItems = "subItems" in item ? item.subItems : null;
               const isOpen = !!expanded[item.to];
+              const isActive = location.pathname === item.to || (item.to !== "/" && location.pathname.startsWith(item.to));
+              const iconColorClass = NAV_ICON_CLASSES[item.color] ?? "";
               return (
                 <div key={item.to}>
                   <div
                     className={`flex items-center rounded-md border-s-[3px] text-sm transition-colors ${indent ? "ms-4" : ""} ${
-                      location.pathname === item.to || (item.to !== "/" && location.pathname.startsWith(item.to))
-                        ? "border-brand-500 bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+                      isActive
+                        ? NAV_ACTIVE_CLASSES[item.color]
                         : "border-transparent text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
                     }`}
                   >
@@ -403,7 +455,7 @@ export default function Layout() {
                         onClick={() => setExpanded((prev) => ({ ...prev, [item.to]: !prev[item.to] }))}
                         className={`flex min-w-0 flex-1 items-center gap-2.5 py-2 text-start ${indent ? "ps-2 pe-1 text-[13px]" : "px-2.5"}`}
                       >
-                        <Icon size={indent ? 14 : 16} strokeWidth={2} className="shrink-0" />
+                        <Icon size={indent ? 14 : 16} strokeWidth={2} className={`shrink-0 ${isActive ? "" : iconColorClass}`} />
                         <span className="truncate">{t(item.label)}</span>
                       </button>
                     ) : (
@@ -412,7 +464,7 @@ export default function Layout() {
                         end={item.to === "/"}
                         className={`flex min-w-0 flex-1 items-center gap-2.5 py-2 ${indent ? "ps-2 pe-1 text-[13px]" : "px-2.5"}`}
                       >
-                        <Icon size={indent ? 14 : 16} strokeWidth={2} className="shrink-0" />
+                        <Icon size={indent ? 14 : 16} strokeWidth={2} className={`shrink-0 ${isActive ? "" : iconColorClass}`} />
                         <span className="truncate">{t(item.label)}</span>
                       </NavLink>
                     )}
@@ -444,7 +496,7 @@ export default function Layout() {
                             }
                             className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-[13px] ${
                               isSubActive
-                                ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+                                ? NAV_SUBACTIVE_CLASSES[item.color]
                                 : "text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
                             }`}
                           >

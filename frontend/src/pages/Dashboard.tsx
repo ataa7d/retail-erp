@@ -229,7 +229,7 @@ export default function Dashboard() {
           label="Sales This Month"
           value={loading ? "—" : formatMoney(summary.monthToDateSales.total)}
           icon={CalendarDays}
-          accent="brand"
+          accent="violet"
           loading={loading}
         />
         <KpiTile
@@ -237,7 +237,7 @@ export default function Dashboard() {
           label="Inventory Value"
           value={loading ? "—" : formatMoney(summary.inventoryValue)}
           icon={Warehouse}
-          accent="slate"
+          accent="teal"
           loading={loading}
         />
         <KpiTile
@@ -263,7 +263,7 @@ export default function Dashboard() {
           label="Low Stock Alerts"
           value={loading ? "—" : summary.lowStockCount}
           icon={AlertTriangle}
-          accent={!loading && summary.lowStockCount > 0 ? "amber" : "slate"}
+          accent={!loading && summary.lowStockCount > 0 ? "rose" : "slate"}
           loading={loading}
         />
         <KpiTile
@@ -272,7 +272,7 @@ export default function Dashboard() {
           label={t("nav.items")}
           value={itemCount ?? "—"}
           icon={Package}
-          accent="brand"
+          accent="sky"
           loading={itemCount === null}
         />
         <KpiTile
@@ -281,14 +281,14 @@ export default function Dashboard() {
           label={t("nav.customers")}
           value={customerCount ?? "—"}
           icon={Users}
-          accent="green"
+          accent="indigo"
           loading={customerCount === null}
         />
         {hasPermission("hr.employee.manage") && (
-          <KpiTile to="/hr" label={t("nav.hr")} value={employeeCount ?? "—"} icon={UserCog} accent="amber" loading={employeeCount === null} />
+          <KpiTile to="/hr" label={t("nav.hr")} value={employeeCount ?? "—"} icon={UserCog} accent="pink" loading={employeeCount === null} />
         )}
         {hasPermission("assets.fixed_asset.manage") && (
-          <KpiTile to="/assets" label={t("nav.assets")} value={assetCount ?? "—"} icon={Building2} accent="slate" loading={assetCount === null} />
+          <KpiTile to="/assets" label={t("nav.assets")} value={assetCount ?? "—"} icon={Building2} accent="cyan" loading={assetCount === null} />
         )}
       </div>
       <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">Sales and stock figures are in {currency}.</p>
