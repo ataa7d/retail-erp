@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Plus, Minus, Trash2, WifiOff, Wifi, RefreshCw, LogOut, X, ShoppingCart, Wallet, PauseCircle, Printer } from "lucide-react";
+import { Search, Plus, Minus, Trash2, WifiOff, Wifi, RefreshCw, LogOut, X, ShoppingCart, Wallet, PauseCircle, Printer, Percent } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -143,6 +143,148 @@ const DEVICE_KEY = "pos_terminal_device_id";
 const seqKey = (deviceId: string) => `pos_terminal_seq_${deviceId}`;
 const queueKey = (deviceId: string) => `pos_terminal_queue_${deviceId}`;
 const heldKey = (deviceId: string) => `pos_terminal_held_${deviceId}`;
+
+interface Discount {
+  type: "amount" | "percent";
+  value: number;
+  authorizedByEmail: string;
+}
+
+/**
+ * Two-step flow: the cashier enters what discount to apply, then a
+ * manager/supervisor (not necessarily the cashier) must authenticate with
+ * their own email+password. verify-step-up checks that login against
+ * sales.pos_invoice.discount without touching the cashier's own session.
+ */
+function DiscountModal({ subtotal, onClose, onApply }: { subtotal: number; onClose: () => void; onApply: (d: Discount) => void }) {
+  const { token, companyId } = useAuth();
+  const [step, setStep] = useState<"amount" | "auth">("amount");
+  const [type, setType] = useState<"amount" | "percent">("percent");
+  const [value, setValue] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const numericValue = Number(value || 0);
+  const previewAmount = type === "percent" ? (subtotal * numericValue) / 100 : numericValue;
+
+  function proceed() {
+    if (!(numericValue > 0)) {
+      setError("Enter a discount greater than zero");
+      return;
+    }
+    if (type === "percent" && numericValue > 100) {
+      setError("Percentage can't exceed 100");
+      return;
+    }
+    if (type === "amount" && numericValue > subtotal) {
+      setError("Discount can't exceed the sale total");
+      return;
+    }
+    setError(null);
+    setStep("auth");
+  }
+
+  async function authorize() {
+    setError(null);
+    setBusy(true);
+    try {
+      await apiRequest("/api/auth/verify-step-up", {
+        method: "POST",
+        token,
+        companyId,
+        body: { email, password, permission: "sales.pos_invoice.discount" },
+      });
+      onApply({ type, value: numericValue, authorizedByEmail: email });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Authorization failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-sm rounded-lg bg-white p-4 shadow-xl dark:bg-slate-800">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Apply Discount</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+            <X size={16} />
+          </button>
+        </div>
+
+        {step === "amount" ? (
+          <>
+            <div className="mb-3 flex gap-2">
+              <button
+                onClick={() => setType("percent")}
+                className={`flex-1 rounded-md border px-2 py-1.5 text-sm ${type === "percent" ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300" : "border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400"}`}
+              >
+                Percent %
+              </button>
+              <button
+                onClick={() => setType("amount")}
+                className={`flex-1 rounded-md border px-2 py-1.5 text-sm ${type === "amount" ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300" : "border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400"}`}
+              >
+                Fixed Amount
+              </button>
+            </div>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              autoFocus
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={type === "percent" ? "e.g. 10" : "e.g. 25.00"}
+              className="mb-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm tabular-nums focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900"
+            />
+            {numericValue > 0 && <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">Discount amount: {previewAmount.toFixed(2)}</p>}
+            {error && <p className="mb-3 text-xs text-red-600 dark:text-red-400">{error}</p>}
+            <button onClick={proceed} className="w-full rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600">
+              Continue
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+              A manager or supervisor with discount authority must sign in to approve this {previewAmount.toFixed(2)} discount.
+            </p>
+            <input
+              type="email"
+              autoFocus
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Manager email"
+              className="mb-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900"
+            />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              className="mb-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900"
+            />
+            {error && <p className="mb-3 text-xs text-red-600 dark:text-red-400">{error}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={authorize}
+                disabled={busy || !email || !password}
+                className="flex-1 rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+              >
+                {busy ? "Checking..." : "Authorize"}
+              </button>
+              <button onClick={() => setStep("amount")} className="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                Back
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function loadSeq(deviceId: string, fallback: number): number {
   const raw = localStorage.getItem(seqKey(deviceId));
@@ -460,6 +602,8 @@ export default function Pos() {
   const [showCloseShift, setShowCloseShift] = useState(false);
   const [held, setHeld] = useState<HeldSale[]>(() => (deviceId ? loadHeld(deviceId) : []));
   const [showHeld, setShowHeld] = useState(false);
+  const [discount, setDiscount] = useState<Discount | null>(null);
+  const [showDiscount, setShowDiscount] = useState(false);
 
   useEffect(() => {
     if (!token || !companyId || !deviceId) {
@@ -536,6 +680,7 @@ export default function Pos() {
     saveHeld(deviceId, next);
     setCart([]);
     setCustomerId("");
+    setDiscount(null);
   }
 
   function resumeHeld(id: string) {
@@ -598,9 +743,14 @@ export default function Pos() {
     }
   }
 
-  const total = cart.reduce((sum, l) => sum + l.qty * l.unitPrice, 0);
+  const subtotal = cart.reduce((sum, l) => sum + l.qty * l.unitPrice, 0);
+  const discountValue = discount
+    ? Math.min(subtotal, discount.type === "percent" ? (subtotal * discount.value) / 100 : discount.value)
+    : 0;
+  const total = subtotal - discountValue;
   const net = total / (1 + VAT_RATE / 100);
   const vat = total - net;
+  const lineDiscounts = cart.map((l) => (subtotal > 0 ? Number(((discountValue * (l.qty * l.unitPrice)) / subtotal).toFixed(2)) : 0));
   const change = paymentMethod === "cash" ? Math.max(0, Number(tendered || 0) - total) : 0;
   const giftCardReady = giftCard !== null && giftCard.card_number === giftCardNumber.trim().toUpperCase() && giftCard.status === "active" && Number(giftCard.balance) >= total;
   const selectedCustomer = customers?.find((c) => c.id === customerId) ?? null;
@@ -695,12 +845,20 @@ export default function Pos() {
         invoiceDate: new Date().toISOString().slice(0, 10),
         fiscalPeriodId: openPeriodId,
         customerId: customerId || null,
-        lines: cart.map((l) => ({
+        lines: cart.map((l, i) => ({
           itemVariantId: l.itemVariantId,
           itemDescription: l.label,
           qty: l.qty,
           unitPrice: l.unitPrice,
-          discountAmount: 0,
+          // Discount is entered once for the whole sale, then spread across
+          // lines proportionally to each line's share of the subtotal --
+          // the backend only knows a per-line discountAmount, not an
+          // order-level one. The last line absorbs the rounding remainder
+          // so the sum always matches discountValue exactly.
+          discountAmount:
+            i === cart.length - 1
+              ? Number((discountValue - lineDiscounts.slice(0, -1).reduce((s, d) => s + d, 0)).toFixed(2))
+              : lineDiscounts[i],
           vatRate: VAT_RATE,
           priceIncludesVat: true,
         })),
@@ -738,6 +896,7 @@ export default function Pos() {
           setGiftCard(null);
           setDepositNumber("");
           setDeposit(null);
+          setDiscount(null);
           return;
         } catch {
           // fall through to offline queue on network failure -- except for
@@ -772,6 +931,7 @@ export default function Pos() {
       });
       setCart([]);
       setTendered("");
+      setDiscount(null);
     } finally {
       setCharging(false);
     }
@@ -948,6 +1108,24 @@ export default function Pos() {
 
           <div className="border-t border-slate-200 dark:border-slate-700 p-3">
             <div className="mb-2 space-y-1 text-sm">
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setShowDiscount(true)}
+                  disabled={cart.length === 0}
+                  className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-40 dark:text-brand-400"
+                >
+                  <Percent size={13} /> {discount ? "Edit discount" : "Add discount"}
+                </button>
+                {discount && (
+                  <span className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                    <span className="tabular-nums">-{discountValue.toFixed(2)}</span>
+                    <span className="text-slate-400 dark:text-slate-500">by {discount.authorizedByEmail}</span>
+                    <button onClick={() => setDiscount(null)} className="text-slate-400 hover:text-red-500">
+                      <X size={12} />
+                    </button>
+                  </span>
+                )}
+              </div>
               <div className="flex justify-between text-slate-500 dark:text-slate-400">
                 <span>Net</span>
                 <span className="tabular-nums">{net.toFixed(2)}</span>
@@ -961,6 +1139,17 @@ export default function Pos() {
                 <span className="tabular-nums">{total.toFixed(2)}</span>
               </div>
             </div>
+
+            {showDiscount && (
+              <DiscountModal
+                subtotal={subtotal}
+                onClose={() => setShowDiscount(false)}
+                onApply={(d) => {
+                  setDiscount(d);
+                  setShowDiscount(false);
+                }}
+              />
+            )}
 
             <div className="mb-2 grid grid-cols-3 gap-1.5">
               <button
