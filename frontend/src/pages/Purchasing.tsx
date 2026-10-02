@@ -64,13 +64,6 @@ interface Store {
   name_en: string;
 }
 
-interface FiscalPeriod {
-  id: string;
-  period_number: number;
-  year_name: string;
-  status: string;
-}
-
 interface ItemVariant {
   id: string;
   variant_code: string;
@@ -641,15 +634,12 @@ export function NewPurchaseOrderForm({
   const baseCurrency = useBaseCurrency();
   const { data: suppliers } = useApiList<Supplier>("/api/suppliers");
   const { data: stores } = useApiList<Store>("/api/stores");
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
-  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
   const { options: variantOptions, reload: reloadVariants } = useVariantOptions();
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
 
   const [supplierId, setSupplierId] = useState(initial?.supplierId ?? "");
   const [storeId, setStoreId] = useState(initial?.storeId ?? "");
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [orderDate, setOrderDate] = useState(new Date().toISOString().slice(0, 10));
   const [expectedDate, setExpectedDate] = useState("");
   const [currency, setCurrency] = useState(baseCurrency);
@@ -739,7 +729,6 @@ export function NewPurchaseOrderForm({
           supplierId,
           orderDate,
           expectedDate: expectedDate || null,
-          fiscalPeriodId,
           lines: lines
             .filter((l) => l.itemVariantId)
             .map((l) => ({
@@ -803,16 +792,6 @@ export function NewPurchaseOrderForm({
         </Field>
         <ExchangeRateField currency={currency} date={orderDate} value={exchangeRate} onChange={setExchangeRate} />
       </div>
-      <Field label="Fiscal Period" required>
-        <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-          <option value="">Select...</option>
-          {openPeriods.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.year_name} — P{p.period_number}
-            </option>
-          ))}
-        </SelectInput>
-      </Field>
 
       <div className="mb-2 mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">Lines</div>
       <div className="space-y-2">
@@ -902,14 +881,11 @@ export function NewPurchaseOrderForm({
 export function NewGoodsReceiptForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: purchaseOrders } = useApiList<PurchaseOrder>("/api/purchase-orders");
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
-  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
   const postedPOs = purchaseOrders?.filter((po) => po.document_status === "posted") ?? [];
 
   const [purchaseOrderId, setPurchaseOrderId] = useState("");
   const [poDetail, setPoDetail] = useState<PoDetail | null>(null);
   const [receiptDate, setReceiptDate] = useState(new Date().toISOString().slice(0, 10));
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [qtyByLine, setQtyByLine] = useState<Record<string, string>>({});
   const [exchangeRate, setExchangeRate] = useState("1");
   const [error, setError] = useState<string | null>(null);
@@ -995,7 +971,6 @@ export function NewGoodsReceiptForm({ onClose, onCreated }: { onClose: () => voi
           purchaseOrderId: poDetail.id,
           supplierId: poDetail.supplier_id,
           receiptDate,
-          fiscalPeriodId,
           lines,
           exchangeRate: poDetail.currency === baseCurrency ? null : Number(exchangeRate),
         },
@@ -1025,16 +1000,6 @@ export function NewGoodsReceiptForm({ onClose, onCreated }: { onClose: () => voi
       <div className="grid grid-cols-2 gap-3">
         <Field label="Receipt Date" required>
           <TextInput type="date" required value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} />
-        </Field>
-        <Field label="Fiscal Period" required>
-          <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-            <option value="">Select...</option>
-            {openPeriods.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.year_name} — P{p.period_number}
-              </option>
-            ))}
-          </SelectInput>
         </Field>
       </div>
       {poDetail && (
@@ -1102,8 +1067,6 @@ export function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => 
   const { token, companyId } = useAuth();
   const { data: purchaseOrders } = useApiList<PurchaseOrder>("/api/purchase-orders");
   const { data: goodsReceipts } = useApiList<GoodsReceipt>("/api/goods-receipts");
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
-  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
   const postedPOs = purchaseOrders?.filter((po) => po.document_status === "posted") ?? [];
 
   const [purchaseOrderId, setPurchaseOrderId] = useState("");
@@ -1112,7 +1075,6 @@ export function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => 
   const [grDetail, setGrDetail] = useState<GrDetail | null>(null);
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [lineData, setLineData] = useState<Record<string, { qty: string; unitPrice: string; vatRate: string; priceIncludesVat: boolean }>>({});
   const [exchangeRate, setExchangeRate] = useState("1");
   const [error, setError] = useState<string | null>(null);
@@ -1165,7 +1127,6 @@ export function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => 
           purchaseOrderId,
           supplierInvoiceNumber,
           invoiceDate,
-          fiscalPeriodId,
           lines,
           exchangeRate: (selectedPo?.currency ?? baseCurrency) === baseCurrency ? null : Number(exchangeRate),
         },
@@ -1210,16 +1171,6 @@ export function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => 
           <TextInput type="date" required value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
         </Field>
       </div>
-      <Field label="Fiscal Period" required>
-        <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-          <option value="">Select...</option>
-          {openPeriods.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.year_name} — P{p.period_number}
-            </option>
-          ))}
-        </SelectInput>
-      </Field>
       {selectedPo && (
         <ExchangeRateField currency={selectedPo.currency} date={invoiceDate} value={exchangeRate} onChange={setExchangeRate} />
       )}
@@ -1386,15 +1337,12 @@ function SupplierInvoicesTab() {
 export function NewSupplierCreditNoteForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: supplierInvoices } = useApiList<SupplierInvoice>("/api/supplier-invoices");
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
-  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
   const postedInvoices = supplierInvoices?.filter((si) => si.document_status === "posted") ?? [];
 
   const [originalInvoiceId, setOriginalInvoiceId] = useState("");
   const [storeId, setStoreId] = useState<string | null>(null);
   const [returnableLines, setReturnableLines] = useState<ReturnableLine[] | null>(null);
   const [creditNoteDate, setCreditNoteDate] = useState(new Date().toISOString().slice(0, 10));
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [reason, setReason] = useState("");
   const [qtyByLine, setQtyByLine] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -1449,7 +1397,6 @@ export function NewSupplierCreditNoteForm({ onClose, onCreated }: { onClose: () 
           supplierId: selectedInvoice.supplier_id,
           originalInvoiceId,
           creditNoteDate,
-          fiscalPeriodId,
           reason,
           lines,
         },
@@ -1476,21 +1423,9 @@ export function NewSupplierCreditNoteForm({ onClose, onCreated }: { onClose: () 
           ))}
         </SelectInput>
       </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Credit Note Date" required>
-          <TextInput type="date" required value={creditNoteDate} onChange={(e) => setCreditNoteDate(e.target.value)} />
-        </Field>
-        <Field label="Fiscal Period" required>
-          <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-            <option value="">Select...</option>
-            {openPeriods.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.year_name} — P{p.period_number}
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
-      </div>
+      <Field label="Credit Note Date" required>
+        <TextInput type="date" required value={creditNoteDate} onChange={(e) => setCreditNoteDate(e.target.value)} />
+      </Field>
       <Field label="Reason" required>
         <TextInput required value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. damaged on arrival, wrong item shipped" />
       </Field>
@@ -1795,13 +1730,10 @@ function ConvertRequisitionForm({ requisition, onClose, onConverted }: { requisi
   const { token, companyId } = useAuth();
   const baseCurrency = useBaseCurrency();
   const { data: suppliers } = useApiList<Supplier>("/api/suppliers");
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
-  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
 
   const [supplierId, setSupplierId] = useState("");
   const [orderDate, setOrderDate] = useState(new Date().toISOString().slice(0, 10));
   const [expectedDate, setExpectedDate] = useState("");
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [lineData, setLineData] = useState<Record<string, { unitPrice: string; vatRate: string; priceIncludesVat: boolean }>>(
     Object.fromEntries(requisition.lines.map((l) => [l.id, { unitPrice: "0", vatRate: "15", priceIncludesVat: false }])),
   );
@@ -1822,7 +1754,6 @@ function ConvertRequisitionForm({ requisition, onClose, onConverted }: { requisi
           supplierId,
           orderDate,
           expectedDate: expectedDate || null,
-          fiscalPeriodId,
           lines: requisition.lines.map((l) => ({
             requisitionLineId: l.id,
             itemVariantId: l.item_variant_id,
@@ -1852,16 +1783,6 @@ function ConvertRequisitionForm({ requisition, onClose, onConverted }: { requisi
             {suppliers?.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name_en} ({s.currency})
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
-        <Field label="Fiscal Period" required>
-          <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-            <option value="">Select...</option>
-            {openPeriods.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.year_name} — P{p.period_number}
               </option>
             ))}
           </SelectInput>

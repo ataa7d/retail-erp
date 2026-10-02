@@ -31,11 +31,6 @@ interface Customer {
   loyalty_points_balance: number;
 }
 
-interface FiscalPeriod {
-  id: string;
-  status: string;
-}
-
 interface ItemBarcode {
   barcode: string;
   unitOfMeasureId: string;
@@ -82,7 +77,6 @@ interface QueuedInvoicePayload {
   storeId: string;
   zatcaInvoiceCategory: "simplified";
   invoiceDate: string;
-  fiscalPeriodId: string;
   customerId: string | null;
   lines: Array<{
     itemVariantId: string;
@@ -546,7 +540,6 @@ export default function Pos() {
   const [deviceId, setDeviceId] = useState<string | null>(() => localStorage.getItem(DEVICE_KEY));
   const { data: devices } = useApiList<PosDevice>("/api/pos-devices");
   const { data: customers } = useApiList<Customer>("/api/customers");
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
   const { data: items } = useApiList<PosItem>("/api/items");
   const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
   const { data: stores } = useApiList<Store>("/api/stores");
@@ -576,7 +569,6 @@ export default function Pos() {
   // picked, just without the dropdown.
   const effectivePriceListId = device?.price_list_id ?? store?.default_price_list_id ?? priceLists?.find((p) => p.is_default)?.id ?? null;
   const { data: priceListItems } = useApiList<PriceListItem>(effectivePriceListId ? `/api/price-lists/${effectivePriceListId}/items` : null);
-  const openPeriodId = periods?.find((p) => p.status === "open")?.id ?? "";
 
   const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -834,7 +826,7 @@ export default function Pos() {
   }, [online, device?.id]);
 
   async function charge() {
-    if (!device || cart.length === 0 || !openPeriodId || !shiftId) return;
+    if (!device || cart.length === 0 || !shiftId) return;
     if (paymentMethod === "gift_card" && (!online || !giftCardReady)) return;
     if (paymentMethod === "points" && (!online || !pointsReady)) return;
     if (paymentMethod === "deposit" && (!online || !depositReady)) return;
@@ -848,7 +840,6 @@ export default function Pos() {
         storeId: device.store_id,
         zatcaInvoiceCategory: "simplified",
         invoiceDate: new Date().toISOString().slice(0, 10),
-        fiscalPeriodId: openPeriodId,
         customerId: customerId || null,
         lines: cart.map((l, i) => ({
           itemVariantId: l.itemVariantId,
@@ -997,12 +988,6 @@ export default function Pos() {
           </button>
         </div>
       </header>
-
-      {!openPeriodId && (
-        <div className="bg-red-600 px-4 py-1.5 text-center text-xs font-medium text-white">
-          No open fiscal period — sales cannot be posted right now.
-        </div>
-      )}
 
       <div className="flex min-h-0 flex-1">
         {/* Product grid */}
@@ -1304,7 +1289,6 @@ export default function Pos() {
               disabled={
                 cart.length === 0 ||
                 charging ||
-                !openPeriodId ||
                 !shiftId ||
                 (paymentMethod === "cash" && Number(tendered || 0) < total) ||
                 (paymentMethod === "gift_card" && !giftCardReady) ||

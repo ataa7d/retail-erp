@@ -30,13 +30,6 @@ interface AssetCategory {
   name_en: string;
 }
 
-interface FiscalPeriod {
-  id: string;
-  period_number: number;
-  year_name: string;
-  status: string;
-}
-
 interface DepreciationRun {
   id: string;
   document_number: string;
@@ -47,15 +40,12 @@ interface DepreciationRun {
 function AcquireAssetForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: categories } = useApiList<AssetCategory>("/api/asset-categories");
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
-  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
   const [assetCategoryId, setAssetCategoryId] = useState("");
   const [assetCode, setAssetCode] = useState("");
   const [nameEn, setNameEn] = useState("");
   const [nameAr, setNameAr] = useState("");
   const [acquisitionDate, setAcquisitionDate] = useState(new Date().toISOString().slice(0, 10));
   const [acquisitionCost, setAcquisitionCost] = useState(0);
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -68,7 +58,7 @@ function AcquireAssetForm({ onClose, onCreated }: { onClose: () => void; onCreat
         method: "POST",
         token,
         companyId,
-        body: { assetCategoryId, assetCode, nameEn, nameAr, acquisitionDate, acquisitionCost, salvageValue: 0, fiscalPeriodId },
+        body: { assetCategoryId, assetCode, nameEn, nameAr, acquisitionDate, acquisitionCost, salvageValue: 0 },
       });
       onCreated();
       onClose();
@@ -106,16 +96,6 @@ function AcquireAssetForm({ onClose, onCreated }: { onClose: () => void; onCreat
       <Field label="Acquisition Cost" required>
         <TextInput type="number" min={0.01} step="0.01" required value={acquisitionCost} onChange={(e) => setAcquisitionCost(Number(e.target.value))} />
       </Field>
-      <Field label="Fiscal Period" required>
-        <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-          <option value="">Select a period...</option>
-          {openPeriods.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.year_name} — Period {p.period_number}
-            </option>
-          ))}
-        </SelectInput>
-      </Field>
       <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">Books a cash-purchase journal (Dr Fixed Asset / Cr Cash) immediately.</p>
       <FormActions error={error} submitting={submitting} submitLabel="Acquire Asset" />
     </form>
@@ -124,9 +104,6 @@ function AcquireAssetForm({ onClose, onCreated }: { onClose: () => void; onCreat
 
 function NewDepreciationRunForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
-  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [runDate, setRunDate] = useState(new Date().toISOString().slice(0, 10));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -140,7 +117,7 @@ function NewDepreciationRunForm({ onClose, onCreated }: { onClose: () => void; o
         method: "POST",
         token,
         companyId,
-        body: { fiscalPeriodId, runDate },
+        body: { runDate },
       });
       await apiRequest(`/api/depreciation-runs/${created.id}/post`, { method: "POST", token, companyId });
       onCreated();
@@ -154,16 +131,6 @@ function NewDepreciationRunForm({ onClose, onCreated }: { onClose: () => void; o
 
   return (
     <form onSubmit={handleSubmit}>
-      <Field label="Fiscal Period" required>
-        <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-          <option value="">Select a period...</option>
-          {openPeriods.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.year_name} — Period {p.period_number}
-            </option>
-          ))}
-        </SelectInput>
-      </Field>
       <Field label="Run Date" required>
         <TextInput type="date" required value={runDate} onChange={(e) => setRunDate(e.target.value)} />
       </Field>
@@ -177,11 +144,8 @@ function NewDepreciationRunForm({ onClose, onCreated }: { onClose: () => void; o
 
 function DisposeAssetForm({ asset, onClose, onDisposed }: { asset: FixedAsset; onClose: () => void; onDisposed: () => void }) {
   const { token, companyId } = useAuth();
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
-  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
   const [disposalDate, setDisposalDate] = useState(new Date().toISOString().slice(0, 10));
   const [proceeds, setProceeds] = useState(0);
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -197,7 +161,7 @@ function DisposeAssetForm({ asset, onClose, onDisposed }: { asset: FixedAsset; o
         method: "POST",
         token,
         companyId,
-        body: { disposalDate, proceeds, fiscalPeriodId },
+        body: { disposalDate, proceeds },
       });
       onDisposed();
       onClose();
@@ -219,16 +183,6 @@ function DisposeAssetForm({ asset, onClose, onDisposed }: { asset: FixedAsset; o
       </Field>
       <Field label="Proceeds" required>
         <TextInput type="number" min={0} step="0.01" required value={proceeds} onChange={(e) => setProceeds(Number(e.target.value))} />
-      </Field>
-      <Field label="Fiscal Period" required>
-        <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-          <option value="">Select a period...</option>
-          {openPeriods.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.year_name} — Period {p.period_number}
-            </option>
-          ))}
-        </SelectInput>
       </Field>
       <p className={`mb-3 text-xs ${gainLoss === 0 ? "text-slate-400 dark:text-slate-500" : gainLoss > 0 ? "text-emerald-600" : "text-red-600"}`}>
         {gainLoss === 0

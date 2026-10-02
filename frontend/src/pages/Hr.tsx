@@ -36,15 +36,6 @@ interface Position {
   name_en: string;
 }
 
-interface FiscalPeriod {
-  id: string;
-  period_number: number;
-  year_name: string;
-  start_date: string;
-  end_date: string;
-  status: string;
-}
-
 interface PayrollRun {
   id: string;
   document_number: string;
@@ -163,9 +154,6 @@ function NewEmployeeForm({ onClose, onCreated }: { onClose: () => void; onCreate
 
 function NewPayrollRunForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
-  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [payPeriodStart, setPayPeriodStart] = useState("");
   const [payPeriodEnd, setPayPeriodEnd] = useState("");
   const [runDate, setRunDate] = useState(new Date().toISOString().slice(0, 10));
@@ -181,7 +169,7 @@ function NewPayrollRunForm({ onClose, onCreated }: { onClose: () => void; onCrea
         method: "POST",
         token,
         companyId,
-        body: { fiscalPeriodId, payPeriodStart, payPeriodEnd, runDate },
+        body: { payPeriodStart, payPeriodEnd, runDate },
       });
       // Payroll lines are computed from each employee's stored salary at
       // posting time, not entered here — so create and post happen as one
@@ -198,16 +186,6 @@ function NewPayrollRunForm({ onClose, onCreated }: { onClose: () => void; onCrea
 
   return (
     <form onSubmit={handleSubmit}>
-      <Field label="Fiscal Period" required>
-        <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-          <option value="">Select a period...</option>
-          {openPeriods.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.year_name} — Period {p.period_number}
-            </option>
-          ))}
-        </SelectInput>
-      </Field>
       <Field label="Pay Period Start" required>
         <TextInput type="date" required value={payPeriodStart} onChange={(e) => setPayPeriodStart(e.target.value)} />
       </Field>

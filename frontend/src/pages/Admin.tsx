@@ -775,11 +775,6 @@ interface Customer {
   name_en: string;
 }
 
-interface FiscalPeriod {
-  id: string;
-  status: string;
-}
-
 interface ItemVariant {
   id: string;
   variant_code: string;
@@ -825,9 +820,7 @@ function OfflineSyncTab() {
   const { token, companyId } = useAuth();
   const { data: devices } = useApiList<PosDevice>("/api/pos-devices");
   const { data: customers } = useApiList<Customer>("/api/customers");
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
   const variantOptions = useSyncVariantOptions();
-  const openPeriodId = periods?.find((p) => p.status === "open")?.id ?? "";
 
   const [deviceId, setDeviceId] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -868,7 +861,6 @@ function OfflineSyncTab() {
       storeId: device!.store_id,
       zatcaInvoiceCategory: "simplified" as const,
       invoiceDate: new Date().toISOString().slice(0, 10),
-      fiscalPeriodId: openPeriodId,
       customerId: customerId || null,
       lines: [
         {
@@ -998,12 +990,11 @@ function OfflineSyncTab() {
         <div className="sm:col-span-2">
           <button
             onClick={addToQueue}
-            disabled={!deviceId || !itemVariantId || !openPeriodId}
+            disabled={!deviceId || !itemVariantId}
             className="rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
           >
             + Add Offline Sale to Queue
           </button>
-          {!openPeriodId && <p className="mt-1 text-xs text-red-500">No open fiscal period found — cannot queue a sale.</p>}
         </div>
       </div>
 

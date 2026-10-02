@@ -3,6 +3,7 @@ import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
 import { recordCustomerDeposit } from "../../sales/customerDepositService.js";
 import { NotFoundError } from "../errors.js";
+import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 
 const recordSchema = z.object({
   storeId: z.string().uuid(),
@@ -10,7 +11,6 @@ const recordSchema = z.object({
   amount: z.number().positive(),
   paymentMethod: z.enum(["cash", "card"]),
   reference: z.string().nullable().optional(),
-  fiscalPeriodId: z.string().uuid(),
   depositDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
@@ -21,7 +21,7 @@ export async function customerDepositRoutes(app: FastifyInstance): Promise<void>
     async (request, reply) => {
       const body = recordSchema.parse(request.body);
       const id = await withTransaction(
-        (client) =>
+        async (client) =>
           recordCustomerDeposit(client, {
             companyId: request.companyId,
             storeId: body.storeId,
@@ -29,7 +29,7 @@ export async function customerDepositRoutes(app: FastifyInstance): Promise<void>
             amount: body.amount,
             paymentMethod: body.paymentMethod,
             reference: body.reference ?? null,
-            fiscalPeriodId: body.fiscalPeriodId,
+            fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.depositDate),
             depositDate: body.depositDate,
             recordedBy: request.authUser.id,
           }),

@@ -4,6 +4,7 @@ import { pool, withTransaction } from "../db.js";
 import { createSalesInvoice, postSalesInvoice, createCreditNote, postCreditNote } from "../../sales/salesService.js";
 import { NotFoundError, BusinessRuleError } from "../errors.js";
 import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
+import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 import { renderZatcaQrDataUrl } from "../../zatca/qrCode.js";
 import { finalizeSalesInvoiceXmlHash, renderSalesInvoiceXml, finalizeCreditNoteXmlHash } from "../../zatca/invoiceXmlService.js";
 
@@ -25,7 +26,6 @@ const paymentSchema = z.object({
 });
 
 const voidSchema = z.object({
-  fiscalPeriodId: z.string().uuid(),
   creditNoteDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   reason: z.string().min(1),
 });
@@ -35,7 +35,6 @@ const createSchema = z.object({
   invoiceChannel: z.enum(["pos", "wholesale"]),
   zatcaInvoiceCategory: z.enum(["simplified", "standard"]),
   invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  fiscalPeriodId: z.string().uuid(),
   customerId: z.string().uuid().nullable().optional(),
   salespersonId: z.string().uuid().nullable().optional(),
   priceListId: z.string().uuid().nullable().optional(),
@@ -74,7 +73,7 @@ export async function salesInvoiceRoutes(app: FastifyInstance): Promise<void> {
           invoiceChannel: body.invoiceChannel,
           zatcaInvoiceCategory: body.zatcaInvoiceCategory,
           invoiceDate: body.invoiceDate,
-          fiscalPeriodId: body.fiscalPeriodId,
+          fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.invoiceDate),
           customerId: body.customerId ?? null,
           salespersonId: body.salespersonId ?? null,
           priceListId: body.priceListId ?? null,
@@ -235,13 +234,14 @@ export async function salesInvoiceRoutes(app: FastifyInstance): Promise<void> {
           [request.params.id],
         );
 
+        const creditNoteDate = body.creditNoteDate ?? new Date().toISOString().slice(0, 10);
         const id = await createCreditNote(client, {
           companyId: request.companyId,
           storeId: inv.store_id,
           originalInvoiceId: request.params.id,
           zatcaInvoiceCategory: inv.zatca_invoice_category,
-          creditNoteDate: body.creditNoteDate ?? new Date().toISOString().slice(0, 10),
-          fiscalPeriodId: body.fiscalPeriodId,
+          creditNoteDate,
+          fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, creditNoteDate),
           customerId: inv.customer_id,
           reason: `Voided: ${body.reason}`,
           createdBy: request.authUser.id,

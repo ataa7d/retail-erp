@@ -4,9 +4,9 @@ import { pool, withTransaction } from "../db.js";
 import { createPayrollRun, postPayrollRun } from "../../hr/payrollService.js";
 import { NotFoundError } from "../errors.js";
 import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
+import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 
 const createSchema = z.object({
-  fiscalPeriodId: z.string().uuid(),
   payPeriodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   payPeriodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   runDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -28,10 +28,10 @@ export async function payrollRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = createSchema.parse(request.body);
       const id = await withTransaction(
-        (client) =>
+        async (client) =>
           createPayrollRun(client, {
             companyId: request.companyId,
-            fiscalPeriodId: body.fiscalPeriodId,
+            fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.runDate),
             payPeriodStart: body.payPeriodStart,
             payPeriodEnd: body.payPeriodEnd,
             runDate: body.runDate,

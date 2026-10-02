@@ -3,6 +3,7 @@ import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
 import { issueGiftCard } from "../../sales/giftCardService.js";
 import { NotFoundError } from "../errors.js";
+import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 
 const issueSchema = z.object({
   storeId: z.string().uuid(),
@@ -11,7 +12,6 @@ const issueSchema = z.object({
   paymentMethod: z.enum(["cash", "card"]),
   customerId: z.string().uuid().nullable().optional(),
   expiresAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  fiscalPeriodId: z.string().uuid(),
   issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
@@ -22,7 +22,7 @@ export async function giftCardRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = issueSchema.parse(request.body);
       const id = await withTransaction(
-        (client) =>
+        async (client) =>
           issueGiftCard(client, {
             companyId: request.companyId,
             storeId: body.storeId,
@@ -31,7 +31,7 @@ export async function giftCardRoutes(app: FastifyInstance): Promise<void> {
             paymentMethod: body.paymentMethod,
             customerId: body.customerId ?? null,
             expiresAt: body.expiresAt ?? null,
-            fiscalPeriodId: body.fiscalPeriodId,
+            fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.issueDate),
             issueDate: body.issueDate,
             issuedBy: request.authUser.id,
           }),

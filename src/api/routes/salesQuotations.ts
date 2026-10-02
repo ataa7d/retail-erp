@@ -10,6 +10,7 @@ import {
   convertSalesQuotationToInvoice,
 } from "../../sales/salesService.js";
 import { NotFoundError, BusinessRuleError } from "../errors.js";
+import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 
 const lineSchema = z.object({
   itemVariantId: z.string().uuid(),
@@ -38,7 +39,6 @@ const rejectSchema = z.object({
 
 const convertSchema = z.object({
   invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  fiscalPeriodId: z.string().uuid(),
 });
 
 export async function salesQuotationRoutes(app: FastifyInstance): Promise<void> {
@@ -158,14 +158,14 @@ export async function salesQuotationRoutes(app: FastifyInstance): Promise<void> 
       const quotation = existing.rows[0]!;
 
       const invoiceId = await withTransaction(
-        (client) =>
+        async (client) =>
           convertSalesQuotationToInvoice(client, {
             quotationId: request.params.id,
             companyId: request.companyId,
             storeId: quotation.store_id,
             customerId: quotation.customer_id,
             invoiceDate: body.invoiceDate,
-            fiscalPeriodId: body.fiscalPeriodId,
+            fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.invoiceDate),
             salespersonId: quotation.salesperson_id,
             priceListId: quotation.price_list_id,
             createdBy: request.authUser.id,

@@ -4,6 +4,7 @@ import { pool, withTransaction } from "../db.js";
 import { acquireFixedAsset, createDepreciationRun, postDepreciationRun, disposeFixedAsset } from "../../assets/fixedAssetService.js";
 import { NotFoundError } from "../errors.js";
 import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
+import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 
 const categorySchema = z.object({
   code: z.string().min(1),
@@ -25,18 +26,15 @@ const acquireSchema = z.object({
   acquisitionCost: z.number().positive(),
   salvageValue: z.number().nonnegative().default(0),
   usefulLifeMonthsOverride: z.number().int().positive().nullable().optional(),
-  fiscalPeriodId: z.string().uuid(),
 });
 
 const depreciationRunSchema = z.object({
-  fiscalPeriodId: z.string().uuid(),
   runDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
 const disposeSchema = z.object({
   disposalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   proceeds: z.number().nonnegative(),
-  fiscalPeriodId: z.string().uuid(),
 });
 
 export async function fixedAssetRoutes(app: FastifyInstance): Promise<void> {
@@ -89,7 +87,7 @@ export async function fixedAssetRoutes(app: FastifyInstance): Promise<void> {
           acquisitionCost: body.acquisitionCost,
           salvageValue: body.salvageValue,
           useful_lifeMonthsOverride: body.usefulLifeMonthsOverride ?? null,
-          fiscalPeriodId: body.fiscalPeriodId,
+          fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.acquisitionDate),
           createdBy: request.authUser.id,
         });
       }, request.authUser.id);
@@ -130,7 +128,7 @@ export async function fixedAssetRoutes(app: FastifyInstance): Promise<void> {
           assetId: request.params.id,
           disposalDate: body.disposalDate,
           proceeds: body.proceeds,
-          fiscalPeriodId: body.fiscalPeriodId,
+          fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.disposalDate),
           postedBy: request.authUser.id,
         });
       }, request.authUser.id);
@@ -146,7 +144,7 @@ export async function fixedAssetRoutes(app: FastifyInstance): Promise<void> {
       const runId = await withTransaction(async (client) => {
         return createDepreciationRun(client, {
           companyId: request.companyId,
-          fiscalPeriodId: body.fiscalPeriodId,
+          fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.runDate),
           runDate: body.runDate,
           createdBy: request.authUser.id,
         });

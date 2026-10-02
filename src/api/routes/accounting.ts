@@ -14,6 +14,7 @@ import {
   closeFiscalYear,
 } from "../../accounting/accountingService.js";
 import { NotFoundError, BusinessRuleError } from "../errors.js";
+import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 
 const coaCreateSchema = z.object({
   accountCode: z.string().min(1),
@@ -57,7 +58,6 @@ const journalLineSchema = z.object({
 
 const journalCreateSchema = z.object({
   journalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  fiscalPeriodId: z.string().uuid(),
   memo: z.string().optional(),
   lines: z.array(journalLineSchema).min(2), // a journal needs at least two lines to balance
 });
@@ -66,7 +66,6 @@ const receiptCreateSchema = z.object({
   customerId: z.string().uuid(),
   bankAccountId: z.string().uuid().nullable().optional(),
   receiptDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  fiscalPeriodId: z.string().uuid(),
   paymentMethod: z.enum(["cash", "card", "credit", "points", "gift_card"]),
   amount: z.number().positive(),
   reference: z.string().optional(),
@@ -77,7 +76,6 @@ const paymentCreateSchema = z.object({
   supplierId: z.string().uuid(),
   bankAccountId: z.string().uuid().nullable().optional(),
   paymentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  fiscalPeriodId: z.string().uuid(),
   paymentMethod: z.enum(["cash", "card", "credit", "points", "gift_card"]),
   amount: z.number().positive(),
   reference: z.string().optional(),
@@ -350,10 +348,11 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
         );
         const journalNumber = numberResult.rows[0]!.fn_next_document_number;
 
+        const fiscalPeriodId = await resolveFiscalPeriodId(client, request.companyId, body.journalDate);
         const journal = await client.query<{ id: string }>(
           `INSERT INTO journals (company_id, journal_number, journal_date, fiscal_period_id, source_type, memo, created_by)
            VALUES ($1, $2, $3, $4, 'manual', $5, $6) RETURNING id`,
-          [request.companyId, journalNumber, body.journalDate, body.fiscalPeriodId, body.memo ?? null, request.authUser.id],
+          [request.companyId, journalNumber, body.journalDate, fiscalPeriodId, body.memo ?? null, request.authUser.id],
         );
         const id = journal.rows[0]!.id;
 
@@ -395,12 +394,13 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = receiptCreateSchema.parse(request.body);
       const id = await withTransaction(async (client) => {
+        const fiscalPeriodId = await resolveFiscalPeriodId(client, request.companyId, body.receiptDate);
         const receiptId = await createCustomerReceipt(client, {
           companyId: request.companyId,
           customerId: body.customerId,
           bankAccountId: body.bankAccountId ?? null,
           receiptDate: body.receiptDate,
-          fiscalPeriodId: body.fiscalPeriodId,
+          fiscalPeriodId,
           paymentMethod: body.paymentMethod,
           amount: body.amount,
           reference: body.reference ?? null,
@@ -435,12 +435,13 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = paymentCreateSchema.parse(request.body);
       const id = await withTransaction(async (client) => {
+        const fiscalPeriodId = await resolveFiscalPeriodId(client, request.companyId, body.paymentDate);
         const paymentId = await createSupplierPayment(client, {
           companyId: request.companyId,
           supplierId: body.supplierId,
           bankAccountId: body.bankAccountId ?? null,
           paymentDate: body.paymentDate,
-          fiscalPeriodId: body.fiscalPeriodId,
+          fiscalPeriodId,
           paymentMethod: body.paymentMethod,
           amount: body.amount,
           reference: body.reference ?? null,

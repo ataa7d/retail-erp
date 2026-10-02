@@ -11,6 +11,7 @@ import {
 } from "../../inventory/inventoryService.js";
 import { NotFoundError } from "../errors.js";
 import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
+import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 
 const transferSchema = z.object({
   sourceStoreId: z.string().uuid(),
@@ -23,7 +24,6 @@ const transferSchema = z.object({
 const stocktakeCreateSchema = z.object({
   storeId: z.string().uuid(),
   stocktakeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  fiscalPeriodId: z.string().uuid(),
   itemVariantIds: z.array(z.string().uuid()).min(1),
 });
 
@@ -35,7 +35,6 @@ const inventoryTransferCreateSchema = z.object({
   sourceStoreId: z.string().uuid(),
   destStoreId: z.string().uuid(),
   transferDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  fiscalPeriodId: z.string().uuid(),
   notes: z.string().optional(),
   lines: z.array(z.object({ itemVariantId: z.string().uuid(), qty: z.number().positive() })).min(1),
 });
@@ -102,13 +101,13 @@ export async function inventoryRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = inventoryTransferCreateSchema.parse(request.body);
       const id = await withTransaction(
-        (client) =>
+        async (client) =>
           createInventoryTransfer(client, {
             companyId: request.companyId,
             sourceStoreId: body.sourceStoreId,
             destStoreId: body.destStoreId,
             transferDate: body.transferDate,
-            fiscalPeriodId: body.fiscalPeriodId,
+            fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.transferDate),
             notes: body.notes,
             lines: body.lines,
             createdBy: request.authUser.id,
@@ -204,12 +203,12 @@ export async function inventoryRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = stocktakeCreateSchema.parse(request.body);
       const id = await withTransaction(
-        (client) =>
+        async (client) =>
           createStocktake(client, {
             companyId: request.companyId,
             storeId: body.storeId,
             stocktakeDate: body.stocktakeDate,
-            fiscalPeriodId: body.fiscalPeriodId,
+            fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.stocktakeDate),
             itemVariantIds: body.itemVariantIds,
             createdBy: request.authUser.id,
           }),

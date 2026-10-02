@@ -20,6 +20,7 @@ import {
 } from "../../purchasing/purchasingService.js";
 import { NotFoundError, BusinessRuleError } from "../errors.js";
 import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
+import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 
 const lineSchema = z.object({
   itemVariantId: z.string().uuid(),
@@ -37,7 +38,6 @@ const createSchema = z.object({
   supplierId: z.string().uuid(),
   orderDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   expectedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  fiscalPeriodId: z.string().uuid(),
   lines: z.array(lineSchema).min(1),
   currency: currencyCode.optional(),
   exchangeRate: z.number().positive().nullable().optional(),
@@ -81,7 +81,6 @@ const requisitionConvertSchema = z.object({
   supplierId: z.string().uuid(),
   orderDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   expectedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  fiscalPeriodId: z.string().uuid(),
   lines: z.array(requisitionConvertLineSchema).min(1),
   currency: currencyCode.optional(),
   exchangeRate: z.number().positive().nullable().optional(),
@@ -105,7 +104,6 @@ const goodsReceiptCreateSchema = z.object({
   purchaseOrderId: z.string().uuid(),
   supplierId: z.string().uuid(),
   receiptDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  fiscalPeriodId: z.string().uuid(),
   lines: z.array(goodsReceiptLineSchema).min(1),
   charges: z.array(goodsReceiptChargeSchema).optional(),
   exchangeRate: z.number().positive().nullable().optional(),
@@ -126,7 +124,6 @@ const supplierInvoiceCreateSchema = z.object({
   purchaseOrderId: z.string().uuid(),
   supplierInvoiceNumber: z.string().min(1),
   invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  fiscalPeriodId: z.string().uuid(),
   lines: z.array(supplierInvoiceLineSchema).min(1),
   exchangeRate: z.number().positive().nullable().optional(),
 });
@@ -172,7 +169,6 @@ const creditNoteCreateSchema = z.object({
   supplierId: z.string().uuid(),
   originalInvoiceId: z.string().uuid(),
   creditNoteDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  fiscalPeriodId: z.string().uuid(),
   reason: z.string().min(1),
   lines: z.array(creditNoteLineSchema).min(1),
 });
@@ -184,14 +180,14 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = createSchema.parse(request.body);
       const id = await withTransaction(
-        (client) =>
+        async (client) =>
           createPurchaseOrder(client, {
             companyId: request.companyId,
             storeId: body.storeId,
             supplierId: body.supplierId,
             orderDate: body.orderDate,
             expectedDate: body.expectedDate ?? null,
-            fiscalPeriodId: body.fiscalPeriodId,
+            fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.orderDate),
             createdBy: request.authUser.id,
             lines: body.lines,
             currency: body.currency ?? null,
@@ -441,7 +437,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const poId = await withTransaction(
-        (client) =>
+        async (client) =>
           convertPurchaseRequisitionToPo(client, {
             requisitionId: request.params.id,
             companyId: request.companyId,
@@ -449,7 +445,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
             supplierId: body.supplierId,
             orderDate: body.orderDate,
             expectedDate: body.expectedDate ?? null,
-            fiscalPeriodId: body.fiscalPeriodId,
+            fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.orderDate),
             createdBy: request.authUser.id,
             currency: body.currency ?? null,
             exchangeRate: body.exchangeRate ?? null,
@@ -738,14 +734,14 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = goodsReceiptCreateSchema.parse(request.body);
       const id = await withTransaction(
-        (client) =>
+        async (client) =>
           createGoodsReceipt(client, {
             companyId: request.companyId,
             storeId: body.storeId,
             purchaseOrderId: body.purchaseOrderId,
             supplierId: body.supplierId,
             receiptDate: body.receiptDate,
-            fiscalPeriodId: body.fiscalPeriodId,
+            fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.receiptDate),
             createdBy: request.authUser.id,
             lines: body.lines,
             charges: body.charges,
@@ -838,14 +834,14 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = supplierInvoiceCreateSchema.parse(request.body);
       const id = await withTransaction(
-        (client) =>
+        async (client) =>
           createSupplierInvoice(client, {
             companyId: request.companyId,
             supplierId: body.supplierId,
             purchaseOrderId: body.purchaseOrderId,
             supplierInvoiceNumber: body.supplierInvoiceNumber,
             invoiceDate: body.invoiceDate,
-            fiscalPeriodId: body.fiscalPeriodId,
+            fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.invoiceDate),
             createdBy: request.authUser.id,
             lines: body.lines,
             exchangeRate: body.exchangeRate ?? null,
@@ -977,14 +973,14 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = creditNoteCreateSchema.parse(request.body);
       const id = await withTransaction(
-        (client) =>
+        async (client) =>
           createSupplierCreditNote(client, {
             companyId: request.companyId,
             storeId: body.storeId,
             supplierId: body.supplierId,
             originalInvoiceId: body.originalInvoiceId,
             creditNoteDate: body.creditNoteDate,
-            fiscalPeriodId: body.fiscalPeriodId,
+            fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.creditNoteDate),
             reason: body.reason,
             createdBy: request.authUser.id,
             lines: body.lines,

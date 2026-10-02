@@ -156,11 +156,6 @@ interface Reconciliation {
   line_count: string;
 }
 
-function useOpenPeriods() {
-  const { data } = useApiList<FiscalPeriod>("/api/fiscal-periods");
-  return data?.filter((p) => p.status === "open") ?? [];
-}
-
 // ---- Chart of Accounts ----
 
 function NewAccountForm({ accounts, onClose, onCreated }: { accounts: Account[]; onClose: () => void; onCreated: () => void }) {
@@ -508,10 +503,8 @@ export function NewJournalForm({ onClose, onCreated }: { onClose: () => void; on
   const { token, companyId } = useAuth();
   const { data: accounts } = useApiList<Account>("/api/chart-of-accounts");
   const postableAccounts = accounts?.filter((a) => !a.is_header) ?? [];
-  const openPeriods = useOpenPeriods();
 
   const [journalDate, setJournalDate] = useState(new Date().toISOString().slice(0, 10));
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [memo, setMemo] = useState("");
   const [lines, setLines] = useState<JournalLineDraft[]>([
     { accountId: "", debitAmount: "", creditAmount: "", description: "" },
@@ -549,7 +542,6 @@ export function NewJournalForm({ onClose, onCreated }: { onClose: () => void; on
         companyId,
         body: {
           journalDate,
-          fiscalPeriodId,
           memo: memo || undefined,
           lines: lines
             .filter((l) => l.accountId)
@@ -572,21 +564,9 @@ export function NewJournalForm({ onClose, onCreated }: { onClose: () => void; on
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Journal Date" required>
-          <TextInput type="date" required value={journalDate} onChange={(e) => setJournalDate(e.target.value)} />
-        </Field>
-        <Field label="Fiscal Period" required>
-          <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-            <option value="">Select...</option>
-            {openPeriods.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.year_name} — P{p.period_number}
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
-      </div>
+      <Field label="Journal Date" required>
+        <TextInput type="date" required value={journalDate} onChange={(e) => setJournalDate(e.target.value)} />
+      </Field>
       <Field label="Memo">
         <TextInput value={memo} onChange={(e) => setMemo(e.target.value)} />
       </Field>
@@ -799,12 +779,10 @@ export function NewReceiptForm({ onClose, onCreated }: { onClose: () => void; on
   const { data: customers } = useApiList<Customer>("/api/customers");
   const { data: bankAccounts } = useApiList<BankAccount>("/api/bank-accounts");
   const { data: arAgeing } = useApiList<AgeingRow>("/api/ar-ageing");
-  const openPeriods = useOpenPeriods();
 
   const [customerId, setCustomerId] = useState("");
   const [bankAccountId, setBankAccountId] = useState("");
   const [receiptDate, setReceiptDate] = useState(new Date().toISOString().slice(0, 10));
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [amount, setAmount] = useState(0);
   const [allocations, setAllocations] = useState<Record<string, number>>({});
@@ -834,7 +812,6 @@ export function NewReceiptForm({ onClose, onCreated }: { onClose: () => void; on
           customerId,
           bankAccountId: bankAccountId || null,
           receiptDate,
-          fiscalPeriodId,
           paymentMethod,
           amount,
           allocations: allocationList.length > 0 ? allocationList : undefined,
@@ -894,16 +871,6 @@ export function NewReceiptForm({ onClose, onCreated }: { onClose: () => void; on
       <Field label="Receipt Date" required>
         <TextInput type="date" required value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} />
       </Field>
-      <Field label="Fiscal Period" required>
-        <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-          <option value="">Select...</option>
-          {openPeriods.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.year_name} — P{p.period_number}
-            </option>
-          ))}
-        </SelectInput>
-      </Field>
       <FormActions error={error} submitting={submitting} submitLabel="Post Receipt" />
     </form>
   );
@@ -948,12 +915,10 @@ export function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; on
   const { data: suppliers } = useApiList<Supplier>("/api/suppliers");
   const { data: bankAccounts } = useApiList<BankAccount>("/api/bank-accounts");
   const { data: apAgeing } = useApiList<AgeingRow>("/api/ap-ageing");
-  const openPeriods = useOpenPeriods();
 
   const [supplierId, setSupplierId] = useState("");
   const [bankAccountId, setBankAccountId] = useState("");
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [amount, setAmount] = useState(0);
   const [currency, setCurrency] = useState(baseCurrency);
@@ -987,7 +952,6 @@ export function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; on
           supplierId,
           bankAccountId: bankAccountId || null,
           paymentDate,
-          fiscalPeriodId,
           paymentMethod,
           amount,
           currency,
@@ -1054,16 +1018,6 @@ export function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; on
       )}
       <Field label="Payment Date" required>
         <TextInput type="date" required value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
-      </Field>
-      <Field label="Fiscal Period" required>
-        <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-          <option value="">Select...</option>
-          {openPeriods.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.year_name} — P{p.period_number}
-            </option>
-          ))}
-        </SelectInput>
       </Field>
       <FormActions error={error} submitting={submitting} submitLabel="Post Payment" />
     </form>

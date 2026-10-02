@@ -36,13 +36,6 @@ interface Item {
   variants: ItemVariant[];
 }
 
-interface FiscalPeriod {
-  id: string;
-  period_number: number;
-  year_name: string;
-  status: string;
-}
-
 interface Transfer {
   id: string;
   movement_at: string;
@@ -575,15 +568,12 @@ function TransfersTab() {
 export function NewInventoryTransferForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
   const variantOptions = useVariantOptions();
   const barcodeMap = useBarcodeMap();
-  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
 
   const [sourceStoreId, setSourceStoreId] = useState("");
   const [destStoreId, setDestStoreId] = useState("");
   const [transferDate, setTransferDate] = useState(new Date().toISOString().slice(0, 10));
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<Array<{ itemVariantId: string; qty: string }>>([{ itemVariantId: "", qty: "1" }]);
   const [error, setError] = useState<string | null>(null);
@@ -656,7 +646,6 @@ export function NewInventoryTransferForm({ onClose, onCreated }: { onClose: () =
           sourceStoreId,
           destStoreId,
           transferDate,
-          fiscalPeriodId,
           notes: notes || undefined,
           lines: validLines.map((l) => ({ itemVariantId: l.itemVariantId, qty: Number(l.qty) })),
         },
@@ -695,16 +684,6 @@ export function NewInventoryTransferForm({ onClose, onCreated }: { onClose: () =
         </Field>
         <Field label="Transfer Date" required>
           <TextInput type="date" required value={transferDate} onChange={(e) => setTransferDate(e.target.value)} />
-        </Field>
-        <Field label="Fiscal Period" required>
-          <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-            <option value="">Select...</option>
-            {openPeriods.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.year_name} — P{p.period_number}
-              </option>
-            ))}
-          </SelectInput>
         </Field>
       </div>
       <Field label="Notes">
@@ -897,13 +876,10 @@ export function NewStocktakeForm({ onClose, onCreated }: { onClose: () => void; 
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
   const { data: items } = useApiList<Item>("/api/items");
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
-  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
   const allVariants = useMemo(() => (items ?? []).flatMap((item) => item.variants.map((v) => ({ ...v, itemName: item.name_en }))), [items]);
 
   const [storeId, setStoreId] = useState("");
   const [stocktakeDate, setStocktakeDate] = useState(new Date().toISOString().slice(0, 10));
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -935,7 +911,7 @@ export function NewStocktakeForm({ onClose, onCreated }: { onClose: () => void; 
         method: "POST",
         token,
         companyId,
-        body: { storeId, stocktakeDate, fiscalPeriodId, itemVariantIds: [...selected] },
+        body: { storeId, stocktakeDate, itemVariantIds: [...selected] },
       });
       onCreated();
       onClose();
@@ -963,17 +939,6 @@ export function NewStocktakeForm({ onClose, onCreated }: { onClose: () => void; 
           <TextInput type="date" required value={stocktakeDate} onChange={(e) => setStocktakeDate(e.target.value)} />
         </Field>
       </div>
-      <Field label="Fiscal Period" required>
-        <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-          <option value="">Select...</option>
-          {openPeriods.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.year_name} — P{p.period_number}
-            </option>
-          ))}
-        </SelectInput>
-      </Field>
-
       <div className="mb-2 mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">Items to count ({selected.size} selected)</div>
       <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-700 p-2">
         {allVariants.map((v) => (

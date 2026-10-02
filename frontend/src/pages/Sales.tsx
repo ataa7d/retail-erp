@@ -149,8 +149,6 @@ function XmlDownloadButton({ status, path }: { status: string; path: string }) {
 
 function VoidInvoiceForm({ invoiceId, onClose, onVoided }: { invoiceId: string; onClose: () => void; onVoided: () => void }) {
   const { token, companyId } = useAuth();
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
-  const openPeriodId = periods?.find((p) => p.status === "open")?.id ?? "";
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -164,7 +162,7 @@ function VoidInvoiceForm({ invoiceId, onClose, onVoided }: { invoiceId: string; 
         method: "POST",
         token,
         companyId,
-        body: { fiscalPeriodId: openPeriodId, reason },
+        body: { reason },
       });
       onVoided();
       onClose();
@@ -184,12 +182,11 @@ function VoidInvoiceForm({ invoiceId, onClose, onVoided }: { invoiceId: string; 
       <Field label="Reason" required>
         <TextInput required value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. wrong item rung up" />
       </Field>
-      {!openPeriodId && <p className="mb-2 text-xs text-red-600">No open fiscal period — cannot void right now.</p>}
       {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
       <div className="flex gap-2">
         <button
           type="submit"
-          disabled={submitting || !openPeriodId}
+          disabled={submitting}
           className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
         >
           {submitting ? "Voiding..." : "Confirm Void"}
@@ -451,13 +448,6 @@ interface ArAgeingRow {
   open_amount: string;
 }
 
-interface FiscalPeriod {
-  id: string;
-  period_number: number;
-  year_name: string;
-  status: string;
-}
-
 interface ItemVariant {
   id: string;
   variant_code: string;
@@ -514,11 +504,9 @@ export function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => voi
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
   const { data: customers } = useApiList<Customer>("/api/customers");
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
   const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
   const { data: taxCodes } = useApiList<TaxCodeOption>("/api/tax-codes");
   const { data: arAgeing } = useApiList<ArAgeingRow>("/api/ar-ageing");
-  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
   const variantOptions = useVariantOptions();
 
   const [invoiceChannel, setInvoiceChannel] = useState<"pos" | "wholesale">("pos");
@@ -527,7 +515,6 @@ export function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => voi
   const [priceListId, setPriceListId] = useState("");
   const [priceListItems, setPriceListItems] = useState<PriceListItem[] | null>(null);
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [lines, setLines] = useState<InvoiceLineDraft[]>([
     { itemVariantId: "", itemDescription: "", qty: "1", unitPrice: "0", vatRate: "15", priceIncludesVat: true },
   ]);
@@ -620,7 +607,6 @@ export function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => voi
           invoiceChannel,
           zatcaInvoiceCategory,
           invoiceDate,
-          fiscalPeriodId,
           customerId: customerId || null,
           priceListId: priceListId || null,
           lines: lines
@@ -725,21 +711,9 @@ export function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => voi
           </SelectInput>
         </Field>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Invoice Date" required>
-          <TextInput type="date" required value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
-        </Field>
-        <Field label="Fiscal Period" required>
-          <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-            <option value="">Select...</option>
-            {openPeriods.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.year_name} — P{p.period_number}
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
-      </div>
+      <Field label="Invoice Date" required>
+        <TextInput type="date" required value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+      </Field>
 
       <div className="mb-2 mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">Lines</div>
       <div className="space-y-2">
@@ -822,15 +796,12 @@ export function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => voi
 export function NewCreditNoteForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token, companyId } = useAuth();
   const { data: invoices } = useApiList<SalesInvoice>("/api/sales-invoices");
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
-  const openPeriods = periods?.filter((p) => p.status === "open") ?? [];
   const postedInvoices = invoices?.filter((i) => i.document_status === "posted") ?? [];
 
   const [originalInvoiceId, setOriginalInvoiceId] = useState("");
   const [invoiceDetail, setInvoiceDetail] = useState<SalesInvoiceDetail | null>(null);
   const [reason, setReason] = useState("");
   const [creditNoteDate, setCreditNoteDate] = useState(new Date().toISOString().slice(0, 10));
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [lineData, setLineData] = useState<Record<string, { qty: string; selected: boolean }>>({});
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -877,7 +848,6 @@ export function NewCreditNoteForm({ onClose, onCreated }: { onClose: () => void;
           originalInvoiceId,
           zatcaInvoiceCategory: "simplified",
           creditNoteDate,
-          fiscalPeriodId,
           customerId: invoiceDetail.customer_id,
           reason,
           lines,
@@ -905,21 +875,9 @@ export function NewCreditNoteForm({ onClose, onCreated }: { onClose: () => void;
           ))}
         </SelectInput>
       </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Credit Note Date" required>
-          <TextInput type="date" required value={creditNoteDate} onChange={(e) => setCreditNoteDate(e.target.value)} />
-        </Field>
-        <Field label="Fiscal Period" required>
-          <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-            <option value="">Select...</option>
-            {openPeriods.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.year_name} — P{p.period_number}
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
-      </div>
+      <Field label="Credit Note Date" required>
+        <TextInput type="date" required value={creditNoteDate} onChange={(e) => setCreditNoteDate(e.target.value)} />
+      </Field>
       <Field label="Reason" required>
         <TextInput required value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. customer changed mind" />
       </Field>
@@ -1339,9 +1297,7 @@ export function NewQuotationForm({ onClose, onCreated }: { onClose: () => void; 
 
 function ConvertQuotationForm({ quotation, onClose, onConverted }: { quotation: SalesQuotationDetail; onClose: () => void; onConverted: (invoiceId: string) => void }) {
   const { token, companyId } = useAuth();
-  const openPeriods = useOpenPeriods();
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
-  const [fiscalPeriodId, setFiscalPeriodId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -1354,7 +1310,7 @@ function ConvertQuotationForm({ quotation, onClose, onConverted }: { quotation: 
         method: "POST",
         token,
         companyId,
-        body: { invoiceDate, fiscalPeriodId },
+        body: { invoiceDate },
       });
       onConverted(result.salesInvoiceId);
     } catch (err) {
@@ -1369,27 +1325,12 @@ function ConvertQuotationForm({ quotation, onClose, onConverted }: { quotation: 
       <Field label="Invoice Date" required>
         <TextInput type="date" required value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
       </Field>
-      <Field label="Fiscal Period" required>
-        <SelectInput required value={fiscalPeriodId} onChange={(e) => setFiscalPeriodId(e.target.value)}>
-          <option value="">Select...</option>
-          {openPeriods.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.year_name} — P{p.period_number}
-            </option>
-          ))}
-        </SelectInput>
-      </Field>
       <FormActions error={error} submitting={submitting} submitLabel="Create & Post Invoice" />
       <button type="button" onClick={onClose} className="w-full rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
         Cancel
       </button>
     </form>
   );
-}
-
-function useOpenPeriods() {
-  const { data } = useApiList<FiscalPeriod>("/api/fiscal-periods");
-  return data?.filter((p) => p.status === "open") ?? [];
 }
 
 export function QuotationDetailModal({ quotationId, onChanged }: { quotationId: string; onChanged: () => void }) {
@@ -1932,8 +1873,6 @@ function IssueGiftCardForm({ onClose, onIssued }: { onClose: () => void; onIssue
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
   const { data: customers } = useApiList<Customer>("/api/customers");
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
-  const openPeriodId = periods?.find((p) => p.status === "open")?.id ?? "";
 
   const [storeId, setStoreId] = useState("");
   const [cardNumber, setCardNumber] = useState(() => `GC-${Math.random().toString(36).slice(2, 10).toUpperCase()}`);
@@ -1961,7 +1900,6 @@ function IssueGiftCardForm({ onClose, onIssued }: { onClose: () => void; onIssue
           paymentMethod,
           customerId: customerId || null,
           expiresAt: expiresAt || null,
-          fiscalPeriodId: openPeriodId,
           issueDate,
         },
       });
@@ -2020,11 +1958,10 @@ function IssueGiftCardForm({ onClose, onIssued }: { onClose: () => void; onIssue
           ))}
         </SelectInput>
       </Field>
-      {!openPeriodId && <p className="mb-2 text-xs text-red-600">No open fiscal period — cannot issue right now.</p>}
       <p className="mb-3 mt-2 text-xs text-slate-400 dark:text-slate-500">
         Books Dr {paymentMethod} / Cr Gift Card Liability — a gift card sale is not revenue until the card is redeemed against a real sale.
       </p>
-      <FormActions error={error} submitting={submitting || !openPeriodId} submitLabel="Issue Gift Card" />
+      <FormActions error={error} submitting={submitting} submitLabel="Issue Gift Card" />
     </form>
   );
 }
@@ -2156,8 +2093,6 @@ function RecordDepositForm({ onClose, onRecorded }: { onClose: () => void; onRec
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
   const { data: customers } = useApiList<Customer>("/api/customers");
-  const { data: periods } = useApiList<FiscalPeriod>("/api/fiscal-periods");
-  const openPeriodId = periods?.find((p) => p.status === "open")?.id ?? "";
 
   const [storeId, setStoreId] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -2183,7 +2118,6 @@ function RecordDepositForm({ onClose, onRecorded }: { onClose: () => void; onRec
           amount: Number(amount),
           paymentMethod,
           reference: reference || null,
-          fiscalPeriodId: openPeriodId,
           depositDate,
         },
       });
@@ -2239,11 +2173,10 @@ function RecordDepositForm({ onClose, onRecorded }: { onClose: () => void; onRec
           <TextInput value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. custom order #123" />
         </Field>
       </div>
-      {!openPeriodId && <p className="mb-2 text-xs text-red-600">No open fiscal period — cannot record right now.</p>}
       <p className="mb-3 mt-2 text-xs text-slate-400 dark:text-slate-500">
         Books Dr {paymentMethod} / Cr Customer Deposits — a deposit is not revenue until it's applied to a real sale.
       </p>
-      <FormActions error={error} submitting={submitting || !openPeriodId} submitLabel="Record Deposit" />
+      <FormActions error={error} submitting={submitting} submitLabel="Record Deposit" />
     </form>
   );
 }

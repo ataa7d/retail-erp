@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
 import { syncPosInvoice, syncPosCreditNote } from "../../sync/syncService.js";
+import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 
 const lineSchema = z.object({
   itemVariantId: z.string().uuid().nullable(),
@@ -30,7 +31,6 @@ const invoiceSyncSchema = z.object({
   // 400 from the trigger instead of being silently overridden.
   zatcaInvoiceCategory: z.enum(["simplified", "standard"]),
   invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  fiscalPeriodId: z.string().uuid(),
   customerId: z.string().uuid().nullable().optional(),
   salespersonId: z.string().uuid().nullable().optional(),
   priceListId: z.string().uuid().nullable().optional(),
@@ -61,7 +61,6 @@ const creditNoteSyncSchema = z.object({
   originalInvoiceId: z.string().uuid(),
   zatcaInvoiceCategory: z.enum(["simplified", "standard"]),
   creditNoteDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  fiscalPeriodId: z.string().uuid(),
   customerId: z.string().uuid().nullable().optional(),
   reason: z.string().min(1),
   lines: z.array(creditNoteLineSyncSchema).min(1),
@@ -107,7 +106,7 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
               storeId: inv.storeId,
               zatcaInvoiceCategory: inv.zatcaInvoiceCategory,
               invoiceDate: inv.invoiceDate,
-              fiscalPeriodId: inv.fiscalPeriodId,
+              fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, inv.invoiceDate),
               customerId: inv.customerId ?? null,
               salespersonId: inv.salespersonId ?? null,
               priceListId: inv.priceListId ?? null,
@@ -149,7 +148,7 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
               originalInvoiceId: cn.originalInvoiceId,
               zatcaInvoiceCategory: cn.zatcaInvoiceCategory,
               creditNoteDate: cn.creditNoteDate,
-              fiscalPeriodId: cn.fiscalPeriodId,
+              fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, cn.creditNoteDate),
               customerId: cn.customerId ?? null,
               reason: cn.reason,
               createdBy: request.authUser.id,

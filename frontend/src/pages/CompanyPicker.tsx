@@ -32,7 +32,8 @@ function NewCompanyForm({ onClose }: { onClose: () => void }) {
   const [country, setCountry] = useState(COUNTRIES[0]![0]);
   const [baseCurrency, setBaseCurrency] = useState(COUNTRIES[0]![1]);
   const [vatRate, setVatRate] = useState("15");
-  const [fiscalYearStart, setFiscalYearStart] = useState(`${new Date().getFullYear()}-01-01`);
+  const currentYear = new Date().getFullYear();
+  const [fiscalYear, setFiscalYear] = useState(currentYear);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,7 +55,7 @@ function NewCompanyForm({ onClose }: { onClose: () => void }) {
         country,
         baseCurrency: baseCurrency.toUpperCase(),
         vatRate: Number(vatRate),
-        fiscalYearStart,
+        fiscalYearStart: `${fiscalYear}-01-01`,
       });
       navigate("/");
     } catch (err) {
@@ -95,13 +96,20 @@ function NewCompanyForm({ onClose }: { onClose: () => void }) {
         <Field label="Default VAT Rate %" required>
           <TextInput required type="number" min={0} max={100} step="0.01" value={vatRate} onChange={(e) => setVatRate(e.target.value)} />
         </Field>
-        <Field label="Fiscal Year Start" required>
-          <TextInput required type="date" value={fiscalYearStart} onChange={(e) => setFiscalYearStart(e.target.value)} />
+        <Field label="Fiscal Year" required>
+          <SelectInput required value={fiscalYear} onChange={(e) => setFiscalYear(Number(e.target.value))}>
+            {[currentYear - 1, currentYear, currentYear + 1, currentYear + 2].map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </SelectInput>
         </Field>
       </div>
       <p className="mb-3 mt-1 text-xs text-slate-400 dark:text-slate-500">
-        Sets up a head office, a main store, a fiscal year (12 monthly periods), a starter chart of accounts, and tax
-        codes at the rate above. You become this company's Administrator.
+        Sets up a head office, a main store, a fiscal year running Jan 1 – Dec 31 of the year above (12 monthly
+        periods), a starter chart of accounts, and tax codes at the rate above. You become this company's
+        Administrator.
       </p>
       <FormActions error={error} submitting={submitting} submitLabel="Create Company" />
       <button

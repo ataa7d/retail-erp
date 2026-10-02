@@ -4,6 +4,7 @@ import { pool, withTransaction } from "../db.js";
 import { createCreditNote, postCreditNote } from "../../sales/salesService.js";
 import { NotFoundError } from "../errors.js";
 import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
+import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 import { renderZatcaQrDataUrl } from "../../zatca/qrCode.js";
 import { finalizeCreditNoteXmlHash, renderCreditNoteXml } from "../../zatca/invoiceXmlService.js";
 
@@ -23,7 +24,6 @@ const createSchema = z.object({
   originalInvoiceId: z.string().uuid(),
   zatcaInvoiceCategory: z.enum(["simplified", "standard"]),
   creditNoteDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  fiscalPeriodId: z.string().uuid(),
   customerId: z.string().uuid().nullable().optional(),
   reason: z.string().min(1),
   lines: z.array(lineSchema).min(1),
@@ -54,13 +54,14 @@ export async function creditNoteRoutes(app: FastifyInstance): Promise<void> {
       const body = createSchema.parse(request.body);
 
       const creditNoteId = await withTransaction(async (client) => {
+        const fiscalPeriodId = await resolveFiscalPeriodId(client, request.companyId, body.creditNoteDate);
         return createCreditNote(client, {
           companyId: request.companyId,
           storeId: body.storeId,
           originalInvoiceId: body.originalInvoiceId,
           zatcaInvoiceCategory: body.zatcaInvoiceCategory,
           creditNoteDate: body.creditNoteDate,
-          fiscalPeriodId: body.fiscalPeriodId,
+          fiscalPeriodId,
           customerId: body.customerId ?? null,
           reason: body.reason,
           createdBy: request.authUser.id,
