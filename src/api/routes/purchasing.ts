@@ -251,9 +251,13 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
 
   app.get<{ Params: { id: string } }>("/purchase-orders/:id", { preHandler: app.authenticate }, async (request) => {
     const header = await pool.query(
-      `SELECT po.*, s.name_en AS supplier_name_en, s.name_ar AS supplier_name_ar
+      `SELECT po.*, s.name_en AS supplier_name_en, s.name_ar AS supplier_name_ar,
+              c.name_en AS company_name_en, c.name_ar AS company_name_ar,
+              c.vat_registration_number AS company_vat_number, c.cr_number AS company_cr_number,
+              c.logo_path AS company_logo_path
        FROM purchase_orders po
        JOIN suppliers s ON s.id = po.supplier_id
+       JOIN companies c ON c.id = po.company_id
        WHERE po.id = $1 AND po.company_id = $2`,
       [request.params.id, request.companyId],
     );

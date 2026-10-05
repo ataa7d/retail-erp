@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ShoppingCart, Truck, Plus, Trash2, PackageCheck, ReceiptText, ClipboardList, Undo2, Download, Upload } from "lucide-react";
+import { ShoppingCart, Truck, Plus, Trash2, PackageCheck, ReceiptText, ClipboardList, Undo2, Download, Upload, Printer } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
-import { apiRequest, ApiError, uploadFile } from "../lib/api";
+import { apiRequest, ApiError, uploadFile, API_URL } from "../lib/api";
 import { runBulkAction } from "../lib/bulkAction";
 import { exportToCsv } from "../lib/csvExport";
 import ListPage from "../components/ListPage";
@@ -13,6 +13,7 @@ import StatusStepper from "../components/StatusStepper";
 import Modal from "../components/Modal";
 import Tabs from "../components/Tabs";
 import ExchangeRateField from "../components/ExchangeRateField";
+import { PurchaseOrderPrintArea } from "../components/PurchaseOrderPrint";
 import { useBaseCurrency, formatMoney } from "../lib/currency";
 import { Field, TextInput, SelectInput, FormActions } from "../components/FormField";
 import type { Column } from "../components/DataTable";
@@ -109,6 +110,9 @@ interface PoLine {
   qty: string;
   received_qty: string;
   unit_price: string;
+  net_amount: string;
+  vat_amount: string;
+  gross_amount: string;
   variant_code: string;
   item_name_en: string;
 }
@@ -120,11 +124,18 @@ interface PoDetail {
   document_number: string;
   order_date: string;
   document_status: string;
+  net_amount: string;
+  vat_amount: string;
   gross_amount: string;
   currency: string;
   purchase_requisition_id: string | null;
   supplier_name_en: string;
   supplier_name_ar: string;
+  company_name_en: string;
+  company_name_ar: string;
+  company_vat_number: string | null;
+  company_cr_number: string | null;
+  company_logo_path: string | null;
   lines: PoLine[];
 }
 
@@ -2202,9 +2213,37 @@ export function PoDetailModal({ poId }: { poId: string }) {
           <button onClick={duplicate} className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">
             Duplicate
           </button>
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400"
+          >
+            <Printer size={13} /> Print
+          </button>
           <StatusBadge status={detail.document_status} />
         </div>
       </div>
+      <PurchaseOrderPrintArea
+        documentNumber={detail.document_number}
+        orderDate={new Date(detail.order_date).toLocaleDateString()}
+        companyNameEn={detail.company_name_en}
+        companyNameAr={detail.company_name_ar}
+        companyVatNumber={detail.company_vat_number}
+        companyCrNumber={detail.company_cr_number}
+        companyLogoUrl={detail.company_logo_path ? `${API_URL}${detail.company_logo_path}` : null}
+        supplierNameEn={detail.supplier_name_en}
+        supplierNameAr={detail.supplier_name_ar}
+        lines={detail.lines.map((l) => ({
+          description: `${l.item_name_en} (${l.variant_code})`,
+          qty: Number(l.qty),
+          unitPrice: Number(l.unit_price),
+          net: Number(l.net_amount),
+          vat: Number(l.vat_amount),
+          gross: Number(l.gross_amount),
+        }))}
+        netAmount={Number(detail.net_amount)}
+        vatAmount={Number(detail.vat_amount)}
+        grossAmount={Number(detail.gross_amount)}
+      />
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
       {detail.document_status === "draft" && hasPermission("purchasing.po.create") && (
         <button onClick={post} disabled={busy} className="mb-3 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
