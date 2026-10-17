@@ -14,7 +14,7 @@ const SAN = {
 
 describe("ZATCA CSR generation (offline, no network)", () => {
   it("produces a self-consistent, verifiable PKCS#10 CSR signed with a secp256k1 key", () => {
-    const { privateKeyPem, publicKeyPem, csrPem } = generateZatcaCsr(SUBJECT, SAN);
+    const { privateKeyPem, publicKeyPem, csrPem } = generateZatcaCsr(SUBJECT, SAN, "sandbox");
 
     expect(privateKeyPem).toContain("-----BEGIN PRIVATE KEY-----");
     expect(publicKeyPem).toContain("-----BEGIN PUBLIC KEY-----");
@@ -47,18 +47,62 @@ describe("ZATCA CSR generation (offline, no network)", () => {
   });
 
   it("generates a fresh, distinct keypair on every call", () => {
-    const first = generateZatcaCsr(SUBJECT, SAN);
-    const second = generateZatcaCsr(SUBJECT, SAN);
+    const first = generateZatcaCsr(SUBJECT, SAN, "sandbox");
+    const second = generateZatcaCsr(SUBJECT, SAN, "sandbox");
     expect(first.privateKeyPem).not.toBe(second.privateKeyPem);
     expect(first.csrPem).not.toBe(second.csrPem);
   });
 
   it("csrPemToBase64 strips the PEM armor and newlines into one continuous Base64 string, matching what ZATCA's API expects", () => {
-    const { csrPem } = generateZatcaCsr(SUBJECT, SAN);
+    const { csrPem } = generateZatcaCsr(SUBJECT, SAN, "sandbox");
     const b64 = csrPemToBase64(csrPem);
     expect(b64).not.toContain("-----");
     expect(b64).not.toContain("\n");
     expect(Buffer.from(b64, "base64").toString("base64")).toBe(b64); // round-trips as valid base64
+  });
+
+  // Regression test for a real ZATCA sandbox rejection (400 "Invalid
+  // Request" at the compliance-CSID step) caused by the extensionRequest
+  // attribute not matching ZATCA's expected shape. Parses the CSR's DER
+  // independently of forge's (RSA-only) CSR reader, the same way
+  // verifyZatcaCsrSignature does, and checks for exactly the two
+  // Extensions ZATCA's CSR config template requires.
+  it("embeds a certificateTemplateName and a directoryName subjectAltName extension, per environment", () => {
+    const { csrPem } = generateZatcaCsr(SUBJECT, SAN, "simulation");
+    const der = Buffer.from(csrPemToBase64(csrPem), "base64");
+    const top = forge.asn1.fromDer(forge.util.createBuffer(der.toString("binary")), { decodeBitStrings: false } as never);
+    const [certificationRequestInfo] = top.value as forge.asn1.Asn1[];
+    const [, , , attributes] = certificationRequestInfo!.value as forge.asn1.Asn1[];
+    const [extensionRequestAttribute] = attributes!.value as forge.asn1.Asn1[];
+    const [, extensionSet] = extensionRequestAttribute!.value as forge.asn1.Asn1[];
+    const [extensionSequence] = extensionSet!.value as forge.asn1.Asn1[];
+    const extensions = extensionSequence!.value as forge.asn1.Asn1[];
+
+    const oidsSeen = extensions.map((ext) => {
+      const [oidAsn1] = ext.value as forge.asn1.Asn1[];
+      return forge.asn1.derToOid(oidAsn1!.value as string);
+    });
+    expect(oidsSeen).toContain("1.3.6.1.4.1.311.20.2"); // certificateTemplateName
+    expect(oidsSeen).toContain("2.5.29.17"); // subjectAltName
+
+    const templateExt = extensions[oidsSeen.indexOf("1.3.6.1.4.1.311.20.2")]!;
+    const [, templateExtnValue] = templateExt.value as forge.asn1.Asn1[];
+    const templateValueAsn1 = forge.asn1.fromDer(templateExtnValue!.value as string);
+    expect(templateValueAsn1.value).toBe("PREZATCA-Code-Signing"); // "simulation" environment
+
+    const sanExt = extensions[oidsSeen.indexOf("2.5.29.17")]!;
+    const [, sanExtnValue] = sanExt.value as forge.asn1.Asn1[];
+    const generalNames = forge.asn1.fromDer(sanExtnValue!.value as string);
+    const [directoryName] = generalNames.value as forge.asn1.Asn1[];
+    expect(directoryName!.tagClass).toBe(forge.asn1.Class.CONTEXT_SPECIFIC);
+    expect(directoryName!.type).toBe(4); // GeneralName choice tag for directoryName
+    const [rdnSequence] = directoryName!.value as forge.asn1.Asn1[];
+    const rdnOids = (rdnSequence!.value as forge.asn1.Asn1[]).map((rdn) => {
+      const [atv] = rdn.value as forge.asn1.Asn1[];
+      const [oidAsn1] = atv!.value as forge.asn1.Asn1[];
+      return forge.asn1.derToOid(oidAsn1!.value as string);
+    });
+    expect(rdnOids).toEqual(["2.5.4.5", "0.9.2342.19200300.100.1.1", "2.5.4.12", "2.5.4.26", "2.5.4.15"]);
   });
 });
 

@@ -113,6 +113,7 @@ export async function zatcaOnboardingRoutes(app: FastifyInstance): Promise<void>
           industryBusinessCategory: body.industryBusinessCategory,
           invoiceType: body.invoiceType,
         },
+        body.environment,
       );
 
       await withTransaction(async (client) => {

@@ -17,17 +17,24 @@
  * is produced with Node's crypto.sign, which already emits the DER
  * ECDSA-signature format X.509/PKCS#10 requires.
  *
- * ACCURACY NOTE: the subject fields (C/O/OU/CN) below are well-established
- * and confident. The extensionRequest custom fields -- EGS serial number,
- * VAT number, invoice-type support flags, location, industry -- are
- * ZATCA-specific extensions whose exact OIDs and inner encoding this
- * module implements to the best of its knowledge, but which genuinely
- * need verification against ZATCA's current CSR config template
- * (published in their onboarding SDK/documentation) before relying on
- * this for a real submission: a wrong OID or format here is the kind of
- * thing that fails silently at generation time and only surfaces as a
- * rejection from ZATCA's API. All of it lives in SAN_FIELD_OIDS below so
- * it's a one-place fix if ZATCA's spec differs from what's encoded here.
+ * CSR CONTENT (verified against ZATCA's published OpenSSL CSR config
+ * template and community reports of real 400 "Invalid CSR" rejections --
+ * see https://zatca1.discourse.group, e.g. the "400 Bad Request Error When
+ * Submitting CSR" thread): the extensionRequest attribute carries exactly
+ * two Extensions:
+ *   1. certificateTemplateName (OID 1.3.6.1.4.1.311.20.2), a PrintableString
+ *      naming the environment -- "TSTZATCA-Code-Signing" (sandbox),
+ *      "PREZATCA-Code-Signing" (simulation), or "ZATCA-Code-Signing"
+ *      (production). Missing this entirely (as an earlier version of this
+ *      module did) is itself enough to cause a 400.
+ *   2. subjectAltName (OID 2.5.29.17), whose value is a SEQUENCE OF
+ *      GeneralName containing exactly one directoryName [4] -- an
+ *      RDNSequence of SN/UID/title/registeredAddress/businessCategory,
+ *      not five ad-hoc top-level "Extensions" the way an earlier version of
+ *      this module built it (that shape doesn't correspond to anything
+ *      ZATCA's CSR parser looks for, and used OIDs -- e.g. 2.5.4.15 for
+ *      both invoiceType and industryBusinessCategory -- that collided with
+ *      each other).
  */
 import forge from "node-forge";
 import { generateKeyPairSync, createPublicKey, sign as nodeSign, verify as nodeVerify } from "node:crypto";
@@ -56,15 +63,23 @@ export interface CsrSanInput {
   invoiceType: string;
 }
 
-// Best-effort mapping of ZATCA's documented CSR custom extension OIDs --
-// see the module doc comment. Centralized here so a spec mismatch is a
-// one-line fix rather than a hunt through ASN.1-building code.
-const SAN_FIELD_OIDS = {
-  egsSerialNumber: "2.5.4.5", // serialNumber
-  vatRegistrationNumber: "1.3.6.1.4.1.311.20.2.3", // organizationIdentifier-style slot (verify)
-  invoiceType: "2.5.4.15", // businessCategory-style slot (verify)
-  location: "2.5.4.26", // registeredAddress-style slot (verify)
-  industryBusinessCategory: "2.5.4.15", // businessCategory (verify: ZATCA may want a distinct OID from invoiceType)
+// The five attribute types that make up the subjectAltName directoryName's
+// RDNSequence -- each confirmed against ZATCA's published CSR config (its
+// dir_sect/alt_names section uses exactly these RDN attribute types).
+const SAN_RDN_OIDS = {
+  egsSerialNumber: "2.5.4.5", // SN (serialNumber)
+  vatRegistrationNumber: "0.9.2342.19200300.100.1.1", // UID (RFC 1274 userid, not an X.520 organizationIdentifier)
+  invoiceType: "2.5.4.12", // title
+  location: "2.5.4.26", // registeredAddress
+  industryBusinessCategory: "2.5.4.15", // businessCategory
+} as const;
+
+const CERTIFICATE_TEMPLATE_NAME_OID = "1.3.6.1.4.1.311.20.2";
+const SUBJECT_ALT_NAME_OID = "2.5.29.17";
+const CERTIFICATE_TEMPLATE_NAMES = {
+  sandbox: "TSTZATCA-Code-Signing",
+  simulation: "PREZATCA-Code-Signing",
+  production: "ZATCA-Code-Signing",
 } as const;
 
 const EC_PUBLIC_KEY_OID = "1.2.840.10045.2.1"; // id-ecPublicKey
@@ -94,25 +109,54 @@ function derToAsn1(der: Buffer) {
   return fromDerNoBitStringDecode(util.createBuffer(der.toString("binary")), { decodeBitStrings: false });
 }
 
-function utf8StringAttribute(oid: string, value: string) {
-  // Encoded as: Extension ::= SEQUENCE { extnID OID, extnValue OCTET STRING }
-  // (critical defaults to FALSE, omitted) with extnValue containing a plain
-  // UTF8String -- a common simplification seen in community ZATCA CSR
-  // implementations. Verify against ZATCA's spec if a submission is rejected
-  // specifically over one of these fields.
-  const utf8Value = asn1.create(asn1.Class.UNIVERSAL, asn1.Type.UTF8, false, forge.util.encodeUtf8(value));
-  const extnValueDer = asn1.toDer(utf8Value).getBytes();
+/** Extension ::= SEQUENCE { extnID OID, extnValue OCTET STRING } (critical defaults to FALSE, omitted). */
+function extension(oid: string, extnValueDer: string) {
   return asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [
     asn1.create(asn1.Class.UNIVERSAL, asn1.Type.OID, false, asn1.oidToDer(oid).getBytes()),
     asn1.create(asn1.Class.UNIVERSAL, asn1.Type.OCTETSTRING, false, extnValueDer),
   ]);
 }
 
+function certificateTemplateNameExtension(environment: keyof typeof CERTIFICATE_TEMPLATE_NAMES) {
+  const value = asn1.create(asn1.Class.UNIVERSAL, asn1.Type.PRINTABLESTRING, false, CERTIFICATE_TEMPLATE_NAMES[environment]);
+  return extension(CERTIFICATE_TEMPLATE_NAME_OID, asn1.toDer(value).getBytes());
+}
+
+/**
+ * subjectAltName extension carrying one directoryName GeneralName -- an
+ * RDNSequence built the same way forge builds the Subject DN (each RDN a
+ * SET of one AttributeTypeAndValue), reused here via the same
+ * distinguishedNameToAsn1 helper rather than hand-rolling an identical
+ * structure twice.
+ */
+function subjectAltNameExtension(san: CsrSanInput) {
+  const rdnSequence = pki.distinguishedNameToAsn1({
+    attributes: [
+      { type: SAN_RDN_OIDS.egsSerialNumber, value: san.egsSerialNumber },
+      { type: SAN_RDN_OIDS.vatRegistrationNumber, value: san.vatRegistrationNumber },
+      { type: SAN_RDN_OIDS.invoiceType, value: san.invoiceType },
+      { type: SAN_RDN_OIDS.location, value: san.location },
+      { type: SAN_RDN_OIDS.industryBusinessCategory, value: san.industryBusinessCategory },
+    ],
+  });
+  // GeneralName ::= CHOICE { ... directoryName [4] Name ... } -- [4] is
+  // EXPLICIT (Name is itself a CHOICE), so it wraps the RDNSequence as its
+  // one child rather than re-tagging it.
+  const directoryName = asn1.create(asn1.Class.CONTEXT_SPECIFIC, 4, true, [rdnSequence]);
+  // SubjectAltName ::= SEQUENCE OF GeneralName -- one entry here.
+  const generalNames = asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [directoryName]);
+  return extension(SUBJECT_ALT_NAME_OID, asn1.toDer(generalNames).getBytes());
+}
+
 /**
  * Generates a fresh secp256k1 keypair (the curve ZATCA's e-invoicing PKI
  * mandates -- not P-256/P-384) and a CSR signed with it.
  */
-export function generateZatcaCsr(subject: CsrSubjectInput, san: CsrSanInput): GeneratedCsr {
+export function generateZatcaCsr(
+  subject: CsrSubjectInput,
+  san: CsrSanInput,
+  environment: keyof typeof CERTIFICATE_TEMPLATE_NAMES,
+): GeneratedCsr {
   const { privateKey, publicKey } = generateKeyPairSync("ec", {
     namedCurve: "secp256k1",
     privateKeyEncoding: { type: "pkcs8", format: "pem" },
@@ -136,13 +180,7 @@ export function generateZatcaCsr(subject: CsrSubjectInput, san: CsrSanInput): Ge
     ],
   });
 
-  const extensions = [
-    utf8StringAttribute(SAN_FIELD_OIDS.egsSerialNumber, san.egsSerialNumber),
-    utf8StringAttribute(SAN_FIELD_OIDS.vatRegistrationNumber, san.vatRegistrationNumber),
-    utf8StringAttribute(SAN_FIELD_OIDS.invoiceType, san.invoiceType),
-    utf8StringAttribute(SAN_FIELD_OIDS.location, san.location),
-    utf8StringAttribute(SAN_FIELD_OIDS.industryBusinessCategory, san.industryBusinessCategory),
-  ];
+  const extensions = [certificateTemplateNameExtension(environment), subjectAltNameExtension(san)];
   const extensionSequence = asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, extensions);
   const extensionRequestAttribute = asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [
     asn1.create(asn1.Class.UNIVERSAL, asn1.Type.OID, false, asn1.oidToDer(EXTENSION_REQUEST_OID).getBytes()),
@@ -238,4 +276,12 @@ export function csrPemToBase64(csrPem: string): string {
 // Referenced only in the doc comment above / for future readers checking
 // which OIDs this module assumes; kept as a named export so it's
 // discoverable without grepping.
-export const ZATCA_CSR_OIDS = { EC_PUBLIC_KEY_OID, SECP256K1_OID, ECDSA_WITH_SHA256_OID, EXTENSION_REQUEST_OID, ...SAN_FIELD_OIDS };
+export const ZATCA_CSR_OIDS = {
+  EC_PUBLIC_KEY_OID,
+  SECP256K1_OID,
+  ECDSA_WITH_SHA256_OID,
+  EXTENSION_REQUEST_OID,
+  CERTIFICATE_TEMPLATE_NAME_OID,
+  SUBJECT_ALT_NAME_OID,
+  ...SAN_RDN_OIDS,
+};
