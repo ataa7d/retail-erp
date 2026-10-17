@@ -12,6 +12,7 @@ import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
 import Tabs from "../components/Tabs";
 import { InvoicePrintArea } from "../components/InvoicePrint";
+import WorkflowActionButton from "../components/WorkflowActionButton";
 import { Field, TextInput, SelectInput, FormActions } from "../components/FormField";
 import type { Column } from "../components/DataTable";
 import { formatMoney } from "../lib/currency";
@@ -270,13 +271,9 @@ export function SalesInvoiceDetailModal({ invoiceId, onVoided }: { invoiceId: st
           </div>
           {postError && <p className="mt-2 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{postError}</p>}
           {detail.document_status === "draft" && hasPermission("sales.pos_invoice.create") && (
-            <button
-              onClick={post}
-              disabled={busy}
-              className="mt-3 w-full rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-            >
+            <WorkflowActionButton onClick={post} disabled={busy} className="mt-3 w-full">
               {busy ? "Working..." : "Post"}
-            </button>
+            </WorkflowActionButton>
           )}
           <ZatcaQrPanel status={detail.document_status} qr={detail.zatcaQr} qrError={detail.zatcaQrError} />
           <XmlDownloadButton status={detail.document_status} path={`/api/sales-invoices/${detail.id}/xml`} />
@@ -403,13 +400,9 @@ export function CreditNoteDetailModal({ creditNoteId }: { creditNoteId: string }
           </div>
           {postError && <p className="mt-2 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{postError}</p>}
           {detail.document_status === "draft" && hasPermission("sales.return.create") && (
-            <button
-              onClick={post}
-              disabled={busy}
-              className="mt-3 w-full rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-            >
+            <WorkflowActionButton onClick={post} disabled={busy} className="mt-3 w-full">
               {busy ? "Working..." : "Post"}
-            </button>
+            </WorkflowActionButton>
           )}
           <ZatcaQrPanel status={detail.document_status} qr={detail.zatcaQr} qrError={detail.zatcaQrError} />
           <XmlDownloadButton status={detail.document_status} path={`/api/credit-notes/${detail.id}/xml`} />
@@ -1446,18 +1439,18 @@ export function QuotationDetailModal({ quotationId, onChanged }: { quotationId: 
         <div className="flex flex-wrap gap-2">
           {canDecide && (
             <>
-              <button onClick={accept} disabled={busy} className="rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
+              <WorkflowActionButton onClick={accept} disabled={busy}>
                 {busy ? "Working..." : "Mark Accepted"}
-              </button>
-              <button onClick={() => setShowReject(true)} disabled={busy} className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">
+              </WorkflowActionButton>
+              <WorkflowActionButton variant="danger" onClick={() => setShowReject(true)} disabled={busy}>
                 Mark Rejected
-              </button>
+              </WorkflowActionButton>
             </>
           )}
           {isOwnQuotation && (
-            <button onClick={withdraw} disabled={busy} className="rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">
+            <WorkflowActionButton variant="secondary" onClick={withdraw} disabled={busy}>
               {busy ? "Working..." : "Withdraw"}
-            </button>
+            </WorkflowActionButton>
           )}
         </div>
       )}

@@ -14,6 +14,7 @@ import Modal from "../components/Modal";
 import Tabs from "../components/Tabs";
 import ExchangeRateField from "../components/ExchangeRateField";
 import { PurchaseOrderPrintArea } from "../components/PurchaseOrderPrint";
+import WorkflowActionButton from "../components/WorkflowActionButton";
 import { useBaseCurrency, formatMoney } from "../lib/currency";
 import { Field, TextInput, SelectInput, FormActions } from "../components/FormField";
 import type { Column } from "../components/DataTable";
@@ -1528,9 +1529,9 @@ export function CreditNoteDetailModal({ creditNoteId }: { creditNoteId: string }
       </div>
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
       {detail.document_status === "draft" && hasPermission("purchasing.goods_receipt.post") && (
-        <button onClick={post} disabled={busy} className="mb-3 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
+        <WorkflowActionButton onClick={post} disabled={busy} className="mb-3">
           {busy ? "Working..." : "Post"}
-        </button>
+        </WorkflowActionButton>
       )}
       <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">{detail.reason}</p>
 
@@ -1993,9 +1994,9 @@ export function RequisitionDetailModal({ requisitionId, onChanged }: { requisiti
 
       {detail.document_status === "pending_approval" && canApprove && !showReject && (
         <div className="flex gap-2">
-          <button onClick={approve} disabled={busy} className="rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
+          <WorkflowActionButton onClick={approve} disabled={busy}>
             {busy ? "Working..." : "Approve"}
-          </button>
+          </WorkflowActionButton>
           <button onClick={() => setShowReject(true)} disabled={busy} className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">
             Reject
           </button>
@@ -2007,9 +2008,9 @@ export function RequisitionDetailModal({ requisitionId, onChanged }: { requisiti
         </p>
       )}
       {detail.document_status === "pending_approval" && isOwnRequisition && (
-        <button onClick={withdraw} disabled={busy} className="rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">
+        <WorkflowActionButton variant="secondary" onClick={withdraw} disabled={busy}>
           {busy ? "Working..." : "Withdraw"}
-        </button>
+        </WorkflowActionButton>
       )}
       {showReject && (
         <form onSubmit={reject} className="space-y-2">
@@ -2033,9 +2034,9 @@ export function RequisitionDetailModal({ requisitionId, onChanged }: { requisiti
             Convert to Purchase Order
           </button>
           {canApprove && (
-            <button onClick={unapprove} disabled={busy} className="rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">
+            <WorkflowActionButton variant="secondary" onClick={unapprove} disabled={busy}>
               {busy ? "Working..." : "Unapprove"}
-            </button>
+            </WorkflowActionButton>
           )}
         </div>
       )}
@@ -2246,9 +2247,9 @@ export function PoDetailModal({ poId }: { poId: string }) {
       />
       {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
       {detail.document_status === "draft" && hasPermission("purchasing.po.create") && (
-        <button onClick={post} disabled={busy} className="mb-3 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
+        <WorkflowActionButton onClick={post} disabled={busy} className="mb-3">
           {busy ? "Working..." : "Post"}
-        </button>
+        </WorkflowActionButton>
       )}
       {detail.purchase_requisition_id && (
         <button
