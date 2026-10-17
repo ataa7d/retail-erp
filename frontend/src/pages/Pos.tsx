@@ -64,6 +64,7 @@ interface TaxCode {
   rate: string;
   tax_type: "standard" | "zero_rated" | "exempt";
   is_active: boolean;
+  is_default: boolean;
 }
 
 interface PriceListItem {
@@ -554,7 +555,10 @@ export default function Pos() {
   const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
   const { data: stores } = useApiList<Store>("/api/stores");
   const { data: taxCodes } = useApiList<TaxCode>("/api/tax-codes");
-  const vatRate = Number(taxCodes?.find((t) => t.tax_type === "standard" && t.is_active)?.rate ?? DEFAULT_VAT_RATE);
+  const vatRate = Number(
+    (taxCodes?.find((t) => t.is_default && t.is_active) ?? taxCodes?.find((t) => t.tax_type === "standard" && t.is_active))?.rate ??
+      DEFAULT_VAT_RATE,
+  );
   const [company, setCompany] = useState<{
     name_en: string;
     name_ar: string;

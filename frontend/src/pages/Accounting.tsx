@@ -354,6 +354,7 @@ interface TaxCode {
   rate: string;
   tax_type: string;
   is_active: boolean;
+  is_default: boolean;
 }
 
 function NewTaxCodeForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
@@ -440,6 +441,16 @@ function TaxCodesTab() {
     }
   }
 
+  async function setDefault(taxCode: TaxCode) {
+    setBusyId(taxCode.id);
+    try {
+      await apiRequest(`/api/tax-codes/${taxCode.id}/set-default`, { method: "POST", token, companyId });
+      reload();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const columns: Column<TaxCode>[] = [
     { key: "code", header: "Code", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.code}</span> },
     { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{r.name_en}</span> },
@@ -463,6 +474,25 @@ function TaxCodesTab() {
           </button>
         </div>
       ),
+    },
+    {
+      key: "default",
+      header: "Default",
+      render: (r) =>
+        r.is_default ? (
+          <span className="text-xs font-medium text-brand-600 dark:text-brand-400">Default</span>
+        ) : r.tax_type === "standard" && r.is_active ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setDefault(r);
+            }}
+            disabled={busyId === r.id}
+            className="text-xs font-medium text-slate-500 hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-200"
+          >
+            Make default
+          </button>
+        ) : null,
     },
   ];
 

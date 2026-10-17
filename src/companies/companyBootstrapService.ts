@@ -150,8 +150,9 @@ export async function bootstrapCompany(client: PoolClient, p: BootstrapCompanyPa
   ];
   for (const [code, nameEn, nameAr, taxRate, taxType] of taxCodes) {
     await client.query(
-      `INSERT INTO tax_codes (company_id, code, name_en, name_ar, rate, tax_type) VALUES ($1, $2, $3, $4, $5, $6)`,
-      [companyId, code, nameEn, nameAr, taxRate, taxType],
+      `INSERT INTO tax_codes (company_id, code, name_en, name_ar, rate, tax_type, is_default)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [companyId, code, nameEn, nameAr, taxRate, taxType, code === "STD"],
     );
   }
 
