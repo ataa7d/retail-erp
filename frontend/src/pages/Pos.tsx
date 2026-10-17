@@ -59,6 +59,13 @@ interface PriceList {
   is_default: boolean;
 }
 
+interface TaxCode {
+  code: string;
+  rate: string;
+  tax_type: "standard" | "zero_rated" | "exempt";
+  is_active: boolean;
+}
+
 interface PriceListItem {
   item_variant_id: string;
   price: string;
@@ -130,7 +137,10 @@ interface HeldSale {
   cart: CartLine[];
 }
 
-const VAT_RATE = 15;
+// Fallback only -- every company gets a "STD" standard-rate tax code at
+// creation (companyBootstrapService.ts), so this never actually applies.
+// Kept so POS still renders something sane if that code is ever deactivated.
+const DEFAULT_VAT_RATE = 15;
 // Must match src/sales/loyaltyService.ts's POINT_REDEMPTION_VALUE.
 const POINT_REDEMPTION_VALUE = 0.05;
 const DEVICE_KEY = "pos_terminal_device_id";
@@ -543,6 +553,8 @@ export default function Pos() {
   const { data: items } = useApiList<PosItem>("/api/items");
   const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
   const { data: stores } = useApiList<Store>("/api/stores");
+  const { data: taxCodes } = useApiList<TaxCode>("/api/tax-codes");
+  const vatRate = Number(taxCodes?.find((t) => t.tax_type === "standard" && t.is_active)?.rate ?? DEFAULT_VAT_RATE);
   const [company, setCompany] = useState<{
     name_en: string;
     name_ar: string;
@@ -745,7 +757,7 @@ export default function Pos() {
     ? Math.min(subtotal, discount.type === "percent" ? (subtotal * discount.value) / 100 : discount.value)
     : 0;
   const total = subtotal - discountValue;
-  const net = total / (1 + VAT_RATE / 100);
+  const net = total / (1 + vatRate / 100);
   const vat = total - net;
   const lineDiscounts = cart.map((l) => (subtotal > 0 ? Number(((discountValue * (l.qty * l.unitPrice)) / subtotal).toFixed(2)) : 0));
   const change = paymentMethod === "cash" ? Math.max(0, Number(tendered || 0) - total) : 0;
@@ -855,7 +867,7 @@ export default function Pos() {
             i === cart.length - 1
               ? Number((discountValue - lineDiscounts.slice(0, -1).reduce((s, d) => s + d, 0)).toFixed(2))
               : lineDiscounts[i],
-          vatRate: VAT_RATE,
+          vatRate,
           priceIncludesVat: true,
         })),
         payments: [
@@ -1121,7 +1133,7 @@ export default function Pos() {
                 <span className="tabular-nums">{net.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                <span>VAT ({VAT_RATE}%)</span>
+                <span>VAT ({vatRate}%)</span>
                 <span className="tabular-nums">{vat.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -1374,11 +1386,11 @@ export default function Pos() {
             companyLogoUrl={company?.logo_path ? `${API_URL}${company.logo_path}` : null}
             lines={receipt.lines.map((l) => {
               const gross = l.qty * l.unitPrice;
-              const net = gross / (1 + VAT_RATE / 100);
+              const net = gross / (1 + vatRate / 100);
               return { description: l.label, qty: l.qty, unitPrice: l.unitPrice, net, vat: gross - net, gross };
             })}
-            netAmount={receipt.total / (1 + VAT_RATE / 100)}
-            vatAmount={receipt.total - receipt.total / (1 + VAT_RATE / 100)}
+            netAmount={receipt.total / (1 + vatRate / 100)}
+            vatAmount={receipt.total - receipt.total / (1 + vatRate / 100)}
             grossAmount={receipt.total}
             qr={receipt.zatcaQr}
           />
