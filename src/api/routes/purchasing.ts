@@ -515,7 +515,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/suppliers",
-    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.create")] },
     async (request, reply) => {
       const body = createSupplierSchema.parse(request.body);
       const result = await pool.query<{ id: string }>(
@@ -556,7 +556,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
   // and recreating the supplier, which orphans its PO/GRN/invoice history.
   app.post<{ Params: { id: string } }>(
     "/suppliers/:id",
-    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.edit")] },
     async (request) => {
       const body = updateSupplierSchema.parse(request.body);
       const existing = await pool.query(`SELECT id FROM suppliers WHERE id = $1 AND company_id = $2`, [
@@ -589,7 +589,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/suppliers/:id/deactivate",
-    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.deactivate")] },
     async (request) => {
       const existing = await pool.query(`SELECT id FROM suppliers WHERE id = $1 AND company_id = $2`, [
         request.params.id,
@@ -603,7 +603,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/suppliers/:id/reactivate",
-    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.deactivate")] },
     async (request) => {
       const existing = await pool.query(`SELECT id FROM suppliers WHERE id = $1 AND company_id = $2`, [
         request.params.id,
@@ -683,7 +683,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/suppliers/:id/prices",
-    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.edit")] },
     async (request, reply) => {
       const body = setSupplierPriceSchema.parse(request.body);
       await withTransaction(async (client) => {
@@ -709,7 +709,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string; variantId: string } }>(
     "/suppliers/:id/prices/:variantId/remove",
-    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.edit")] },
     async (request) => {
       await withTransaction(async (client) => {
         const supplier = await client.query(`SELECT id FROM suppliers WHERE id = $1 AND company_id = $2`, [

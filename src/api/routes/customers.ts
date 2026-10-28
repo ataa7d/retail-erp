@@ -48,7 +48,7 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/customers",
-    { preHandler: [app.authenticate, app.requirePermission("sales.customer.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("sales.customer.create")] },
     async (request, reply) => {
       const body = createSchema.parse(request.body);
       const id = await withTransaction(async (client) => {
@@ -89,7 +89,7 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
   // it's first created.
   app.post<{ Params: { id: string } }>(
     "/customers/:id/terms",
-    { preHandler: [app.authenticate, app.requirePermission("sales.customer.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("sales.customer.edit")] },
     async (request) => {
       const body = termsSchema.parse(request.body);
       await withTransaction(async (client) => {
@@ -124,7 +124,7 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
   // a commercial-terms one, and unrelated to credit limits/price lists.
   app.post<{ Params: { id: string } }>(
     "/customers/:id/loyalty",
-    { preHandler: [app.authenticate, app.requirePermission("sales.customer.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("sales.customer.edit")] },
     async (request) => {
       const body = loyaltySchema.parse(request.body);
       await withTransaction(async (client) => {

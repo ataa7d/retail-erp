@@ -30,7 +30,8 @@ import { isPushSupported, subscribeToPush } from "../lib/push";
 import GlobalSearch from "./GlobalSearch";
 
 // Items now lives inside Inventory's tabs -- this link stays visible to
-// anyone who could reach Items before (inventory.items.manage), not just
+// anyone who could reach Items before (any of the three permissions that
+// replaced the old inventory.items.manage umbrella), not just
 // inventory.adjustment.post, so nobody loses access they already had.
 // Customers (moved into Accounting below) doesn't get the same treatment:
 // it used to be visible to *everyone* (no permission at all), and Accounting
@@ -71,7 +72,7 @@ const navItems = [
   {
     to: "/inventory",
     label: "nav.inventory",
-    permission: ["inventory.adjustment.post", "inventory.items.manage"],
+    permission: ["inventory.adjustment.post", "inventory.items.create", "inventory.items.edit", "inventory.items.deactivate"],
     icon: Warehouse,
     color: "teal",
     subItems: [

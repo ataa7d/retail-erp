@@ -118,7 +118,7 @@ const variantAttributesSchema = z.object({
 export async function itemRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/items",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.create")] },
     async (request, reply) => {
       const body = createSchema.parse(request.body);
       const itemId = await withTransaction(async (client) => {
@@ -176,7 +176,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
   // barcoded", same scope as the plain POST /items create.
   app.post(
     "/items/quick-add",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.create")] },
     async (request, reply) => {
       const body = quickAddSchema.parse(request.body);
       const result = await withTransaction(async (client) => {
@@ -239,7 +239,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/items/:id/variants",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.create")] },
     async (request, reply) => {
       const body = addVariantSchema.parse(request.body);
       const variantId = await withTransaction(async (client) => {
@@ -266,7 +266,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/item-variants/:id/barcodes",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.edit")] },
     async (request, reply) => {
       const body = addBarcodeSchema.parse(request.body);
       const barcodeId = await withTransaction(async (client) => {
@@ -290,7 +290,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/items/:id/classify",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.edit")] },
     async (request) => {
       const body = classifySchema.parse(request.body);
       await withTransaction(async (client) => {
@@ -323,7 +323,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/item-variants/:id/deactivate",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.deactivate")] },
     async (request) => {
       await withTransaction(async (client) => {
         const existing = await client.query(`SELECT id FROM item_variants WHERE id = $1 AND company_id = $2`, [
@@ -339,7 +339,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/item-variants/:id/reactivate",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.deactivate")] },
     async (request) => {
       await withTransaction(async (client) => {
         const existing = await client.query(`SELECT id FROM item_variants WHERE id = $1 AND company_id = $2`, [
@@ -355,7 +355,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/item-variants/:id/reorder-point",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.edit")] },
     async (request) => {
       const body = reorderPointSchema.parse(request.body);
       await withTransaction(async (client) => {
@@ -372,7 +372,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/item-variants/:id/attributes",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.edit")] },
     async (request) => {
       const body = variantAttributesSchema.parse(request.body);
       await withTransaction(async (client) => {
@@ -464,7 +464,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
   // the response reports success/failure per row instead of all-or-nothing.
   app.post(
     "/items/bulk-import",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.create")] },
     async (request) => {
       const file = await request.file();
       if (!file) throw new BusinessRuleError("no file uploaded");

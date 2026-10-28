@@ -40,7 +40,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/brands",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.edit")] },
     async (request, reply) => {
       const body = brandSchema.parse(request.body);
       const result = await pool.query<{ id: string }>(
@@ -54,7 +54,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/brands/:id/deactivate",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.edit")] },
     async (request) => {
       const existing = await pool.query(`SELECT id FROM brands WHERE id = $1 AND company_id = $2`, [
         request.params.id,
@@ -68,7 +68,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/brands/:id/reactivate",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.edit")] },
     async (request) => {
       const existing = await pool.query(`SELECT id FROM brands WHERE id = $1 AND company_id = $2`, [
         request.params.id,
@@ -91,7 +91,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/categories",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.edit")] },
     async (request, reply) => {
       const body = categorySchema.parse(request.body);
       const result = await pool.query<{ id: string }>(
@@ -105,7 +105,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/categories/:id/deactivate",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.edit")] },
     async (request) => {
       const existing = await pool.query(`SELECT id FROM categories WHERE id = $1 AND company_id = $2`, [
         request.params.id,
@@ -119,7 +119,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/categories/:id/reactivate",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.edit")] },
     async (request) => {
       const existing = await pool.query(`SELECT id FROM categories WHERE id = $1 AND company_id = $2`, [
         request.params.id,
@@ -142,7 +142,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/seasons",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.edit")] },
     async (request, reply) => {
       const body = seasonSchema.parse(request.body);
       const result = await pool.query<{ id: string }>(
@@ -156,7 +156,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/seasons/:id/deactivate",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.edit")] },
     async (request) => {
       const existing = await pool.query(`SELECT id FROM seasons WHERE id = $1 AND company_id = $2`, [
         request.params.id,
@@ -170,7 +170,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/seasons/:id/reactivate",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.edit")] },
     async (request) => {
       const existing = await pool.query(`SELECT id FROM seasons WHERE id = $1 AND company_id = $2`, [
         request.params.id,
@@ -196,7 +196,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/item-groups",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.edit")] },
     async (request, reply) => {
       const body = groupSchema.parse(request.body);
       const result = await pool.query<{ id: string }>(
@@ -210,7 +210,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/item-groups/:id/deactivate",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.edit")] },
     async (request) => {
       const existing = await pool.query(`SELECT id FROM item_groups WHERE id = $1 AND company_id = $2`, [
         request.params.id,
@@ -224,7 +224,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/item-groups/:id/reactivate",
-    { preHandler: [app.authenticate, app.requirePermission("inventory.items.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.items.edit")] },
     async (request) => {
       const existing = await pool.query(`SELECT id FROM item_groups WHERE id = $1 AND company_id = $2`, [
         request.params.id,
