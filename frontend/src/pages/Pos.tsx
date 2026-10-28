@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Search, Plus, Minus, Trash2, WifiOff, Wifi, RefreshCw, LogOut, X, ShoppingCart, Wallet, PauseCircle, Printer, Percent } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
+import { useDefaultVatRate } from "../lib/useDefaultVatRate";
 import { apiRequest, ApiError, API_URL } from "../lib/api";
 import { InvoicePrintArea } from "../components/InvoicePrint";
 
@@ -56,14 +57,6 @@ interface PriceList {
   id: string;
   code: string;
   name_en: string;
-  is_default: boolean;
-}
-
-interface TaxCode {
-  code: string;
-  rate: string;
-  tax_type: "standard" | "zero_rated" | "exempt";
-  is_active: boolean;
   is_default: boolean;
 }
 
@@ -138,10 +131,6 @@ interface HeldSale {
   cart: CartLine[];
 }
 
-// Fallback only -- every company gets a "STD" standard-rate tax code at
-// creation (companyBootstrapService.ts), so this never actually applies.
-// Kept so POS still renders something sane if that code is ever deactivated.
-const DEFAULT_VAT_RATE = 15;
 // Must match src/sales/loyaltyService.ts's POINT_REDEMPTION_VALUE.
 const POINT_REDEMPTION_VALUE = 0.05;
 const DEVICE_KEY = "pos_terminal_device_id";
@@ -554,11 +543,7 @@ export default function Pos() {
   const { data: items } = useApiList<PosItem>("/api/items");
   const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
   const { data: stores } = useApiList<Store>("/api/stores");
-  const { data: taxCodes } = useApiList<TaxCode>("/api/tax-codes");
-  const vatRate = Number(
-    (taxCodes?.find((t) => t.is_default && t.is_active) ?? taxCodes?.find((t) => t.tax_type === "standard" && t.is_active))?.rate ??
-      DEFAULT_VAT_RATE,
-  );
+  const vatRate = Number(useDefaultVatRate());
   const [company, setCompany] = useState<{
     name_en: string;
     name_ar: string;

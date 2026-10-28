@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Receipt, RotateCcw, Plus, Trash2, Tag, FileText, Wallet, Printer, Download } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
+import { useDefaultVatRate } from "../lib/useDefaultVatRate";
 import { apiRequest, ApiError, downloadFile, API_URL } from "../lib/api";
 import { runBulkAction } from "../lib/bulkAction";
 import { exportToCsv } from "../lib/csvExport";
@@ -501,6 +502,7 @@ export function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => voi
   const { data: taxCodes } = useApiList<TaxCodeOption>("/api/tax-codes");
   const { data: arAgeing } = useApiList<ArAgeingRow>("/api/ar-ageing");
   const variantOptions = useVariantOptions();
+  const defaultVatRate = useDefaultVatRate();
 
   const [invoiceChannel, setInvoiceChannel] = useState<"pos" | "wholesale">("pos");
   const [storeId, setStoreId] = useState("");
@@ -509,11 +511,20 @@ export function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => voi
   const [priceListItems, setPriceListItems] = useState<PriceListItem[] | null>(null);
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [lines, setLines] = useState<InvoiceLineDraft[]>([
-    { itemVariantId: "", itemDescription: "", qty: "1", unitPrice: "0", vatRate: "15", priceIncludesVat: true },
+    { itemVariantId: "", itemDescription: "", qty: "1", unitPrice: "0", vatRate: defaultVatRate, priceIncludesVat: true },
   ]);
   const [payments, setPayments] = useState<PaymentDraft[]>([{ paymentMethod: "cash", amount: "" }]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // The initial line above is seeded before the tax-codes fetch resolves
+  // (useState's initializer runs synchronously at mount); patch it once the
+  // real default is known, but only while still pristine (no item picked
+  // yet -- once one is, updateLine's own tax-code resolution takes over).
+  useEffect(() => {
+    setLines((prev) => (prev.length === 1 && prev[0]!.itemVariantId === "" ? [{ ...prev[0]!, vatRate: defaultVatRate }] : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultVatRate]);
 
   const zatcaInvoiceCategory = invoiceChannel === "pos" ? "simplified" : "standard";
 
@@ -555,7 +566,11 @@ export function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => voi
             next.unitPrice = priceEntry.price;
             next.priceIncludesVat = list?.price_includes_vat ?? next.priceIncludesVat;
           }
-          const taxCode = taxCodes?.find((t) => t.id === list?.default_tax_code_id);
+          // The price list's own tax code wins when set; otherwise fall
+          // back to the company's default rather than leaving whatever
+          // placeholder the line started with.
+          const taxCode =
+            taxCodes?.find((t) => t.id === list?.default_tax_code_id) ?? taxCodes?.find((t) => t.is_default && t.is_active);
           if (taxCode) next.vatRate = taxCode.rate;
         }
         return next;
@@ -563,7 +578,10 @@ export function NewSalesInvoiceForm({ onClose, onCreated }: { onClose: () => voi
     );
   }
   function addLine() {
-    setLines((prev) => [...prev, { itemVariantId: "", itemDescription: "", qty: "1", unitPrice: "0", vatRate: "15", priceIncludesVat: true }]);
+    setLines((prev) => [
+      ...prev,
+      { itemVariantId: "", itemDescription: "", qty: "1", unitPrice: "0", vatRate: defaultVatRate, priceIncludesVat: true },
+    ]);
   }
   function removeLine(index: number) {
     setLines((prev) => prev.filter((_, i) => i !== index));
@@ -1092,6 +1110,7 @@ export function NewQuotationForm({ onClose, onCreated }: { onClose: () => void; 
   const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
   const { data: taxCodes } = useApiList<TaxCodeOption>("/api/tax-codes");
   const variantOptions = useVariantOptions();
+  const defaultVatRate = useDefaultVatRate();
 
   const [storeId, setStoreId] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -1101,10 +1120,17 @@ export function NewQuotationForm({ onClose, onCreated }: { onClose: () => void; 
   const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<InvoiceLineDraft[]>([
-    { itemVariantId: "", itemDescription: "", qty: "1", unitPrice: "0", vatRate: "15", priceIncludesVat: false },
+    { itemVariantId: "", itemDescription: "", qty: "1", unitPrice: "0", vatRate: defaultVatRate, priceIncludesVat: false },
   ]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Same timing issue as NewSalesInvoiceForm -- patch the still-pristine
+  // initial line once the real default resolves.
+  useEffect(() => {
+    setLines((prev) => (prev.length === 1 && prev[0]!.itemVariantId === "" ? [{ ...prev[0]!, vatRate: defaultVatRate }] : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultVatRate]);
 
   useEffect(() => {
     if (!priceListId || !token || !companyId) {
@@ -1136,7 +1162,8 @@ export function NewQuotationForm({ onClose, onCreated }: { onClose: () => void; 
             next.unitPrice = priceEntry.price;
             next.priceIncludesVat = list?.price_includes_vat ?? next.priceIncludesVat;
           }
-          const taxCode = taxCodes?.find((t) => t.id === list?.default_tax_code_id);
+          const taxCode =
+            taxCodes?.find((t) => t.id === list?.default_tax_code_id) ?? taxCodes?.find((t) => t.is_default && t.is_active);
           if (taxCode) next.vatRate = taxCode.rate;
         }
         return next;
@@ -1144,7 +1171,10 @@ export function NewQuotationForm({ onClose, onCreated }: { onClose: () => void; 
     );
   }
   function addLine() {
-    setLines((prev) => [...prev, { itemVariantId: "", itemDescription: "", qty: "1", unitPrice: "0", vatRate: "15", priceIncludesVat: false }]);
+    setLines((prev) => [
+      ...prev,
+      { itemVariantId: "", itemDescription: "", qty: "1", unitPrice: "0", vatRate: defaultVatRate, priceIncludesVat: false },
+    ]);
   }
   function removeLine(index: number) {
     setLines((prev) => prev.filter((_, i) => i !== index));
@@ -1540,6 +1570,8 @@ interface TaxCodeOption {
   code: string;
   name_en: string;
   rate: string;
+  is_active: boolean;
+  is_default: boolean;
 }
 
 function NewPriceListForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {

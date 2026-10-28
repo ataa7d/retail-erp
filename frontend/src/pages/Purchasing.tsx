@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { ShoppingCart, Truck, Plus, Trash2, PackageCheck, ReceiptText, ClipboardList, Undo2, Download, Upload, Printer } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
+import { useDefaultVatRate } from "../lib/useDefaultVatRate";
 import { apiRequest, ApiError, uploadFile, API_URL } from "../lib/api";
 import { runBulkAction } from "../lib/bulkAction";
 import { exportToCsv } from "../lib/csvExport";
@@ -111,6 +112,8 @@ interface PoLine {
   qty: string;
   received_qty: string;
   unit_price: string;
+  vat_rate: string;
+  price_includes_vat: boolean;
   net_amount: string;
   vat_amount: string;
   gross_amount: string;
@@ -525,6 +528,7 @@ function BulkUploadItemsModal({
   onImported: (lines: PoLineDraft[], options: Array<{ id: string; label: string }>) => void;
 }) {
   const { token, companyId } = useAuth();
+  const defaultVatRate = useDefaultVatRate();
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -559,7 +563,7 @@ function BulkUploadItemsModal({
           itemVariantId: r.variantId,
           qty: csvRow?.order_qty || "1",
           unitPrice: csvRow?.standard_cost || "0",
-          vatRate: csvRow?.order_vat_rate || "15",
+          vatRate: csvRow?.order_vat_rate || defaultVatRate,
           priceIncludesVat: false,
         });
         const detail = [csvRow?.color, csvRow?.size].filter(Boolean).join(" / ");
@@ -647,6 +651,7 @@ export function NewPurchaseOrderForm({
   const { data: suppliers } = useApiList<Supplier>("/api/suppliers");
   const { data: stores } = useApiList<Store>("/api/stores");
   const { options: variantOptions, reload: reloadVariants } = useVariantOptions();
+  const defaultVatRate = useDefaultVatRate();
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
 
@@ -657,8 +662,18 @@ export function NewPurchaseOrderForm({
   const [currency, setCurrency] = useState(baseCurrency);
   const [exchangeRate, setExchangeRate] = useState("1");
   const [lines, setLines] = useState<PoLineDraft[]>(
-    initial?.lines ?? [{ itemVariantId: "", qty: "1", unitPrice: "0", vatRate: "15", priceIncludesVat: false }],
+    initial?.lines ?? [{ itemVariantId: "", qty: "1", unitPrice: "0", vatRate: defaultVatRate, priceIncludesVat: false }],
   );
+
+  // The initial blank line above is seeded before the tax-codes fetch above
+  // resolves (useState's initializer runs synchronously at mount), so it
+  // patches in the real default once known -- but only while the line is
+  // still untouched, never overwriting a rate the user already edited.
+  useEffect(() => {
+    if (initial?.lines) return;
+    setLines((prev) => (prev.length === 1 && prev[0]!.itemVariantId === "" ? [{ ...prev[0]!, vatRate: defaultVatRate }] : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultVatRate]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [supplierPrices, setSupplierPrices] = useState<SupplierItemPrice[] | null>(null);
@@ -721,7 +736,7 @@ export function NewPurchaseOrderForm({
     );
   }
   function addLine() {
-    setLines((prev) => [...prev, { itemVariantId: "", qty: "1", unitPrice: "0", vatRate: "15", priceIncludesVat: false }]);
+    setLines((prev) => [...prev, { itemVariantId: "", qty: "1", unitPrice: "0", vatRate: defaultVatRate, priceIncludesVat: false }]);
   }
   function removeLine(index: number) {
     setLines((prev) => prev.filter((_, i) => i !== index));
@@ -868,7 +883,7 @@ export function NewPurchaseOrderForm({
             if (emptyIndex >= 0) {
               return prev.map((l, i) => (i === emptyIndex ? { ...l, itemVariantId: variant.id } : l));
             }
-            return [...prev, { itemVariantId: variant.id, qty: "1", unitPrice: "0", vatRate: "15", priceIncludesVat: false }];
+            return [...prev, { itemVariantId: variant.id, qty: "1", unitPrice: "0", vatRate: defaultVatRate, priceIncludesVat: false }];
           });
         }}
       />
@@ -1079,6 +1094,7 @@ export function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => 
   const { token, companyId } = useAuth();
   const { data: purchaseOrders } = useApiList<PurchaseOrder>("/api/purchase-orders");
   const { data: goodsReceipts } = useApiList<GoodsReceipt>("/api/goods-receipts");
+  const defaultVatRate = useDefaultVatRate();
   const postedPOs = purchaseOrders?.filter((po) => po.document_status === "posted") ?? [];
 
   const [purchaseOrderId, setPurchaseOrderId] = useState("");
@@ -1108,7 +1124,7 @@ export function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => 
       setGrDetail(detail);
       const init: Record<string, { qty: string; unitPrice: string; vatRate: string; priceIncludesVat: boolean }> = {};
       for (const line of detail.lines) {
-        init[line.id] = { qty: line.qty_received, unitPrice: line.base_unit_cost, vatRate: "15", priceIncludesVat: false };
+        init[line.id] = { qty: line.qty_received, unitPrice: line.base_unit_cost, vatRate: defaultVatRate, priceIncludesVat: false };
       }
       setLineData(init);
     });
@@ -1126,7 +1142,7 @@ export function NewSupplierInvoiceForm({ onClose, onCreated }: { onClose: () => 
         qty: Number(lineData[l.id]?.qty ?? l.qty_received),
         unitPrice: Number(lineData[l.id]?.unitPrice ?? l.unit_cost),
         discountAmount: 0,
-        vatRate: Number(lineData[l.id]?.vatRate ?? 15),
+        vatRate: Number(lineData[l.id]?.vatRate ?? defaultVatRate),
         priceIncludesVat: lineData[l.id]?.priceIncludesVat ?? false,
       }));
 
@@ -1742,13 +1758,24 @@ function ConvertRequisitionForm({ requisition, onClose, onConverted }: { requisi
   const { token, companyId } = useAuth();
   const baseCurrency = useBaseCurrency();
   const { data: suppliers } = useApiList<Supplier>("/api/suppliers");
+  const defaultVatRate = useDefaultVatRate();
 
   const [supplierId, setSupplierId] = useState("");
   const [orderDate, setOrderDate] = useState(new Date().toISOString().slice(0, 10));
   const [expectedDate, setExpectedDate] = useState("");
   const [lineData, setLineData] = useState<Record<string, { unitPrice: string; vatRate: string; priceIncludesVat: boolean }>>(
-    Object.fromEntries(requisition.lines.map((l) => [l.id, { unitPrice: "0", vatRate: "15", priceIncludesVat: false }])),
+    Object.fromEntries(requisition.lines.map((l) => [l.id, { unitPrice: "0", vatRate: defaultVatRate, priceIncludesVat: false }])),
   );
+
+  // Same timing issue as NewPurchaseOrderForm: this initializer runs before
+  // the tax-codes fetch resolves, so patch every still-pristine line once
+  // the real default is known.
+  useEffect(() => {
+    setLineData((prev) =>
+      Object.fromEntries(Object.entries(prev).map(([id, l]) => [id, l.unitPrice === "0" ? { ...l, vatRate: defaultVatRate } : l])),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultVatRate]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -1772,7 +1799,7 @@ function ConvertRequisitionForm({ requisition, onClose, onConverted }: { requisi
             qty: Number(l.qty),
             unitPrice: Number(lineData[l.id]?.unitPrice ?? 0),
             discountAmount: 0,
-            vatRate: Number(lineData[l.id]?.vatRate ?? 15),
+            vatRate: Number(lineData[l.id]?.vatRate ?? defaultVatRate),
             priceIncludesVat: lineData[l.id]?.priceIncludesVat ?? false,
           })),
         },
@@ -1997,9 +2024,9 @@ export function RequisitionDetailModal({ requisitionId, onChanged }: { requisiti
           <WorkflowActionButton onClick={approve} disabled={busy}>
             {busy ? "Working..." : "Approve"}
           </WorkflowActionButton>
-          <button onClick={() => setShowReject(true)} disabled={busy} className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">
+          <WorkflowActionButton variant="danger" onClick={() => setShowReject(true)} disabled={busy}>
             Reject
-          </button>
+          </WorkflowActionButton>
         </div>
       )}
       {detail.document_status === "pending_approval" && !canApprove && (
@@ -2193,8 +2220,8 @@ export function PoDetailModal({ poId }: { poId: string }) {
             itemVariantId: l.item_variant_id,
             qty: l.qty,
             unitPrice: l.unit_price,
-            vatRate: "15",
-            priceIncludesVat: false,
+            vatRate: l.vat_rate,
+            priceIncludesVat: l.price_includes_vat,
           })),
         },
       },
@@ -2794,6 +2821,7 @@ function ReorderSuggestionsTab() {
   const navigate = useNavigate();
   const { token, companyId } = useAuth();
   const { data: stores } = useApiList<Store>("/api/stores");
+  const defaultVatRate = useDefaultVatRate();
   const [storeId, setStoreId] = useState("");
   const [suggestions, setSuggestions] = useState<ReorderSuggestion[] | null>(null);
   const [qtyOverrides, setQtyOverrides] = useState<Record<string, string>>({});
@@ -2828,7 +2856,7 @@ function ReorderSuggestionsTab() {
         itemVariantId: r.item_variant_id,
         qty: qtyOverrides[r.item_variant_id] ?? r.suggested_qty,
         unitPrice: r.unit_cost ?? "0",
-        vatRate: "15",
+        vatRate: defaultVatRate,
         priceIncludesVat: false,
       })),
     };
