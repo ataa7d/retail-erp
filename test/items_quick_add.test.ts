@@ -43,7 +43,7 @@ beforeAll(async () => {
   await client.query(`INSERT INTO user_company_access (user_id, company_id) VALUES ($1, $2)`, [userId, companyId]);
   const role = await client.query(`INSERT INTO roles (company_id, name) VALUES ($1, 'Inventory Manager') RETURNING id`, [companyId]);
   await client.query(
-    `INSERT INTO role_permissions (role_id, permission_id) SELECT $1, id FROM permissions WHERE code = 'inventory.items.manage'`,
+    `INSERT INTO role_permissions (role_id, permission_id) SELECT $1, id FROM permissions WHERE code = 'inventory.items.create'`,
     [role.rows[0].id],
   );
   await client.query(`INSERT INTO user_roles (user_id, company_id, role_id) VALUES ($1, $2, $3)`, [userId, companyId, role.rows[0].id]);

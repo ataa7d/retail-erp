@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import jwt from "@fastify/jwt";
 import { pool } from "../db.js";
 import { ForbiddenError, UnauthorizedError } from "../errors.js";
+import { userHasPermission } from "../permissions.js";
 
 export interface AuthUser {
   id: string;
@@ -80,15 +81,8 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
 
   app.decorate("requirePermission", (code: string) => {
     return async (request: FastifyRequest) => {
-      const result = await pool.query(
-        `SELECT 1 FROM user_roles ur
-         JOIN role_permissions rp ON rp.role_id = ur.role_id
-         JOIN permissions p ON p.id = rp.permission_id
-         WHERE ur.user_id = $1 AND ur.company_id = $2 AND p.code = $3
-         LIMIT 1`,
-        [request.authUser.id, request.companyId, code],
-      );
-      if (result.rows.length === 0) {
+      const allowed = await userHasPermission(request.authUser.id, request.companyId, code);
+      if (!allowed) {
         throw new ForbiddenError(`missing permission: ${code}`);
       }
     };

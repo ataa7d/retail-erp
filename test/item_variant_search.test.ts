@@ -61,6 +61,12 @@ beforeAll(async () => {
     [`varsearch_${randomUUID()}@test.local`, passwordHash],
   );
   await client.query(`INSERT INTO user_company_access (user_id, company_id) VALUES ($1, $2)`, [user.rows[0].id, companyId]);
+  const role = await client.query(`INSERT INTO roles (company_id, name) VALUES ($1, 'Inventory') RETURNING id`, [companyId]);
+  await client.query(
+    `INSERT INTO role_permissions (role_id, permission_id) SELECT $1, id FROM permissions WHERE code = 'inventory.items.view'`,
+    [role.rows[0].id],
+  );
+  await client.query(`INSERT INTO user_roles (user_id, company_id, role_id) VALUES ($1, $2, $3)`, [user.rows[0].id, companyId, role.rows[0].id]);
   const userEmail = (await client.query(`SELECT email FROM users WHERE id = $1`, [user.rows[0].id])).rows[0].email;
 
   const loginRes = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: userEmail, password: PASSWORD } });
@@ -72,6 +78,9 @@ afterAll(async () => {
   await client.query(`DELETE FROM audit_log WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM item_variants WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM items WHERE company_id = $1`, [companyId]);
+  await client.query(`DELETE FROM user_roles WHERE company_id = $1`, [companyId]);
+  await client.query(`DELETE FROM role_permissions WHERE role_id IN (SELECT id FROM roles WHERE company_id = $1)`, [companyId]);
+  await client.query(`DELETE FROM roles WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM user_company_access WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM users WHERE email LIKE 'varsearch_%'`);
   await client.query(`DELETE FROM brands WHERE company_id = $1`, [companyId]);

@@ -10,6 +10,7 @@ import {
   postInventoryTransfer,
 } from "../../inventory/inventoryService.js";
 import { NotFoundError } from "../errors.js";
+import { userHasPermission } from "../permissions.js";
 import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
 import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 
@@ -68,9 +69,12 @@ export async function inventoryRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/stock-transfers", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(
-      `SELECT
+  app.get(
+    "/stock-transfers",
+    { preHandler: [app.authenticate, app.requirePermission("inventory.transfer.view")] },
+    async (request) => {
+      const result = await pool.query(
+        `SELECT
          mo.id, mo.movement_at, mo.qty, mo.unit_cost, mo.total_cost, mo.reason_code,
          so.store_code AS source_store_code, so.name_en AS source_store_name,
          sd.store_code AS dest_store_code, sd.name_en AS dest_store_name,
@@ -84,10 +88,13 @@ export async function inventoryRoutes(app: FastifyInstance): Promise<void> {
        WHERE mo.company_id = $1 AND mo.movement_type = 'transfer_out'
        ORDER BY mo.movement_at DESC
        LIMIT 200`,
-      [request.companyId],
-    );
-    return result.rows;
-  });
+        [request.companyId],
+      );
+      const canViewCost = await userHasPermission(request.authUser.id, request.companyId, "inventory.items.view_cost");
+      const rows = canViewCost ? result.rows : result.rows.map(({ unit_cost, total_cost, ...row }) => row);
+      return rows;
+    },
+  );
 
   // ---- Inventory Transfers (multi-line, draft/post document -- for
   // planned, multi-item moves between stores. The single-item instant
@@ -119,7 +126,7 @@ export async function inventoryRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/inventory-transfers", { preHandler: app.authenticate }, async (request) => {
+  app.get("/inventory-transfers", { preHandler: [app.authenticate, app.requirePermission("inventory.transfer.view")] }, async (request) => {
     const result = await pool.query(
       `SELECT it.id, it.document_number, it.transfer_date, it.document_status, it.notes,
               so.name_en AS source_store_name_en, sd.name_en AS dest_store_name_en,
@@ -135,7 +142,7 @@ export async function inventoryRoutes(app: FastifyInstance): Promise<void> {
     return result.rows;
   });
 
-  app.get<{ Params: { id: string } }>("/inventory-transfers/:id", { preHandler: app.authenticate }, async (request) => {
+  app.get<{ Params: { id: string } }>("/inventory-transfers/:id", { preHandler: [app.authenticate, app.requirePermission("inventory.transfer.view")] }, async (request) => {
     const header = await pool.query(
       `SELECT it.*, so.name_en AS source_store_name_en, sd.name_en AS dest_store_name_en
        FROM inventory_transfers it
@@ -219,7 +226,7 @@ export async function inventoryRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/stocktakes", { preHandler: app.authenticate }, async (request) => {
+  app.get("/stocktakes", { preHandler: [app.authenticate, app.requirePermission("inventory.stocktake.view")] }, async (request) => {
     const result = await pool.query(
       `SELECT st.id, st.document_number, st.stocktake_date, st.document_status,
               s.name_en AS store_name_en,
@@ -235,7 +242,7 @@ export async function inventoryRoutes(app: FastifyInstance): Promise<void> {
     return result.rows;
   });
 
-  app.get<{ Params: { id: string } }>("/stocktakes/:id", { preHandler: app.authenticate }, async (request) => {
+  app.get<{ Params: { id: string } }>("/stocktakes/:id", { preHandler: [app.authenticate, app.requirePermission("inventory.stocktake.view")] }, async (request) => {
     const header = await pool.query(
       `SELECT st.*, s.name_en AS store_name_en FROM stocktakes st JOIN stores s ON s.id = st.store_id
        WHERE st.id = $1 AND st.company_id = $2`,

@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
 import { syncPosInvoice, syncPosCreditNote } from "../../sync/syncService.js";
+import { userHasPermission } from "../permissions.js";
 import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 
 const lineSchema = z.object({
@@ -236,13 +237,16 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
       [query.storeId],
     );
 
+    const canViewCost = await userHasPermission(request.authUser.id, request.companyId, "inventory.items.view_cost");
+    const stockBalanceRows = canViewCost ? stockBalances.rows : stockBalances.rows.map(({ avg_unit_cost, ...row }) => row);
+
     return {
       since: query.since ?? null,
       serverTime,
       items: itemsWithVariants,
       customers: customers.rows,
       priceLists: priceLists.rows,
-      stockBalances: stockBalances.rows,
+      stockBalances: stockBalanceRows,
     };
   });
 }

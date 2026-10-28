@@ -533,6 +533,7 @@ export function NewTransferForm({ onClose, onCreated }: { onClose: () => void; o
 function TransfersTab() {
   const navigate = useNavigate();
   const { data, error } = useApiList<Transfer>("/api/stock-transfers");
+  const { hasPermission } = useAuth();
 
   const columns: Column<Transfer>[] = [
     { key: "date", header: "Date", render: (r) => new Date(r.movement_at).toLocaleString() },
@@ -543,7 +544,9 @@ function TransfersTab() {
     // signed ledger) — shown as a magnitude here since From/To already
     // convey direction and a bare "-3" reads as an error, not data.
     { key: "qty", header: "Qty", render: (r) => Math.abs(Number(r.qty)).toLocaleString(), numeric: true },
-    { key: "cost", header: "Value", render: (r) => Math.abs(Number(r.total_cost)).toFixed(2), numeric: true },
+    ...(hasPermission("inventory.items.view_cost")
+      ? [{ key: "cost", header: "Value", render: (r: Transfer) => Math.abs(Number(r.total_cost)).toFixed(2), numeric: true }]
+      : []),
   ];
 
   return (
@@ -1126,11 +1129,11 @@ export default function Inventory() {
   const location = useLocation();
   const tabs = useMemo(
     () => [
-      { key: "items", label: "Items", content: <ItemsSection /> },
-      { key: "stock", label: "Stock", content: <StockTab /> },
-      { key: "transfers", label: "Transfers", content: <TransfersTab /> },
-      { key: "transfer-orders", label: "Transfer Orders", content: <TransferOrdersTab /> },
-      { key: "adjustments", label: "Adjustments", content: <AdjustmentsTab /> },
+      { key: "items", label: "Items", content: <ItemsSection />, permission: "inventory.items.view" },
+      { key: "stock", label: "Stock", content: <StockTab />, permission: "inventory.stock.view" },
+      { key: "transfers", label: "Transfers", content: <TransfersTab />, permission: "inventory.transfer.view" },
+      { key: "transfer-orders", label: "Transfer Orders", content: <TransferOrdersTab />, permission: "inventory.transfer.view" },
+      { key: "adjustments", label: "Adjustments", content: <AdjustmentsTab />, permission: "inventory.stocktake.view" },
     ],
     [],
   );

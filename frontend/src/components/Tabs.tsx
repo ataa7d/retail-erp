@@ -1,15 +1,18 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useAuth } from "../lib/auth";
 
 interface Tab {
   key: string;
   label: string;
   content: ReactNode;
+  /** Hidden entirely (button and content) when the user lacks this permission (any, if an array). Omit for no gate. */
+  permission?: string | string[];
 }
 
 // hideHeader skips the in-page tab-button row for modules whose tabs are
 // now switched from the sidebar dropdown instead (see Layout.tsx subItems).
 export default function Tabs({
-  tabs,
+  tabs: allTabs,
   initialActive,
   hideHeader,
 }: {
@@ -17,14 +20,30 @@ export default function Tabs({
   initialActive?: string;
   hideHeader?: boolean;
 }) {
+  const { hasPermission } = useAuth();
+  const tabs = useMemo(
+    () =>
+      allTabs.filter((tab) => {
+        if (!tab.permission) return true;
+        const codes = Array.isArray(tab.permission) ? tab.permission : [tab.permission];
+        return codes.some((code) => hasPermission(code));
+      }),
+    [allTabs, hasPermission],
+  );
   const [active, setActive] = useState(initialActive ?? tabs[0]?.key);
 
   // initialActive only set the state on first mount before; re-syncing here
   // picks up a new sidebar sub-item click even when the page itself doesn't
-  // remount (same route, just a different `fromTab` navigation state).
+  // remount (same route, just a different `fromTab` navigation state). Also
+  // falls back to the first permitted tab if the active one got filtered out.
   useEffect(() => {
-    if (initialActive) setActive(initialActive);
-  }, [initialActive]);
+    if (initialActive && tabs.some((t) => t.key === initialActive)) {
+      setActive(initialActive);
+    } else if (!tabs.some((t) => t.key === active)) {
+      setActive(tabs[0]?.key);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialActive, tabs]);
 
   return (
     <div>

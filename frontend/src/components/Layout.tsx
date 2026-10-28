@@ -47,7 +47,7 @@ import GlobalSearch from "./GlobalSearch";
 // KPI tile palette) so the sidebar reads as a set of distinct departments
 // at a glance instead of one repeated brand-blue highlight -- color as a
 // wayfinding device, not just decoration.
-const navItems = [
+export const navItems = [
   { to: "/", label: "nav.dashboard", permission: null, icon: LayoutDashboard, color: "brand" },
   {
     to: "/sales",
@@ -72,31 +72,48 @@ const navItems = [
   {
     to: "/inventory",
     label: "nav.inventory",
-    permission: ["inventory.adjustment.post", "inventory.items.create", "inventory.items.edit", "inventory.items.deactivate"],
+    permission: [
+      "inventory.adjustment.post",
+      "inventory.items.create",
+      "inventory.items.edit",
+      "inventory.items.deactivate",
+      "inventory.items.view",
+      "inventory.stock.view",
+      "inventory.transfer.view",
+      "inventory.stocktake.view",
+    ],
     icon: Warehouse,
     color: "teal",
     subItems: [
-      { key: "items", label: "Items" },
-      { key: "stock", label: "Stock" },
-      { key: "transfers", label: "Transfers" },
-      { key: "transfer-orders", label: "Transfer Orders" },
-      { key: "adjustments", label: "Adjustments" },
+      { key: "items", label: "Items", permission: "inventory.items.view" },
+      { key: "stock", label: "Stock", permission: "inventory.stock.view" },
+      { key: "transfers", label: "Transfers", permission: "inventory.transfer.view" },
+      { key: "transfer-orders", label: "Transfer Orders", permission: "inventory.transfer.view" },
+      { key: "adjustments", label: "Adjustments", permission: "inventory.stocktake.view" },
     ],
   },
   {
     to: "/purchasing",
     label: "nav.purchasing",
-    permission: "purchasing.po.create",
+    permission: [
+      "purchasing.po.create",
+      "purchasing.requisition.view",
+      "purchasing.po.view",
+      "purchasing.goods_receipt.view",
+      "purchasing.supplier_invoice.view",
+      "purchasing.return.view",
+      "purchasing.supplier.view",
+    ],
     icon: ShoppingCart,
     color: "amber",
     subItems: [
-      { key: "requisitions", label: "Requisitions" },
-      { key: "reorder", label: "Reorder Suggestions" },
-      { key: "pos", label: "Purchase Orders" },
-      { key: "receipts", label: "Goods Receipts" },
-      { key: "invoices", label: "Supplier Invoices" },
-      { key: "returns", label: "Purchase Returns" },
-      { key: "suppliers", label: "Suppliers" },
+      { key: "requisitions", label: "Requisitions", permission: "purchasing.requisition.view" },
+      { key: "reorder", label: "Reorder Suggestions", permission: "purchasing.po.view" },
+      { key: "pos", label: "Purchase Orders", permission: "purchasing.po.view" },
+      { key: "receipts", label: "Goods Receipts", permission: "purchasing.goods_receipt.view" },
+      { key: "invoices", label: "Supplier Invoices", permission: "purchasing.supplier_invoice.view" },
+      { key: "returns", label: "Purchase Returns", permission: "purchasing.return.view" },
+      { key: "suppliers", label: "Suppliers", permission: "purchasing.supplier.view" },
     ],
   },
   {
@@ -482,7 +499,13 @@ export default function Layout() {
                   </div>
                   {subItems && isOpen && (
                     <div className="ms-4 mt-0.5 flex flex-col gap-0.5 border-s border-slate-200 ps-2 dark:border-slate-700">
-                      {subItems.map((sub) => {
+                      {subItems
+                        .filter((sub) => {
+                          if (!("permission" in sub) || !sub.permission) return true;
+                          const codes = Array.isArray(sub.permission) ? sub.permission : [sub.permission];
+                          return codes.some((code) => hasPermission(code));
+                        })
+                        .map((sub) => {
                         const SubIcon = "icon" in sub ? sub.icon : null;
                         const isSubActive =
                           "to" in sub

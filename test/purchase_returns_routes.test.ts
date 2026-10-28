@@ -116,7 +116,7 @@ beforeAll(async () => {
   const role = await client.query(`INSERT INTO roles (company_id, name) VALUES ($1, 'Purchasing') RETURNING id`, [companyId]);
   await client.query(
     `INSERT INTO role_permissions (role_id, permission_id)
-     SELECT $1, id FROM permissions WHERE code IN ('purchasing.po.create', 'purchasing.goods_receipt.post')`,
+     SELECT $1, id FROM permissions WHERE code IN ('purchasing.po.create', 'purchasing.po.view', 'purchasing.goods_receipt.post', 'purchasing.goods_receipt.view', 'purchasing.return.view', 'purchasing.supplier_invoice.view')`,
     [role.rows[0].id],
   );
   await client.query(`INSERT INTO user_roles (user_id, company_id, role_id) VALUES ($1, $2, $3)`, [userId, companyId, role.rows[0].id]);

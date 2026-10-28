@@ -517,7 +517,8 @@ function ClassifyItemForm({ item, onChanged }: { item: Item; onChanged: () => vo
 }
 
 function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) {
-  const { token, companyId } = useAuth();
+  const { token, companyId, hasPermission } = useAuth();
+  const canViewCost = hasPermission("inventory.items.view_cost");
   const { data: units } = useApiList<UnitOfMeasure>("/api/units-of-measure");
   const unitLabel = (id: string) => units?.find((u) => u.id === id)?.code ?? "?";
 
@@ -574,7 +575,9 @@ function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) 
         token,
         companyId,
         body: {
-          standardCost: draft.standardCost ? Number(draft.standardCost) : null,
+          // Omitted (not null) when the viewer can't see cost -- they never
+          // saw the real current value, so this must never overwrite it.
+          ...(canViewCost ? { standardCost: draft.standardCost ? Number(draft.standardCost) : null } : {}),
           weightKg: draft.weightKg ? Number(draft.weightKg) : null,
         },
       });
@@ -650,15 +653,19 @@ function ItemDetail({ item, onChanged }: { item: Item; onChanged: () => void }) 
               <span className="text-xs text-slate-400 dark:text-slate-500">0 = no low-stock alert</span>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-slate-100 dark:border-slate-800 pt-2">
-              <label className="text-xs text-slate-500 dark:text-slate-400">Standard cost</label>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                value={costDraft(v).standardCost}
-                onChange={(e) => setCostDrafts((prev) => ({ ...prev, [v.id]: { ...costDraft(v), standardCost: e.target.value } }))}
-                className="w-20 rounded border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
-              />
+              {canViewCost && (
+                <>
+                  <label className="text-xs text-slate-500 dark:text-slate-400">Standard cost</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={costDraft(v).standardCost}
+                    onChange={(e) => setCostDrafts((prev) => ({ ...prev, [v.id]: { ...costDraft(v), standardCost: e.target.value } }))}
+                    className="w-20 rounded border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 text-xs focus:border-brand-400 focus:outline-none"
+                  />
+                </>
+              )}
               <label className="text-xs text-slate-500 dark:text-slate-400">Weight (kg)</label>
               <input
                 type="number"
@@ -1243,7 +1250,8 @@ function AllVariantsTab() {
   const { data: categories } = useApiList<Category>("/api/categories");
   const { data: seasons } = useApiList<Season>("/api/seasons");
   const { data: groups } = useApiList<ItemGroup>("/api/item-groups");
-  const { token, companyId } = useAuth();
+  const { token, companyId, hasPermission } = useAuth();
+  const canViewCost = hasPermission("inventory.items.view_cost");
 
   const [filters, setFilters] = useState<VariantFilters>(EMPTY_VARIANT_FILTERS);
   const [debouncedFilters, setDebouncedFilters] = useState<VariantFilters>(EMPTY_VARIANT_FILTERS);
@@ -1469,7 +1477,9 @@ function AllVariantsTab() {
               <th className={thClass} onClick={() => toggleSort("color")}>Color{sortIndicator("color")}</th>
               <th className={thClass} onClick={() => toggleSort("size")}>Size{sortIndicator("size")}</th>
               <th className="whitespace-nowrap px-3 py-2 text-start text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Barcode</th>
-              <th className={`${thClass} text-end`} onClick={() => toggleSort("standardCost")}>Cost{sortIndicator("standardCost")}</th>
+              {canViewCost && (
+                <th className={`${thClass} text-end`} onClick={() => toggleSort("standardCost")}>Cost{sortIndicator("standardCost")}</th>
+              )}
               <th className={`${thClass} text-end`} onClick={() => toggleSort("reorderPoint")}>Reorder{sortIndicator("reorderPoint")}</th>
               <th className={thClass} onClick={() => toggleSort("status")}>Status{sortIndicator("status")}</th>
             </tr>
@@ -1505,7 +1515,7 @@ function AllVariantsTab() {
               <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.color} onChange={(e) => updateFilter("color", e.target.value)} /></th>
               <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.size} onChange={(e) => updateFilter("size", e.target.value)} /></th>
               <th className="px-2 py-1.5"><input className={filterInputClass} value={filters.barcode} onChange={(e) => updateFilter("barcode", e.target.value)} /></th>
-              <th className="px-2 py-1.5" />
+              {canViewCost && <th className="px-2 py-1.5" />}
               <th className="px-2 py-1.5" />
               <th className="px-2 py-1.5">
                 <select className={filterInputClass} value={filters.isActive} onChange={(e) => updateFilter("isActive", e.target.value)}>
@@ -1519,7 +1529,7 @@ function AllVariantsTab() {
           <tbody>
             {result?.rows.length === 0 && (
               <tr>
-                <td colSpan={14} className="px-4 py-12 text-center text-sm text-slate-400 dark:text-slate-500">
+                <td colSpan={canViewCost ? 14 : 13} className="px-4 py-12 text-center text-sm text-slate-400 dark:text-slate-500">
                   No variants match these filters.
                 </td>
               </tr>
@@ -1539,19 +1549,21 @@ function AllVariantsTab() {
                 <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{r.color ?? "—"}</td>
                 <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{r.size ?? "—"}</td>
                 <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-500 dark:text-slate-400">{r.primary_barcode ?? "—"}</td>
-                <td className="px-1 py-1 text-end">
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    className={editableInputClass}
-                    value={costDrafts[r.id] ?? r.standard_cost ?? ""}
-                    onChange={(e) => setCostDrafts((prev) => ({ ...prev, [r.id]: e.target.value }))}
-                    onBlur={(e) => saveCost(r, e.target.value)}
-                    disabled={savingCell === `${r.id}:cost`}
-                    placeholder="—"
-                  />
-                </td>
+                {canViewCost && (
+                  <td className="px-1 py-1 text-end">
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      className={editableInputClass}
+                      value={costDrafts[r.id] ?? r.standard_cost ?? ""}
+                      onChange={(e) => setCostDrafts((prev) => ({ ...prev, [r.id]: e.target.value }))}
+                      onBlur={(e) => saveCost(r, e.target.value)}
+                      disabled={savingCell === `${r.id}:cost`}
+                      placeholder="—"
+                    />
+                  </td>
+                )}
                 <td className="px-1 py-1 text-end">
                   <input
                     type="number"

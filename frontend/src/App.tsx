@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth, AuthProvider } from "./lib/auth";
-import Layout from "./components/Layout";
+import Layout, { navItems } from "./components/Layout";
 import Login from "./pages/Login";
 import CompanyPicker from "./pages/CompanyPicker";
 import Dashboard from "./pages/Dashboard";
@@ -57,6 +57,19 @@ function RequireCompany({ children }: { children: React.ReactElement }) {
   return children;
 }
 
+// Reuses the same permission each module's sidebar entry already declares
+// (navItems in Layout.tsx) so a screen's URL-level gate can never drift
+// from what the sidebar already promises -- one definition, not two.
+function RequirePermission({ navPath, children }: { navPath: string; children: React.ReactElement }) {
+  const { hasPermission } = useAuth();
+  const required = navItems.find((item) => item.to === navPath)?.permission ?? null;
+  if (required) {
+    const codes = Array.isArray(required) ? required : [required];
+    if (!codes.some((code) => hasPermission(code))) return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -100,21 +113,126 @@ export default function App() {
           <Route path="sales/credit-notes/:id" element={<SalesCreditNoteDetailPage />} />
           <Route path="sales/quotations/:id" element={<QuotationDetailPage />} />
           <Route path="customers" element={<Navigate to="/accounting" state={{ fromTab: "customers" }} replace />} />
-          <Route path="inventory" element={<Inventory />} />
-          <Route path="inventory/transfers/new" element={<NewTransferPage />} />
-          <Route path="inventory/transfer-orders/new" element={<NewTransferOrderPage />} />
-          <Route path="inventory/stocktakes/new" element={<NewStocktakePage />} />
-          <Route path="inventory/transfer-orders/:id" element={<InventoryTransferDetailPage />} />
-          <Route path="inventory/stocktakes/:id/count" element={<CountStocktakePage />} />
-          <Route path="purchasing" element={<Purchasing />} />
-          <Route path="purchasing/orders/new" element={<NewPurchaseOrderPage />} />
-          <Route path="purchasing/requisitions/new" element={<NewRequisitionPage />} />
-          <Route path="purchasing/goods-receipts/new" element={<NewGoodsReceiptPage />} />
-          <Route path="purchasing/supplier-invoices/new" element={<NewSupplierInvoicePage />} />
-          <Route path="purchasing/returns/new" element={<NewPurchaseReturnPage />} />
-          <Route path="purchasing/orders/:id" element={<PoDetailPage />} />
-          <Route path="purchasing/requisitions/:id" element={<RequisitionDetailPage />} />
-          <Route path="purchasing/returns/:id" element={<PurchaseReturnDetailPage />} />
+          <Route
+            path="inventory"
+            element={
+              <RequirePermission navPath="/inventory">
+                <Inventory />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="inventory/transfers/new"
+            element={
+              <RequirePermission navPath="/inventory">
+                <NewTransferPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="inventory/transfer-orders/new"
+            element={
+              <RequirePermission navPath="/inventory">
+                <NewTransferOrderPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="inventory/stocktakes/new"
+            element={
+              <RequirePermission navPath="/inventory">
+                <NewStocktakePage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="inventory/transfer-orders/:id"
+            element={
+              <RequirePermission navPath="/inventory">
+                <InventoryTransferDetailPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="inventory/stocktakes/:id/count"
+            element={
+              <RequirePermission navPath="/inventory">
+                <CountStocktakePage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchasing"
+            element={
+              <RequirePermission navPath="/purchasing">
+                <Purchasing />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchasing/orders/new"
+            element={
+              <RequirePermission navPath="/purchasing">
+                <NewPurchaseOrderPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchasing/requisitions/new"
+            element={
+              <RequirePermission navPath="/purchasing">
+                <NewRequisitionPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchasing/goods-receipts/new"
+            element={
+              <RequirePermission navPath="/purchasing">
+                <NewGoodsReceiptPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchasing/supplier-invoices/new"
+            element={
+              <RequirePermission navPath="/purchasing">
+                <NewSupplierInvoicePage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchasing/returns/new"
+            element={
+              <RequirePermission navPath="/purchasing">
+                <NewPurchaseReturnPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchasing/orders/:id"
+            element={
+              <RequirePermission navPath="/purchasing">
+                <PoDetailPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchasing/requisitions/:id"
+            element={
+              <RequirePermission navPath="/purchasing">
+                <RequisitionDetailPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchasing/returns/:id"
+            element={
+              <RequirePermission navPath="/purchasing">
+                <PurchaseReturnDetailPage />
+              </RequirePermission>
+            }
+          />
           <Route path="reports" element={<Reports />} />
           <Route path="accounting" element={<Accounting />} />
           <Route path="accounting/journals/new" element={<NewJournalPage />} />

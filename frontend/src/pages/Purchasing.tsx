@@ -2819,7 +2819,8 @@ interface ReorderSuggestion {
 
 function ReorderSuggestionsTab() {
   const navigate = useNavigate();
-  const { token, companyId } = useAuth();
+  const { token, companyId, hasPermission } = useAuth();
+  const canViewCost = hasPermission("inventory.items.view_cost");
   const { data: stores } = useApiList<Store>("/api/stores");
   const defaultVatRate = useDefaultVatRate();
   const [storeId, setStoreId] = useState("");
@@ -2901,7 +2902,8 @@ function ReorderSuggestionsTab() {
                     {r.item_name_en} — {r.variant_code}
                     <span className="text-xs text-slate-400 dark:text-slate-500">
                       {" "}
-                      (on hand {r.qty_on_hand}, reorder point {r.reorder_point}, {r.unit_cost} {r.currency}/unit
+                      (on hand {r.qty_on_hand}, reorder point {r.reorder_point}
+                      {canViewCost ? `, ${r.unit_cost} ${r.currency}/unit` : ""}
                       {r.moq && Number(r.moq) > 0 ? `, MOQ ${r.moq}` : ""})
                     </span>
                   </span>
@@ -2949,13 +2951,13 @@ export default function Purchasing() {
         initialActive={(location.state as { fromTab?: string } | null)?.fromTab}
         hideHeader
         tabs={[
-          { key: "requisitions", label: "Requisitions", content: <RequisitionsTab /> },
-          { key: "reorder", label: "Reorder Suggestions", content: <ReorderSuggestionsTab /> },
-          { key: "pos", label: "Purchase Orders", content: <PurchaseOrdersTab /> },
-          { key: "receipts", label: "Goods Receipts", content: <GoodsReceiptsTab /> },
-          { key: "invoices", label: "Supplier Invoices", content: <SupplierInvoicesTab /> },
-          { key: "returns", label: "Purchase Returns", content: <PurchaseReturnsTab /> },
-          { key: "suppliers", label: "Suppliers", content: <SuppliersTab /> },
+          { key: "requisitions", label: "Requisitions", content: <RequisitionsTab />, permission: "purchasing.requisition.view" },
+          { key: "reorder", label: "Reorder Suggestions", content: <ReorderSuggestionsTab />, permission: "purchasing.po.view" },
+          { key: "pos", label: "Purchase Orders", content: <PurchaseOrdersTab />, permission: "purchasing.po.view" },
+          { key: "receipts", label: "Goods Receipts", content: <GoodsReceiptsTab />, permission: "purchasing.goods_receipt.view" },
+          { key: "invoices", label: "Supplier Invoices", content: <SupplierInvoicesTab />, permission: "purchasing.supplier_invoice.view" },
+          { key: "returns", label: "Purchase Returns", content: <PurchaseReturnsTab />, permission: "purchasing.return.view" },
+          { key: "suppliers", label: "Suppliers", content: <SuppliersTab />, permission: "purchasing.supplier.view" },
         ]}
       />
     </div>

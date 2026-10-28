@@ -20,6 +20,7 @@ import {
 } from "../../purchasing/purchasingService.js";
 import { NotFoundError, BusinessRuleError } from "../errors.js";
 import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
+import { userHasPermission } from "../permissions.js";
 import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 
 const lineSchema = z.object({
@@ -235,7 +236,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/purchase-orders", { preHandler: app.authenticate }, async (request) => {
+  app.get("/purchase-orders", { preHandler: [app.authenticate, app.requirePermission("purchasing.po.view")] }, async (request) => {
     const result = await pool.query(
       `SELECT po.id, po.document_number, po.order_date, po.expected_date, po.document_status,
               po.net_amount, po.vat_amount, po.gross_amount, po.currency, po.exchange_rate,
@@ -249,7 +250,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     return result.rows;
   });
 
-  app.get<{ Params: { id: string } }>("/purchase-orders/:id", { preHandler: app.authenticate }, async (request) => {
+  app.get<{ Params: { id: string } }>("/purchase-orders/:id", { preHandler: [app.authenticate, app.requirePermission("purchasing.po.view")] }, async (request) => {
     const header = await pool.query(
       `SELECT po.*, s.name_en AS supplier_name_en, s.name_ar AS supplier_name_ar,
               c.name_en AS company_name_en, c.name_ar AS company_name_ar,
@@ -462,7 +463,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/purchase-requisitions", { preHandler: app.authenticate }, async (request) => {
+  app.get("/purchase-requisitions", { preHandler: [app.authenticate, app.requirePermission("purchasing.requisition.view")] }, async (request) => {
     const result = await pool.query(
       `SELECT pr.id, pr.document_number, pr.requisition_date, pr.needed_by_date, pr.document_status,
               pr.rejection_reason, s.name_en AS store_name_en,
@@ -479,7 +480,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     return result.rows;
   });
 
-  app.get<{ Params: { id: string } }>("/purchase-requisitions/:id", { preHandler: app.authenticate }, async (request) => {
+  app.get<{ Params: { id: string } }>("/purchase-requisitions/:id", { preHandler: [app.authenticate, app.requirePermission("purchasing.requisition.view")] }, async (request) => {
     const header = await pool.query(
       `SELECT pr.*, s.name_en AS store_name_en, u.email AS requested_by_email, du.email AS decided_by_email
        FROM purchase_requisitions pr
@@ -625,7 +626,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
   // quoted a price for comes back with supplier_id null -- the caller
   // shows it as "needs a supplier price first" rather than silently
   // dropping it.
-  app.get("/reorder-suggestions", { preHandler: app.authenticate }, async (request) => {
+  app.get("/reorder-suggestions", { preHandler: [app.authenticate, app.requirePermission("purchasing.po.view")] }, async (request) => {
     const query = z.object({ storeId: z.string().uuid() }).parse(request.query);
     const store = await pool.query(`SELECT id FROM stores WHERE id = $1 AND company_id = $2`, [query.storeId, request.companyId]);
     if (store.rows.length === 0) throw new NotFoundError("store not found");
@@ -659,7 +660,9 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
        ORDER BY ls.item_name_en`,
       [request.companyId, query.storeId],
     );
-    return result.rows;
+    const canViewCost = await userHasPermission(request.authUser.id, request.companyId, "inventory.items.view_cost");
+    const rows = canViewCost ? result.rows : result.rows.map(({ unit_cost, ...row }) => row);
+    return rows;
   });
 
   // ---- Supplier item prices (cost catalog) ----
@@ -669,7 +672,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
   // hand too -- e.g. entering a supplier's quoted price before ever placing
   // an order against it.
 
-  app.get("/supplier-item-prices", { preHandler: app.authenticate }, async (request) => {
+  app.get("/supplier-item-prices", { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier.view")] }, async (request) => {
     const query = z.object({ supplierId: z.string().uuid() }).parse(request.query);
     const result = await pool.query(
       `SELECT sip.id, sip.item_variant_id, sip.unit_cost, sip.currency, sip.lead_time_days, sip.moq, sip.is_active
@@ -793,7 +796,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/goods-receipts", { preHandler: app.authenticate }, async (request) => {
+  app.get("/goods-receipts", { preHandler: [app.authenticate, app.requirePermission("purchasing.goods_receipt.view")] }, async (request) => {
     const result = await pool.query(
       `SELECT gr.id, gr.document_number, gr.receipt_date, gr.document_status, gr.purchase_order_id, gr.currency, gr.exchange_rate,
               po.document_number AS po_document_number,
@@ -808,7 +811,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     return result.rows;
   });
 
-  app.get<{ Params: { id: string } }>("/goods-receipts/:id", { preHandler: app.authenticate }, async (request) => {
+  app.get<{ Params: { id: string } }>("/goods-receipts/:id", { preHandler: [app.authenticate, app.requirePermission("purchasing.goods_receipt.view")] }, async (request) => {
     const header = await pool.query(
       `SELECT gr.*, s.name_en AS supplier_name_en, s.name_ar AS supplier_name_ar
        FROM goods_receipts gr
@@ -892,7 +895,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/supplier-invoices", { preHandler: app.authenticate }, async (request) => {
+  app.get("/supplier-invoices", { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier_invoice.view")] }, async (request) => {
     const result = await pool.query(
       `SELECT si.id, si.supplier_id, si.document_number, si.supplier_invoice_number, si.invoice_date, si.document_status,
               si.gross_amount, si.currency, si.exchange_rate, si.base_gross_amount,
@@ -906,7 +909,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     return result.rows;
   });
 
-  app.get<{ Params: { id: string } }>("/supplier-invoices/:id", { preHandler: app.authenticate }, async (request) => {
+  app.get<{ Params: { id: string } }>("/supplier-invoices/:id", { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier_invoice.view")] }, async (request) => {
     const header = await pool.query(
       `SELECT si.*, s.name_en AS supplier_name_en, s.name_ar AS supplier_name_ar
        FROM supplier_invoices si
@@ -934,7 +937,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
   // user can't over-return past what was actually invoiced.
   app.get<{ Params: { id: string } }>(
     "/supplier-invoices/:id/returnable-lines",
-    { preHandler: app.authenticate },
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier_invoice.view")] },
     async (request) => {
       const invoice = await pool.query(
         `SELECT id, document_status, purchase_order_id FROM supplier_invoices WHERE id = $1 AND company_id = $2`,
@@ -1031,7 +1034,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/supplier-credit-notes", { preHandler: app.authenticate }, async (request) => {
+  app.get("/supplier-credit-notes", { preHandler: [app.authenticate, app.requirePermission("purchasing.return.view")] }, async (request) => {
     const result = await pool.query(
       `SELECT cn.id, cn.document_number, cn.credit_note_date, cn.document_status, cn.reason,
               cn.net_amount, cn.vat_amount, cn.gross_amount,
@@ -1047,7 +1050,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     return result.rows;
   });
 
-  app.get<{ Params: { id: string } }>("/supplier-credit-notes/:id", { preHandler: app.authenticate }, async (request) => {
+  app.get<{ Params: { id: string } }>("/supplier-credit-notes/:id", { preHandler: [app.authenticate, app.requirePermission("purchasing.return.view")] }, async (request) => {
     const header = await pool.query(
       `SELECT cn.*, s.name_en AS supplier_name_en, s.name_ar AS supplier_name_ar,
               si.document_number AS invoice_document_number

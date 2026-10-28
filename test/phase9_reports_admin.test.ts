@@ -357,14 +357,14 @@ describe("admin routes", () => {
     await app.inject({
       method: "POST", url: `/api/admin/roles/${roleId}/permissions`,
       headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
-      payload: { permissionCodes: ["inventory.items.manage"] },
+      payload: { permissionCodes: ["admin.audit_log.view"] },
     });
     const rolesAfter = await app.inject({
       method: "GET", url: "/api/admin/roles",
       headers: { authorization: `Bearer ${authToken}`, "x-company-id": companyId },
     });
     const roleAfter = rolesAfter.json().find((r: { id: string }) => r.id === roleId);
-    expect(roleAfter.permissions).toEqual(["inventory.items.manage"]);
+    expect(roleAfter.permissions).toEqual(["admin.audit_log.view"]);
 
     const deactivated = await app.inject({
       method: "POST", url: `/api/admin/roles/${roleId}/deactivate`,

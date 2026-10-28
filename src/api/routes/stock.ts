@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { pool } from "../db.js";
+import { userHasPermission } from "../permissions.js";
 
 const querySchema = z.object({
   storeId: z.string().uuid(),
@@ -41,7 +42,7 @@ const stockVariantQuerySchema = z.object({
 export async function stockRoutes(app: FastifyInstance): Promise<void> {
   // A snapshot, explicitly labeled as such — this is the "last known,
   // clearly marked as such" stock view an offline POS client would cache.
-  app.get("/stock-balances", { preHandler: app.authenticate }, async (request) => {
+  app.get("/stock-balances", { preHandler: [app.authenticate, app.requirePermission("inventory.stock.view")] }, async (request) => {
     const query = querySchema.parse(request.query);
 
     const store = await pool.query(`SELECT company_id FROM stores WHERE id = $1`, [query.storeId]);
@@ -55,7 +56,9 @@ export async function stockRoutes(app: FastifyInstance): Promise<void> {
       [query.storeId],
     );
 
-    return { asOf: new Date().toISOString(), balances: result.rows };
+    const canViewCost = await userHasPermission(request.authUser.id, request.companyId, "inventory.items.view_cost");
+    const balances = canViewCost ? result.rows : result.rows.map(({ avg_unit_cost, ...row }) => row);
+    return { asOf: new Date().toISOString(), balances };
   });
 
   // The Stock screen itself: same paginated/filterable/sortable shape as
@@ -64,7 +67,7 @@ export async function stockRoutes(app: FastifyInstance): Promise<void> {
   // stores because a store is a filter here, never a column -- the
   // optional storeId narrows qty_on_hand/stores_in_stock to just that
   // store; omitted, they're summed/counted across every store.
-  app.get("/stock-balances/variants", { preHandler: app.authenticate }, async (request) => {
+  app.get("/stock-balances/variants", { preHandler: [app.authenticate, app.requirePermission("inventory.stock.view")] }, async (request) => {
     const q = stockVariantQuerySchema.parse(request.query);
 
     const conditions: string[] = ["iv.company_id = $1"];
@@ -143,7 +146,7 @@ export async function stockRoutes(app: FastifyInstance): Promise<void> {
   // without ever needing a column per store in the main grid.
   app.get<{ Params: { variantId: string } }>(
     "/stock-balances/variants/:variantId/by-store",
-    { preHandler: app.authenticate },
+    { preHandler: [app.authenticate, app.requirePermission("inventory.stock.view")] },
     async (request) => {
       const result = await pool.query<{ store_id: string; store_name_en: string; store_name_ar: string; qty_on_hand: string }>(
         `SELECT s.id AS store_id, s.name_en AS store_name_en, s.name_ar AS store_name_ar, COALESCE(sb.qty_on_hand, 0) AS qty_on_hand

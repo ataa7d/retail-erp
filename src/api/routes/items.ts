@@ -3,6 +3,7 @@ import { z } from "zod";
 import { parse } from "csv-parse/sync";
 import { pool, withTransaction } from "../db.js";
 import { NotFoundError, BusinessRuleError } from "../errors.js";
+import { userHasPermission } from "../permissions.js";
 import { importItemRow, nextInternalBarcode, nextInternalItemCode, type ItemImportRow } from "../../inventory/itemImportService.js";
 
 const listQuerySchema = z.object({
@@ -381,11 +382,26 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
           request.companyId,
         ]);
         if (existing.rows.length === 0) throw new NotFoundError("item variant not found");
-        await client.query(`UPDATE item_variants SET standard_cost = $1, weight_kg = $2 WHERE id = $3`, [
-          body.standardCost ?? null,
-          body.weightKg ?? null,
-          request.params.id,
-        ]);
+
+        // Only touches a column whose key the caller actually sent -- a user
+        // without inventory.items.view_cost (whose UI never sends
+        // standardCost, since it can't show them the current value to edit)
+        // must be able to save weightKg alone without silently wiping cost
+        // back to null.
+        const sets: string[] = [];
+        const values: unknown[] = [];
+        if ("standardCost" in body) {
+          values.push(body.standardCost ?? null);
+          sets.push(`standard_cost = $${values.length}`);
+        }
+        if ("weightKg" in body) {
+          values.push(body.weightKg ?? null);
+          sets.push(`weight_kg = $${values.length}`);
+        }
+        if (sets.length > 0) {
+          values.push(request.params.id);
+          await client.query(`UPDATE item_variants SET ${sets.join(", ")} WHERE id = $${values.length}`, values);
+        }
       }, request.authUser.id);
       return { id: request.params.id, standardCost: body.standardCost ?? null, weightKg: body.weightKg ?? null };
     },
@@ -398,7 +414,7 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
   // Every filter here is either an indexed exact match or backed by a
   // trigram GIN index (migration 0067), so it stays index-driven instead
   // of a sequential scan regardless of catalog size.
-  app.get("/item-variants", { preHandler: app.authenticate }, async (request) => {
+  app.get("/item-variants", { preHandler: [app.authenticate, app.requirePermission("inventory.items.view")] }, async (request) => {
     const q = variantSearchQuerySchema.parse(request.query);
 
     const conditions: string[] = ["iv.company_id = $1"];
@@ -453,7 +469,8 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
     );
 
     const total = result.rows.length > 0 ? Number(result.rows[0]!.total_count) : 0;
-    const rows = result.rows.map(({ total_count, ...row }) => row);
+    const canViewCost = await userHasPermission(request.authUser.id, request.companyId, "inventory.items.view_cost");
+    const rows = result.rows.map(({ total_count, standard_cost, ...row }) => (canViewCost ? { ...row, standard_cost } : row));
     return { rows, total, page: q.page, pageSize: q.pageSize };
   });
 
@@ -560,6 +577,13 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
 
   // Master data syncs one way, down — updatedSince lets a client (POS,
   // admin UI) pull only what changed since its last sync.
+  //
+  // Deliberately NOT gated behind inventory.items.view: this is a shared
+  // item-lookup endpoint consumed by POS, Sales, Purchasing, and Dashboard
+  // for their own already-permissioned flows (e.g. building a cart needs
+  // sales.pos_invoice.create, not an Inventory-module permission), not
+  // just the Items admin screen. Cost is still masked below regardless of
+  // which module is calling.
   app.get("/items", { preHandler: app.authenticate }, async (request) => {
     const query = listQuerySchema.parse(request.query);
 
@@ -584,10 +608,11 @@ export async function itemRoutes(app: FastifyInstance): Promise<void> {
       [request.companyId],
     );
 
+    const canViewCost = await userHasPermission(request.authUser.id, request.companyId, "inventory.items.view_cost");
     const variantsByItem = new Map<string, unknown[]>();
-    for (const v of variants.rows) {
+    for (const { standard_cost, ...v } of variants.rows) {
       const list = variantsByItem.get(v.item_id) ?? [];
-      list.push(v);
+      list.push(canViewCost ? { ...v, standard_cost } : v);
       variantsByItem.set(v.item_id, list);
     }
 
