@@ -207,6 +207,7 @@ function EmployeesTab() {
   const { i18n } = useTranslation();
   const { hasPermission } = useAuth();
   const canViewSalary = hasPermission("hr.employee.view_salary");
+  const canCreate = hasPermission("hr.employee.create");
   const { data, error, reload } = useApiList<Employee>("/api/employees");
   const [showNew, setShowNew] = useState(false);
 
@@ -236,8 +237,8 @@ function EmployeesTab() {
         emptyIcon={UserCog}
         emptyText="No employees yet."
         searchPlaceholder="Search employees..."
-        actionLabel="New Employee"
-        onAction={() => setShowNew(true)}
+        actionLabel={canCreate ? "New Employee" : undefined}
+        onAction={canCreate ? () => setShowNew(true) : undefined}
       />
       {showNew && (
         <Modal title="New Employee" onClose={() => setShowNew(false)}>
@@ -345,6 +346,7 @@ function PayrollRunsTab() {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
   const canPost = hasPermission("hr.payroll.post");
+  const canCreate = hasPermission("hr.payroll.create");
 
   const columns: Column<PayrollRun>[] = [
     { key: "number", header: "Run #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
@@ -374,8 +376,8 @@ function PayrollRunsTab() {
         emptyIcon={Wallet}
         emptyText="No payroll runs yet."
         searchPlaceholder="Search payroll runs..."
-        actionLabel="New Payroll Run"
-        onAction={() => setShowNew(true)}
+        actionLabel={canCreate ? "New Payroll Run" : undefined}
+        onAction={canCreate ? () => setShowNew(true) : undefined}
         onRowClick={(r) => setSelectedId(r.id)}
         selectable={canPost}
         selectedKeys={selectedKeys}

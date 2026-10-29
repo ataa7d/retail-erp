@@ -210,6 +210,8 @@ function DisposeAssetForm({ asset, onClose, onDisposed }: { asset: FixedAsset; o
 
 function AssetDetailModal({ asset, onClose, onDisposed }: { asset: FixedAsset; onClose: () => void; onDisposed: () => void }) {
   const { i18n } = useTranslation();
+  const { hasPermission } = useAuth();
+  const canDispose = hasPermission("assets.fixed_asset.dispose");
   const [showDispose, setShowDispose] = useState(false);
   const hasCostData = asset.acquisition_cost !== undefined && asset.accumulated_depreciation !== undefined;
   const bookValue = hasCostData ? Number(asset.acquisition_cost) - Number(asset.accumulated_depreciation) : null;
@@ -236,7 +238,7 @@ function AssetDetailModal({ asset, onClose, onDisposed }: { asset: FixedAsset; o
         </div>
       </div>
       )}
-      {asset.status === "active" && !showDispose && (
+      {asset.status === "active" && canDispose && !showDispose && (
         <button
           onClick={() => setShowDispose(true)}
           className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
@@ -265,6 +267,7 @@ function AssetsTab() {
   const { i18n } = useTranslation();
   const { hasPermission } = useAuth();
   const canViewCost = hasPermission("assets.fixed_asset.view_cost");
+  const canCreate = hasPermission("assets.fixed_asset.create");
   const { data, error, reload } = useApiList<FixedAsset>("/api/fixed-assets");
   const [showNew, setShowNew] = useState(false);
   const [selected, setSelected] = useState<FixedAsset | null>(null);
@@ -303,8 +306,8 @@ function AssetsTab() {
         emptyIcon={Building2}
         emptyText="No fixed assets yet."
         searchPlaceholder="Search assets..."
-        actionLabel="Acquire Asset"
-        onAction={() => setShowNew(true)}
+        actionLabel={canCreate ? "Acquire Asset" : undefined}
+        onAction={canCreate ? () => setShowNew(true) : undefined}
         onRowClick={setSelected}
       />
       {showNew && (
@@ -324,6 +327,7 @@ function DepreciationRunsTab() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
   const canPost = hasPermission("assets.depreciation.post");
+  const canCreate = hasPermission("assets.depreciation.create");
 
   const columns: Column<DepreciationRun>[] = [
     { key: "number", header: "Run #", render: (r) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.document_number}</span> },
@@ -352,8 +356,8 @@ function DepreciationRunsTab() {
         emptyIcon={CalendarClock}
         emptyText="No depreciation runs yet."
         searchPlaceholder="Search runs..."
-        actionLabel="New Depreciation Run"
-        onAction={() => setShowNew(true)}
+        actionLabel={canCreate ? "New Depreciation Run" : undefined}
+        onAction={canCreate ? () => setShowNew(true) : undefined}
         selectable={canPost}
         selectedKeys={selected}
         onSelectionChange={setSelected}

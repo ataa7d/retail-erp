@@ -38,7 +38,7 @@ const terminateSchema = z.object({ terminationDate: z.string().regex(/^\d{4}-\d{
 export async function hrRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/departments",
-    { preHandler: [app.authenticate, app.requirePermission("hr.employee.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("hr.employee.create")] },
     async (request, reply) => {
       const body = departmentSchema.parse(request.body);
       const id = await withTransaction(
@@ -61,7 +61,7 @@ export async function hrRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/positions",
-    { preHandler: [app.authenticate, app.requirePermission("hr.employee.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("hr.employee.create")] },
     async (request, reply) => {
       const body = positionSchema.parse(request.body);
       const id = await withTransaction(
@@ -84,7 +84,7 @@ export async function hrRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/employees",
-    { preHandler: [app.authenticate, app.requirePermission("hr.employee.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("hr.employee.create")] },
     async (request, reply) => {
       const body = employeeSchema.parse(request.body);
       const id = await withTransaction(
@@ -140,7 +140,7 @@ export async function hrRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/employees/:id/terminate",
-    { preHandler: [app.authenticate, app.requirePermission("hr.employee.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("hr.employee.terminate")] },
     async (request) => {
       const body = terminateSchema.parse(request.body);
       await withTransaction(async (client) => {

@@ -46,7 +46,7 @@ export async function payrollRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/payroll-runs",
-    { preHandler: [app.authenticate, app.requirePermission("hr.payroll.post")] },
+    { preHandler: [app.authenticate, app.requirePermission("hr.payroll.create")] },
     async (request, reply) => {
       const body = createSchema.parse(request.body);
       const id = await withTransaction(

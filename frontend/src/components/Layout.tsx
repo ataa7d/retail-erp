@@ -189,7 +189,7 @@ export const navItems = [
   {
     to: "/hr",
     label: "nav.hr",
-    permission: ["hr.employee.manage", "hr.employee.view", "hr.payroll.view"],
+    permission: ["hr.employee.create", "hr.employee.terminate", "hr.employee.view", "hr.payroll.create", "hr.payroll.post", "hr.payroll.view"],
     icon: UserCog,
     color: "pink",
     subItems: [
@@ -200,7 +200,14 @@ export const navItems = [
   {
     to: "/assets",
     label: "nav.assets",
-    permission: ["assets.fixed_asset.manage", "assets.fixed_asset.view", "assets.depreciation.view"],
+    permission: [
+      "assets.fixed_asset.create",
+      "assets.fixed_asset.dispose",
+      "assets.fixed_asset.view",
+      "assets.depreciation.create",
+      "assets.depreciation.post",
+      "assets.depreciation.view",
+    ],
     icon: Building2,
     color: "cyan",
     subItems: [

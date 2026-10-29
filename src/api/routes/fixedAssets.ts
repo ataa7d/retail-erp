@@ -49,7 +49,7 @@ const disposeSchema = z.object({
 export async function fixedAssetRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/asset-categories",
-    { preHandler: [app.authenticate, app.requirePermission("assets.fixed_asset.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("assets.fixed_asset.create")] },
     async (request, reply) => {
       const body = categorySchema.parse(request.body);
       const result = await pool.query<{ id: string }>(
@@ -85,7 +85,7 @@ export async function fixedAssetRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/fixed-assets",
-    { preHandler: [app.authenticate, app.requirePermission("assets.fixed_asset.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("assets.fixed_asset.create")] },
     async (request, reply) => {
       const body = acquireSchema.parse(request.body);
       const assetId = await withTransaction(async (client) => {
@@ -138,7 +138,7 @@ export async function fixedAssetRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/fixed-assets/:id/dispose",
-    { preHandler: [app.authenticate, app.requirePermission("assets.fixed_asset.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("assets.fixed_asset.dispose")] },
     async (request) => {
       const body = disposeSchema.parse(request.body);
       await withTransaction(async (client) => {
@@ -161,7 +161,7 @@ export async function fixedAssetRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/depreciation-runs",
-    { preHandler: [app.authenticate, app.requirePermission("assets.depreciation.post")] },
+    { preHandler: [app.authenticate, app.requirePermission("assets.depreciation.create")] },
     async (request, reply) => {
       const body = depreciationRunSchema.parse(request.body);
       const runId = await withTransaction(async (client) => {
