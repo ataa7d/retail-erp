@@ -219,9 +219,13 @@ export const navItems = [
     to: "/admin",
     label: "nav.admin",
     permission: [
-      "admin.users.manage",
+      "admin.users.invite",
+      "admin.users.assign_roles",
+      "admin.users.deactivate",
       "admin.users.view",
-      "admin.roles.manage",
+      "admin.roles.create",
+      "admin.roles.assign_permissions",
+      "admin.roles.deactivate",
       "admin.roles.view",
       "admin.branches.view",
       "admin.companies.manage",
@@ -245,7 +249,7 @@ export const navItems = [
       // device picker for ordinary cashiers), no dedicated view
       // permission exists or is warranted.
       { key: "pos-devices", label: "POS Devices", permission: "sales.pos_device.manage" },
-      { key: "offline-sync", label: "Offline Sync", permission: "admin.users.manage" },
+      { key: "offline-sync", label: "Offline Sync", permission: "admin.users.invite" },
       { key: "zatca", label: "ZATCA Onboarding", permission: "admin.zatca_onboarding.view" },
       // Notification preferences are the viewer's own, not company-wide
       // admin config -- no permission needed beyond reaching /admin.

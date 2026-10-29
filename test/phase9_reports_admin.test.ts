@@ -130,7 +130,7 @@ beforeAll(async () => {
 
   const role = await client.query(`INSERT INTO roles (company_id, name) VALUES ($1, 'Reports Access') RETURNING id`, [companyId]);
   await client.query(
-    `INSERT INTO role_permissions (role_id, permission_id) SELECT $1, id FROM permissions WHERE code IN ('accounting.reports.trial_balance.view', 'accounting.reports.income_statement.view', 'accounting.reports.balance_sheet.view', 'admin.users.manage', 'admin.users.view', 'admin.audit_log.view', 'admin.roles.manage', 'admin.roles.view')`,
+    `INSERT INTO role_permissions (role_id, permission_id) SELECT $1, id FROM permissions WHERE code IN ('accounting.reports.trial_balance.view', 'accounting.reports.income_statement.view', 'accounting.reports.balance_sheet.view', 'admin.users.invite', 'admin.users.assign_roles', 'admin.users.deactivate', 'admin.users.view', 'admin.audit_log.view', 'admin.roles.create', 'admin.roles.assign_permissions', 'admin.roles.deactivate', 'admin.roles.view')`,
     [role.rows[0].id],
   );
   await client.query(`INSERT INTO user_roles (user_id, company_id, role_id) VALUES ($1, $2, $3)`, [userId, companyId, role.rows[0].id]);

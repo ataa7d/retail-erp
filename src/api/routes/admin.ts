@@ -63,7 +63,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // shouldn't need to know whether they're already in the system.
   app.post(
     "/admin/users",
-    { preHandler: [app.authenticate, app.requirePermission("admin.users.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("admin.users.invite")] },
     async (request, reply) => {
       const body = inviteUserSchema.parse(request.body);
       const id = await withTransaction(async (client) => {
@@ -120,7 +120,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/admin/users/:id/deactivate",
-    { preHandler: [app.authenticate, app.requirePermission("admin.users.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("admin.users.deactivate")] },
     async (request) => {
       if (request.params.id === request.authUser.id) {
         throw new BusinessRuleError("you cannot deactivate your own access");
@@ -136,7 +136,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/admin/users/:id/reactivate",
-    { preHandler: [app.authenticate, app.requirePermission("admin.users.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("admin.users.deactivate")] },
     async (request) => {
       const result = await pool.query(
         `UPDATE user_company_access SET is_active = true WHERE user_id = $1 AND company_id = $2`,
@@ -151,7 +151,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // migration 0004) -- storeId omitted/null means company-wide.
   app.post<{ Params: { id: string } }>(
     "/admin/users/:id/roles",
-    { preHandler: [app.authenticate, app.requirePermission("admin.users.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("admin.users.assign_roles")] },
     async (request, reply) => {
       const body = assignRoleSchema.parse(request.body);
       const storeId = body.storeId ?? null;
@@ -182,7 +182,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string; userRoleId: string } }>(
     "/admin/users/:id/roles/:userRoleId/remove",
-    { preHandler: [app.authenticate, app.requirePermission("admin.users.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("admin.users.assign_roles")] },
     async (request) => {
       const result = await pool.query(
         `DELETE FROM user_roles WHERE id = $1 AND user_id = $2 AND company_id = $3`,
@@ -204,7 +204,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/admin/roles",
-    { preHandler: [app.authenticate, app.requirePermission("admin.roles.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("admin.roles.create")] },
     async (request, reply) => {
       const body = createRoleSchema.parse(request.body);
       const result = await pool.query<{ id: string }>(
@@ -221,7 +221,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // checkbox list at once, so "replace" matches how it's actually used.
   app.post<{ Params: { id: string } }>(
     "/admin/roles/:id/permissions",
-    { preHandler: [app.authenticate, app.requirePermission("admin.roles.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("admin.roles.assign_permissions")] },
     async (request) => {
       const body = setRolePermissionsSchema.parse(request.body);
       await withTransaction(async (client) => {
@@ -246,7 +246,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/admin/roles/:id/deactivate",
-    { preHandler: [app.authenticate, app.requirePermission("admin.roles.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("admin.roles.deactivate")] },
     async (request) => {
       const result = await pool.query(`UPDATE roles SET is_active = false WHERE id = $1 AND company_id = $2`, [
         request.params.id,
@@ -259,7 +259,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/admin/roles/:id/reactivate",
-    { preHandler: [app.authenticate, app.requirePermission("admin.roles.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("admin.roles.deactivate")] },
     async (request) => {
       const result = await pool.query(`UPDATE roles SET is_active = true WHERE id = $1 AND company_id = $2`, [
         request.params.id,

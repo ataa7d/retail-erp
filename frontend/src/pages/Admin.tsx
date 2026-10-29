@@ -125,7 +125,9 @@ function InviteUserForm({ onClose, onCreated }: { onClose: () => void; onCreated
 }
 
 function UserDetailModal({ userId, onClose, onChanged }: { userId: string; onClose: () => void; onChanged: () => void }) {
-  const { token, companyId } = useAuth();
+  const { token, companyId, hasPermission } = useAuth();
+  const canDeactivate = hasPermission("admin.users.deactivate");
+  const canAssignRoles = hasPermission("admin.users.assign_roles");
   const { data: roles } = useApiList<Role>("/api/admin/roles");
   const { data: stores } = useApiList<AdminStore>("/api/stores");
   const [detail, setDetail] = useState<UserDetail | null>(null);
@@ -197,9 +199,11 @@ function UserDetailModal({ userId, onClose, onChanged }: { userId: string; onClo
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={detail.has_company_access ? "active" : "inactive"} />
-          <button onClick={toggleAccess} disabled={busy} className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50">
-            {detail.has_company_access ? "Deactivate" : "Reactivate"}
-          </button>
+          {canDeactivate && (
+            <button onClick={toggleAccess} disabled={busy} className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50">
+              {detail.has_company_access ? "Deactivate" : "Reactivate"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -214,44 +218,48 @@ function UserDetailModal({ userId, onClose, onChanged }: { userId: string; onClo
               {a.role_name}
               {a.store_name_en && <span className="ms-1 text-xs text-slate-400 dark:text-slate-500">· {a.store_name_en} only</span>}
             </span>
-            <button onClick={() => removeAssignment(a.id)} disabled={busy} className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50">
-              Remove
-            </button>
+            {canAssignRoles && (
+              <button onClick={() => removeAssignment(a.id)} disabled={busy} className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50">
+                Remove
+              </button>
+            )}
           </div>
         ))}
       </div>
 
-      <form onSubmit={assignRole} className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
-        <div className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-300">Assign a role</div>
-        <div className="grid grid-cols-2 gap-2">
-          <SelectInput required value={roleId} onChange={(e) => setRoleId(e.target.value)}>
-            <option value="">Select role...</option>
-            {roles?.filter((r) => r.is_active).map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </SelectInput>
-          <SelectInput value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-            <option value="">All stores (company-wide)</option>
-            {stores?.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name_en} only
-              </option>
-            ))}
-          </SelectInput>
-        </div>
-        <button type="submit" disabled={busy || !roleId} className="mt-2 rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-50">
-          {busy ? "Working..." : "Assign"}
-        </button>
-      </form>
+      {canAssignRoles && (
+        <form onSubmit={assignRole} className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
+          <div className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-300">Assign a role</div>
+          <div className="grid grid-cols-2 gap-2">
+            <SelectInput required value={roleId} onChange={(e) => setRoleId(e.target.value)}>
+              <option value="">Select role...</option>
+              {roles?.filter((r) => r.is_active).map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </SelectInput>
+            <SelectInput value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+              <option value="">All stores (company-wide)</option>
+              {stores?.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name_en} only
+                </option>
+              ))}
+            </SelectInput>
+          </div>
+          <button type="submit" disabled={busy || !roleId} className="mt-2 rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-50">
+            {busy ? "Working..." : "Assign"}
+          </button>
+        </form>
+      )}
     </div>
   );
 }
 
 function UsersTab() {
   const { hasPermission } = useAuth();
-  const canManage = hasPermission("admin.users.manage");
+  const canManage = hasPermission("admin.users.invite");
   const { data, error, reload } = useApiList<AdminUser>("/api/admin/users");
   const [showNew, setShowNew] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -330,7 +338,9 @@ function NewRoleForm({ onClose, onCreated }: { onClose: () => void; onCreated: (
 }
 
 function RoleDetailModal({ roleId, onClose, onChanged }: { roleId: string; onClose: () => void; onChanged: () => void }) {
-  const { token, companyId } = useAuth();
+  const { token, companyId, hasPermission } = useAuth();
+  const canAssignPermissions = hasPermission("admin.roles.assign_permissions");
+  const canDeactivate = hasPermission("admin.roles.deactivate");
   const { data: catalog } = useApiList<Permission>("/api/admin/permissions");
   const [role, setRole] = useState<Role | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -407,9 +417,11 @@ function RoleDetailModal({ roleId, onClose, onChanged }: { roleId: string; onClo
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={role.is_active ? "active" : "inactive"} />
-          <button onClick={toggleActive} disabled={busy} className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50">
-            {role.is_active ? "Deactivate" : "Reactivate"}
-          </button>
+          {canDeactivate && (
+            <button onClick={toggleActive} disabled={busy} className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50">
+              {role.is_active ? "Deactivate" : "Reactivate"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -422,7 +434,13 @@ function RoleDetailModal({ roleId, onClose, onChanged }: { roleId: string; onClo
             <div className="space-y-1">
               {perms.map((p) => (
                 <label key={p.code} className="flex items-start gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
-                  <input type="checkbox" className="mt-0.5" checked={selected.has(p.code)} onChange={() => toggle(p.code)} />
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={selected.has(p.code)}
+                    disabled={!canAssignPermissions}
+                    onChange={() => toggle(p.code)}
+                  />
                   <span>
                     <span className="text-slate-800 dark:text-slate-100">{p.description}</span>
                     <span className="ms-1.5 font-mono text-xs text-slate-400 dark:text-slate-500">{p.code}</span>
@@ -434,16 +452,18 @@ function RoleDetailModal({ roleId, onClose, onChanged }: { roleId: string; onClo
         ))}
       </div>
 
-      <button onClick={save} disabled={busy} className="rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50">
-        {busy ? "Saving..." : "Save Permissions"}
-      </button>
+      {canAssignPermissions && (
+        <button onClick={save} disabled={busy} className="rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50">
+          {busy ? "Saving..." : "Save Permissions"}
+        </button>
+      )}
     </div>
   );
 }
 
 function RolesTab() {
   const { hasPermission } = useAuth();
-  const canManage = hasPermission("admin.roles.manage");
+  const canManage = hasPermission("admin.roles.create");
   const { data, error, reload } = useApiList<Role>("/api/admin/roles");
   const [showNew, setShowNew] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -2011,7 +2031,7 @@ export default function Admin() {
           { key: "users", label: "Users", content: <UsersTab />, permission: "admin.users.view" },
           { key: "roles", label: "Roles", content: <RolesTab />, permission: "admin.roles.view" },
           { key: "pos-devices", label: "POS Devices", content: <PosDevicesTab />, permission: "sales.pos_device.manage" },
-          { key: "offline-sync", label: "Offline Sync", content: <OfflineSyncTab />, permission: "admin.users.manage" },
+          { key: "offline-sync", label: "Offline Sync", content: <OfflineSyncTab />, permission: "admin.users.invite" },
           { key: "zatca", label: "ZATCA Onboarding", content: <ZatcaOnboardingTab />, permission: "admin.zatca_onboarding.view" },
           { key: "notifications", label: "Notification Preferences", content: <NotificationPreferencesTab /> },
           { key: "audit", label: "Audit Log", content: <AuditLogTab />, permission: "admin.audit_log.view" },
