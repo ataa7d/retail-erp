@@ -64,26 +64,38 @@ function toPublicOnboardingRow(row: Record<string, unknown>) {
 }
 
 export async function zatcaOnboardingRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/zatca-onboarding", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(`SELECT * FROM zatca_onboarding WHERE company_id = $1`, [request.companyId]);
-    if (result.rows.length === 0) return { status: "not_started" };
-    return toPublicOnboardingRow(result.rows[0]!);
-  });
+  app.get(
+    "/zatca-onboarding",
+    { preHandler: [app.authenticate, app.requirePermission("admin.zatca_onboarding.view")] },
+    async (request) => {
+      const result = await pool.query(`SELECT * FROM zatca_onboarding WHERE company_id = $1`, [request.companyId]);
+      if (result.rows.length === 0) return { status: "not_started" };
+      return toPublicOnboardingRow(result.rows[0]!);
+    },
+  );
 
-  app.get("/zatca-onboarding/compliance-checks", { preHandler: app.authenticate }, async (request) => {
-    const onboarding = await pool.query<{ id: string }>(`SELECT id FROM zatca_onboarding WHERE company_id = $1`, [request.companyId]);
-    if (onboarding.rows.length === 0) return [];
-    const result = await pool.query(
-      `SELECT id, document_type, source_invoice_id, passed, submitted_at
+  app.get(
+    "/zatca-onboarding/compliance-checks",
+    { preHandler: [app.authenticate, app.requirePermission("admin.zatca_onboarding.view")] },
+    async (request) => {
+      const onboarding = await pool.query<{ id: string }>(`SELECT id FROM zatca_onboarding WHERE company_id = $1`, [request.companyId]);
+      if (onboarding.rows.length === 0) return [];
+      const result = await pool.query(
+        `SELECT id, document_type, source_invoice_id, passed, submitted_at
        FROM zatca_compliance_checks WHERE zatca_onboarding_id = $1 ORDER BY submitted_at DESC`,
-      [onboarding.rows[0]!.id],
-    );
-    return result.rows;
-  });
+        [onboarding.rows[0]!.id],
+      );
+      return result.rows;
+    },
+  );
 
-  app.get("/zatca-onboarding/readiness", { preHandler: app.authenticate }, async (request) => {
-    return runZatcaReadinessCheck(pool, request.companyId);
-  });
+  app.get(
+    "/zatca-onboarding/readiness",
+    { preHandler: [app.authenticate, app.requirePermission("admin.zatca_onboarding.view")] },
+    async (request) => {
+      return runZatcaReadinessCheck(pool, request.companyId);
+    },
+  );
 
   // Step 1: generate this company's EGS keypair + CSR. Overwrites any
   // previous CSR/keypair for the company -- starting over is the normal

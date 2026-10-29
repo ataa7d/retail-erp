@@ -250,6 +250,8 @@ function UserDetailModal({ userId, onClose, onChanged }: { userId: string; onClo
 }
 
 function UsersTab() {
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission("admin.users.manage");
   const { data, error, reload } = useApiList<AdminUser>("/api/admin/users");
   const [showNew, setShowNew] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -273,8 +275,8 @@ function UsersTab() {
         emptyIcon={ShieldCheck}
         emptyText="No users yet."
         searchPlaceholder="Search users..."
-        actionLabel="Invite User"
-        onAction={() => setShowNew(true)}
+        actionLabel={canManage ? "Invite User" : undefined}
+        onAction={canManage ? () => setShowNew(true) : undefined}
         onRowClick={(r) => setOpenId(r.id)}
       />
       {showNew && (
@@ -440,6 +442,8 @@ function RoleDetailModal({ roleId, onClose, onChanged }: { roleId: string; onClo
 }
 
 function RolesTab() {
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission("admin.roles.manage");
   const { data, error, reload } = useApiList<Role>("/api/admin/roles");
   const [showNew, setShowNew] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -463,8 +467,8 @@ function RolesTab() {
         emptyIcon={KeyRound}
         emptyText="No roles yet."
         searchPlaceholder="Search roles..."
-        actionLabel="New Role"
-        onAction={() => setShowNew(true)}
+        actionLabel={canManage ? "New Role" : undefined}
+        onAction={canManage ? () => setShowNew(true) : undefined}
         onRowClick={(r) => setOpenId(r.id)}
       />
       {showNew && (
@@ -2002,15 +2006,15 @@ export default function Admin() {
         initialActive={(location.state as { fromTab?: string } | null)?.fromTab}
         hideHeader
         tabs={[
-          { key: "company", label: "Company Profile", content: <CompanyProfileTab /> },
-          { key: "branches-stores", label: "Branches & Stores", content: <BranchesStoresTab /> },
-          { key: "users", label: "Users", content: <UsersTab /> },
-          { key: "roles", label: "Roles", content: <RolesTab /> },
-          { key: "pos-devices", label: "POS Devices", content: <PosDevicesTab /> },
-          { key: "offline-sync", label: "Offline Sync", content: <OfflineSyncTab /> },
-          { key: "zatca", label: "ZATCA Onboarding", content: <ZatcaOnboardingTab /> },
+          { key: "company", label: "Company Profile", content: <CompanyProfileTab />, permission: "admin.companies.manage" },
+          { key: "branches-stores", label: "Branches & Stores", content: <BranchesStoresTab />, permission: "admin.branches.view" },
+          { key: "users", label: "Users", content: <UsersTab />, permission: "admin.users.view" },
+          { key: "roles", label: "Roles", content: <RolesTab />, permission: "admin.roles.view" },
+          { key: "pos-devices", label: "POS Devices", content: <PosDevicesTab />, permission: "sales.pos_device.manage" },
+          { key: "offline-sync", label: "Offline Sync", content: <OfflineSyncTab />, permission: "admin.users.manage" },
+          { key: "zatca", label: "ZATCA Onboarding", content: <ZatcaOnboardingTab />, permission: "admin.zatca_onboarding.view" },
           { key: "notifications", label: "Notification Preferences", content: <NotificationPreferencesTab /> },
-          { key: "audit", label: "Audit Log", content: <AuditLogTab /> },
+          { key: "audit", label: "Audit Log", content: <AuditLogTab />, permission: "admin.audit_log.view" },
         ]}
       />
     </div>

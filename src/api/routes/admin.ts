@@ -38,7 +38,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // isn't this company's business to expose.
   app.get(
     "/admin/users",
-    { preHandler: [app.authenticate, app.requirePermission("admin.users.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("admin.users.view")] },
     async (request) => {
       const result = await pool.query(
         `SELECT u.id, u.email, u.full_name_en, u.full_name_ar, u.is_active AS user_is_active,
@@ -95,7 +95,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get<{ Params: { id: string } }>(
     "/admin/users/:id",
-    { preHandler: [app.authenticate, app.requirePermission("admin.users.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("admin.users.view")] },
     async (request) => {
       const user = await pool.query(
         `SELECT u.id, u.email, u.full_name_en, u.full_name_ar, u.is_active AS user_is_active, uca.is_active AS has_company_access
@@ -195,7 +195,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get(
     "/admin/permissions",
-    { preHandler: [app.authenticate, app.requirePermission("admin.roles.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("admin.roles.view")] },
     async () => {
       const result = await pool.query(`SELECT id, module, action, code, description FROM permissions ORDER BY module, action`);
       return result.rows;
@@ -272,7 +272,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get(
     "/admin/roles",
-    { preHandler: [app.authenticate, app.requirePermission("admin.roles.manage")] },
+    { preHandler: [app.authenticate, app.requirePermission("admin.roles.view")] },
     async (request) => {
       const result = await pool.query(
         `SELECT r.id, r.name, r.description, r.is_active,

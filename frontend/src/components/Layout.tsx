@@ -210,19 +210,39 @@ export const navItems = [
   {
     to: "/admin",
     label: "nav.admin",
-    permission: "admin.users.manage",
+    permission: [
+      "admin.users.manage",
+      "admin.users.view",
+      "admin.roles.manage",
+      "admin.roles.view",
+      "admin.branches.view",
+      "admin.companies.manage",
+      "sales.pos_device.manage",
+      "admin.zatca_onboarding.view",
+      "admin.audit_log.view",
+    ],
     icon: ShieldCheck,
     color: "indigo",
     subItems: [
-      { key: "company", label: "Company Profile" },
-      { key: "branches-stores", label: "Branches & Stores" },
-      { key: "users", label: "Users" },
-      { key: "roles", label: "Roles" },
-      { key: "pos-devices", label: "POS Devices" },
-      { key: "offline-sync", label: "Offline Sync" },
-      { key: "zatca", label: "ZATCA Onboarding" },
+      // Company Profile has no dedicated view permission -- GET
+      // /companies/current is an intentionally open shared lookup every
+      // invoice print and VAT calc depends on (Sales/POS/HR), so this
+      // reuses the existing write permission for tab-only gating, same
+      // as Sales' price-lists tab in Phase 2.
+      { key: "company", label: "Company Profile", permission: "admin.companies.manage" },
+      { key: "branches-stores", label: "Branches & Stores", permission: "admin.branches.view" },
+      { key: "users", label: "Users", permission: "admin.users.view" },
+      { key: "roles", label: "Roles", permission: "admin.roles.view" },
+      // Same reuse: GET /pos-devices is a shared lookup (POS login's
+      // device picker for ordinary cashiers), no dedicated view
+      // permission exists or is warranted.
+      { key: "pos-devices", label: "POS Devices", permission: "sales.pos_device.manage" },
+      { key: "offline-sync", label: "Offline Sync", permission: "admin.users.manage" },
+      { key: "zatca", label: "ZATCA Onboarding", permission: "admin.zatca_onboarding.view" },
+      // Notification preferences are the viewer's own, not company-wide
+      // admin config -- no permission needed beyond reaching /admin.
       { key: "notifications", label: "Notification Preferences" },
-      { key: "audit", label: "Audit Log" },
+      { key: "audit", label: "Audit Log", permission: "admin.audit_log.view" },
     ],
   },
 ] as const;

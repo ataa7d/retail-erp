@@ -346,7 +346,14 @@ export default function App() {
               </RequirePermission>
             }
           />
-          <Route path="admin" element={<Admin />} />
+          <Route
+            path="admin"
+            element={
+              <RequirePermission navPath="/admin">
+                <Admin />
+              </RequirePermission>
+            }
+          />
         </Route>
       </Routes>
     </AuthProvider>

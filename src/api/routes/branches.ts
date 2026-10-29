@@ -16,14 +16,18 @@ const createSchema = z.object({
 const updateSchema = createSchema.omit({ branchCode: true });
 
 export async function branchRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/branches", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(
-      `SELECT id, branch_code, name_en, name_ar, cr_number, vat_registration_number, address, city, is_active
+  app.get(
+    "/branches",
+    { preHandler: [app.authenticate, app.requirePermission("admin.branches.view")] },
+    async (request) => {
+      const result = await pool.query(
+        `SELECT id, branch_code, name_en, name_ar, cr_number, vat_registration_number, address, city, is_active
        FROM branches WHERE company_id = $1 ORDER BY branch_code`,
-      [request.companyId],
-    );
-    return result.rows;
-  });
+        [request.companyId],
+      );
+      return result.rows;
+    },
+  );
 
   app.post(
     "/branches",
