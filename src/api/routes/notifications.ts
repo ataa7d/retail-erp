@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { pool } from "../db.js";
+import { userHasPermission } from "../permissions.js";
 
 export interface NotificationItem {
   id: string;
@@ -7,18 +8,6 @@ export interface NotificationItem {
   title: string;
   detail: string;
   link: string;
-}
-
-async function hasPermission(companyId: string, userId: string, code: string): Promise<boolean> {
-  const r = await pool.query(
-    `SELECT 1 FROM user_roles ur
-     JOIN role_permissions rp ON rp.role_id = ur.role_id
-     JOIN permissions p ON p.id = rp.permission_id
-     WHERE ur.user_id = $1 AND ur.company_id = $2 AND p.code = $3
-     LIMIT 1`,
-    [userId, companyId, code],
-  );
-  return r.rows.length > 0;
 }
 
 /**
@@ -34,7 +23,7 @@ async function hasPermission(companyId: string, userId: string, code: string): P
 export async function computeNotifications(companyId: string, userId: string): Promise<NotificationItem[]> {
   const items: NotificationItem[] = [];
 
-  if (await hasPermission(companyId, userId, "purchasing.requisition.approve")) {
+  if (await userHasPermission(userId, companyId, "purchasing.requisition.approve")) {
     const pending = await pool.query<{ id: string; document_number: string; requested_by_email: string | null }>(
       `SELECT pr.id, pr.document_number, u.email AS requested_by_email
        FROM purchase_requisitions pr

@@ -10,9 +10,10 @@ import { pool } from "./db.js";
 export async function userHasPermission(userId: string, companyId: string, code: string): Promise<boolean> {
   const result = await pool.query(
     `SELECT 1 FROM user_roles ur
+     JOIN roles r ON r.id = ur.role_id
      JOIN role_permissions rp ON rp.role_id = ur.role_id
      JOIN permissions p ON p.id = rp.permission_id
-     WHERE ur.user_id = $1 AND ur.company_id = $2 AND p.code = $3
+     WHERE ur.user_id = $1 AND ur.company_id = $2 AND p.code = $3 AND r.is_active = true
      LIMIT 1`,
     [userId, companyId, code],
   );

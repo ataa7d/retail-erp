@@ -7,15 +7,16 @@ export async function meRoutes(app: FastifyInstance): Promise<void> {
       `SELECT DISTINCT r.id, r.name, ur.store_id
        FROM user_roles ur
        JOIN roles r ON r.id = ur.role_id
-       WHERE ur.user_id = $1 AND ur.company_id = $2`,
+       WHERE ur.user_id = $1 AND ur.company_id = $2 AND r.is_active = true`,
       [request.authUser.id, request.companyId],
     );
     const permissions = await pool.query<{ code: string }>(
       `SELECT DISTINCT p.code
        FROM user_roles ur
+       JOIN roles r ON r.id = ur.role_id
        JOIN role_permissions rp ON rp.role_id = ur.role_id
        JOIN permissions p ON p.id = rp.permission_id
-       WHERE ur.user_id = $1 AND ur.company_id = $2`,
+       WHERE ur.user_id = $1 AND ur.company_id = $2 AND r.is_active = true`,
       [request.authUser.id, request.companyId],
     );
 
