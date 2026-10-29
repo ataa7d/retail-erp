@@ -494,7 +494,7 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
 
   app.get(
     "/ar-ageing",
-    { preHandler: [app.authenticate, app.requirePermission("accounting.ageing.view")] },
+    { preHandler: [app.authenticate, app.requirePermission("accounting.ar_ageing.view")] },
     async (request) => {
     const result = await pool.query(
       `SELECT ar.*, c.name_en AS customer_name_en, c.name_ar AS customer_name_ar
@@ -508,7 +508,7 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
 
   app.get(
     "/ap-ageing",
-    { preHandler: [app.authenticate, app.requirePermission("accounting.ageing.view")] },
+    { preHandler: [app.authenticate, app.requirePermission("accounting.ap_ageing.view")] },
     async (request) => {
     const result = await pool.query(
       `SELECT ap.*, s.name_en AS supplier_name_en, s.name_ar AS supplier_name_ar
