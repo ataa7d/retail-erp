@@ -283,11 +283,46 @@ export default function App() {
             }
           />
           <Route path="reports" element={<Reports />} />
-          <Route path="accounting" element={<Accounting />} />
-          <Route path="accounting/journals/new" element={<NewJournalPage />} />
-          <Route path="accounting/receipts/new" element={<NewReceiptPage />} />
-          <Route path="accounting/payments/new" element={<NewPaymentPage />} />
-          <Route path="accounting/budgets/:id" element={<BudgetDetailPage />} />
+          <Route
+            path="accounting"
+            element={
+              <RequirePermission navPath="/accounting">
+                <Accounting />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="accounting/journals/new"
+            element={
+              <RequirePermission navPath="/accounting">
+                <NewJournalPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="accounting/receipts/new"
+            element={
+              <RequirePermission navPath="/accounting">
+                <NewReceiptPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="accounting/payments/new"
+            element={
+              <RequirePermission navPath="/accounting">
+                <NewPaymentPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="accounting/budgets/:id"
+            element={
+              <RequirePermission navPath="/accounting">
+                <BudgetDetailPage />
+              </RequirePermission>
+            }
+          />
           <Route path="hr" element={<Hr />} />
           <Route path="assets" element={<Assets />} />
           <Route path="admin" element={<Admin />} />

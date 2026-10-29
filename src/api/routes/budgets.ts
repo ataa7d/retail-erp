@@ -47,7 +47,10 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
     return result.rows;
   });
 
-  app.get<{ Params: { id: string } }>("/budgets/:id", { preHandler: app.authenticate }, async (request) => {
+  app.get<{ Params: { id: string } }>(
+    "/budgets/:id",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.budget.view")] },
+    async (request) => {
     const header = await pool.query(
       `SELECT b.*, fy.year_name FROM budgets b JOIN fiscal_years fy ON fy.id = b.fiscal_year_id
        WHERE b.id = $1 AND b.company_id = $2`,
@@ -66,7 +69,8 @@ export async function budgetRoutes(app: FastifyInstance): Promise<void> {
       [request.params.id],
     );
     return { ...header.rows[0], lines: lines.rows };
-  });
+    },
+  );
 
   app.post<{ Params: { id: string } }>(
     "/budgets/:id/status",

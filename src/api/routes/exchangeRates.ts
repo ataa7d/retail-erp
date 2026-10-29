@@ -17,14 +17,18 @@ const lookupSchema = z.object({
 });
 
 export async function exchangeRateRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/exchange-rates", { preHandler: app.authenticate }, async (request) => {
+  app.get(
+    "/exchange-rates",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.exchange_rate.view")] },
+    async (request) => {
     const result = await pool.query(
       `SELECT id, currency, rate_date, rate FROM exchange_rates
        WHERE company_id = $1 ORDER BY rate_date DESC, currency LIMIT 500`,
       [request.companyId],
     );
     return result.rows;
-  });
+    },
+  );
 
   // One rate per currency per day: re-entering a day's rate corrects it
   // rather than adding a second, conflicting one. Documents snapshot the

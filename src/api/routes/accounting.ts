@@ -104,14 +104,18 @@ const reconciliationCreateSchema = z.object({
 });
 
 export async function accountingRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/chart-of-accounts", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(
-      `SELECT id, parent_id, account_code, name_en, name_ar, account_type, normal_balance, is_header, is_active
+  app.get(
+    "/chart-of-accounts",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.coa.view")] },
+    async (request) => {
+      const result = await pool.query(
+        `SELECT id, parent_id, account_code, name_en, name_ar, account_type, normal_balance, is_header, is_active
        FROM chart_of_accounts WHERE company_id = $1 ORDER BY account_code`,
-      [request.companyId],
-    );
-    return result.rows;
-  });
+        [request.companyId],
+      );
+      return result.rows;
+    },
+  );
 
   app.post(
     "/chart-of-accounts",
@@ -176,15 +180,19 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/fiscal-periods", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(
-      `SELECT fp.id, fp.fiscal_year_id, fp.period_number, fp.start_date, fp.end_date, fp.status, fy.year_name
+  app.get(
+    "/fiscal-periods",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.fiscal_period.view")] },
+    async (request) => {
+      const result = await pool.query(
+        `SELECT fp.id, fp.fiscal_year_id, fp.period_number, fp.start_date, fp.end_date, fp.status, fy.year_name
        FROM fiscal_periods fp JOIN fiscal_years fy ON fy.id = fp.fiscal_year_id
        WHERE fp.company_id = $1 ORDER BY fp.start_date`,
-      [request.companyId],
-    );
-    return result.rows;
-  });
+        [request.companyId],
+      );
+      return result.rows;
+    },
+  );
 
   app.post<{ Params: { id: string } }>(
     "/fiscal-periods/:id/close",
@@ -218,13 +226,17 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/fiscal-years", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(
-      `SELECT id, year_name, start_date, end_date, status FROM fiscal_years WHERE company_id = $1 ORDER BY start_date`,
-      [request.companyId],
-    );
-    return result.rows;
-  });
+  app.get(
+    "/fiscal-years",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.fiscal_period.view")] },
+    async (request) => {
+      const result = await pool.query(
+        `SELECT id, year_name, start_date, end_date, status FROM fiscal_years WHERE company_id = $1 ORDER BY start_date`,
+        [request.companyId],
+      );
+      return result.rows;
+    },
+  );
 
   app.post<{ Params: { id: string } }>(
     "/fiscal-years/:id/close",
@@ -251,14 +263,18 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/bank-accounts", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(
-      `SELECT id, bank_name, account_name, account_number, iban, currency, gl_account_id, is_active
+  app.get(
+    "/bank-accounts",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.bank_account.view")] },
+    async (request) => {
+      const result = await pool.query(
+        `SELECT id, bank_name, account_name, account_number, iban, currency, gl_account_id, is_active
        FROM bank_accounts WHERE company_id = $1 ORDER BY bank_name`,
-      [request.companyId],
-    );
-    return result.rows;
-  });
+        [request.companyId],
+      );
+      return result.rows;
+    },
+  );
 
   // Bank reconciliation (statement lines, matching, reconciliation runs)
   // was a complete feature with no way to add the bank account itself --
@@ -307,16 +323,23 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
 
   // ---- Journals (general ledger) ----
 
-  app.get("/journals", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(
-      `SELECT id, journal_number, journal_date, source_type, document_status
+  app.get(
+    "/journals",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.journal.view")] },
+    async (request) => {
+      const result = await pool.query(
+        `SELECT id, journal_number, journal_date, source_type, document_status
        FROM journals WHERE company_id = $1 ORDER BY journal_date DESC, created_at DESC LIMIT 200`,
-      [request.companyId],
-    );
-    return result.rows;
-  });
+        [request.companyId],
+      );
+      return result.rows;
+    },
+  );
 
-  app.get<{ Params: { id: string } }>("/journals/:id", { preHandler: app.authenticate }, async (request) => {
+  app.get<{ Params: { id: string } }>(
+    "/journals/:id",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.journal.view")] },
+    async (request) => {
     const header = await pool.query(`SELECT * FROM journals WHERE id = $1 AND company_id = $2`, [
       request.params.id,
       request.companyId,
@@ -329,7 +352,8 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
       [request.params.id],
     );
     return { ...header.rows[0], lines: lines.rows };
-  });
+    },
+  );
 
   // Manual journal entry: unlike every other document in this system, a
   // manual journal has no upstream business document to derive its lines
@@ -377,7 +401,10 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
 
   // ---- Customer receipts (AR settlement) ----
 
-  app.get("/customer-receipts", { preHandler: app.authenticate }, async (request) => {
+  app.get(
+    "/customer-receipts",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.receipt.view")] },
+    async (request) => {
     const result = await pool.query(
       `SELECT cr.id, cr.document_number, cr.receipt_date, cr.payment_method, cr.amount, cr.document_status,
               c.name_en AS customer_name_en, c.name_ar AS customer_name_ar
@@ -386,7 +413,8 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
       [request.companyId],
     );
     return result.rows;
-  });
+    },
+  );
 
   app.post(
     "/customer-receipts",
@@ -417,7 +445,10 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
 
   // ---- Supplier payments (AP settlement) ----
 
-  app.get("/supplier-payments", { preHandler: app.authenticate }, async (request) => {
+  app.get(
+    "/supplier-payments",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.payment.view")] },
+    async (request) => {
     const result = await pool.query(
       `SELECT sp.id, sp.document_number, sp.payment_date, sp.payment_method, sp.amount, sp.document_status,
               sp.currency, sp.exchange_rate, sp.base_amount,
@@ -427,7 +458,8 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
       [request.companyId],
     );
     return result.rows;
-  });
+    },
+  );
 
   app.post(
     "/supplier-payments",
@@ -460,7 +492,10 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
 
   // ---- Ageing ----
 
-  app.get("/ar-ageing", { preHandler: app.authenticate }, async (request) => {
+  app.get(
+    "/ar-ageing",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.ageing.view")] },
+    async (request) => {
     const result = await pool.query(
       `SELECT ar.*, c.name_en AS customer_name_en, c.name_ar AS customer_name_ar
        FROM ar_ageing ar JOIN customers c ON c.id = ar.customer_id
@@ -468,9 +503,13 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
       [request.companyId],
     );
     return result.rows;
-  });
+    },
+  );
 
-  app.get("/ap-ageing", { preHandler: app.authenticate }, async (request) => {
+  app.get(
+    "/ap-ageing",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.ageing.view")] },
+    async (request) => {
     const result = await pool.query(
       `SELECT ap.*, s.name_en AS supplier_name_en, s.name_ar AS supplier_name_ar
        FROM ap_ageing ap JOIN suppliers s ON s.id = ap.supplier_id
@@ -478,7 +517,8 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
       [request.companyId],
     );
     return result.rows;
-  });
+    },
+  );
 
   // ---- Bank reconciliation ----
   // Statement lines are entered manually here (no bank feed/CSV import in
@@ -511,7 +551,10 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/bank-statement-lines", { preHandler: app.authenticate }, async (request) => {
+  app.get(
+    "/bank-statement-lines",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.bank_reconciliation.view")] },
+    async (request) => {
     const query = z.object({ bankAccountId: z.string().uuid() }).parse(request.query);
     const result = await pool.query(
       `SELECT bsl.*, jl.description AS matched_description, j.journal_number AS matched_journal_number
@@ -523,7 +566,8 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
       [request.companyId, query.bankAccountId],
     );
     return result.rows;
-  });
+    },
+  );
 
   app.post<{ Params: { id: string } }>(
     "/bank-statement-lines/:id/match",
@@ -544,7 +588,10 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
 
   // Candidates for matching: posted journal lines on this bank account's
   // own GL account that no statement line has claimed yet.
-  app.get("/bank-accounts/:id/unmatched-journal-lines", { preHandler: app.authenticate }, async (request) => {
+  app.get(
+    "/bank-accounts/:id/unmatched-journal-lines",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.bank_reconciliation.view")] },
+    async (request) => {
     const params = z.object({ id: z.string().uuid() }).parse(request.params);
     const result = await pool.query(
       `SELECT jl.id, jl.debit_amount, jl.credit_amount, jl.description, j.journal_number, j.journal_date
@@ -557,9 +604,13 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
       [params.id, request.companyId],
     );
     return result.rows;
-  });
+    },
+  );
 
-  app.get("/bank-reconciliations", { preHandler: app.authenticate }, async (request) => {
+  app.get(
+    "/bank-reconciliations",
+    { preHandler: [app.authenticate, app.requirePermission("accounting.bank_reconciliation.view")] },
+    async (request) => {
     const query = z.object({ bankAccountId: z.string().uuid() }).parse(request.query);
     const result = await pool.query(
       `SELECT id, statement_date, statement_ending_balance, document_status,
@@ -570,7 +621,8 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
       [request.companyId, query.bankAccountId],
     );
     return result.rows;
-  });
+    },
+  );
 
   app.post(
     "/bank-reconciliations",

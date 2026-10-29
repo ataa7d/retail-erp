@@ -33,11 +33,10 @@ import GlobalSearch from "./GlobalSearch";
 // anyone who could reach Items before (any of the three permissions that
 // replaced the old inventory.items.manage umbrella), not just
 // inventory.adjustment.post, so nobody loses access they already had.
-// Customers (moved into Accounting below) doesn't get the same treatment:
-// it used to be visible to *everyone* (no permission at all), and Accounting
-// is gated behind accounting.journal.post -- users who could see customers
-// but not post journals will lose the sidebar link. Flagged, not silently
-// widened, since broadening Accounting's gate would expose GL data instead.
+// Customers (moved into Accounting below) now carries its own
+// sales.customer.view permission (Phase 3 read-access work), granted to
+// every active role on deploy, so nobody who could see it before loses
+// access; it no longer rides solely on accounting.journal.post.
 // subItems mirror each module's own internal <Tabs> keys/labels exactly
 // (Purchasing.tsx, Sales.tsx, etc.) so a sub-item navigates straight to
 // that tab via the same `state: { fromTab }` mechanism every "New X" page
@@ -126,23 +125,38 @@ export const navItems = [
   {
     to: "/accounting",
     label: "nav.accounting",
-    permission: "accounting.journal.post",
+    permission: [
+      "accounting.journal.post",
+      "accounting.coa.view",
+      "sales.customer.view",
+      "accounting.tax_code.view",
+      "sales.loyalty_tier.view",
+      "accounting.journal.view",
+      "accounting.receipt.view",
+      "accounting.payment.view",
+      "accounting.bank_account.view",
+      "accounting.bank_reconciliation.view",
+      "accounting.ageing.view",
+      "accounting.exchange_rate.view",
+      "accounting.fiscal_period.view",
+      "accounting.budget.view",
+    ],
     icon: Landmark,
     color: "green",
     subItems: [
-      { key: "coa", label: "Chart of Accounts" },
-      { key: "customers", label: "Customers" },
-      { key: "tax-codes", label: "Tax Codes" },
-      { key: "loyalty-tiers", label: "Loyalty Tiers" },
-      { key: "journals", label: "Journals" },
-      { key: "receipts", label: "Customer Receipts" },
-      { key: "payments", label: "Supplier Payments" },
-      { key: "bank", label: "Bank Reconciliation" },
-      { key: "ar", label: "AR Ageing" },
-      { key: "ap", label: "AP Ageing" },
-      { key: "fx", label: "Exchange Rates" },
-      { key: "close", label: "Period Close" },
-      { key: "budgets", label: "Budgets" },
+      { key: "coa", label: "Chart of Accounts", permission: "accounting.coa.view" },
+      { key: "customers", label: "Customers", permission: "sales.customer.view" },
+      { key: "tax-codes", label: "Tax Codes", permission: "accounting.tax_code.view" },
+      { key: "loyalty-tiers", label: "Loyalty Tiers", permission: "sales.loyalty_tier.view" },
+      { key: "journals", label: "Journals", permission: "accounting.journal.view" },
+      { key: "receipts", label: "Customer Receipts", permission: "accounting.receipt.view" },
+      { key: "payments", label: "Supplier Payments", permission: "accounting.payment.view" },
+      { key: "bank", label: "Bank Reconciliation", permission: "accounting.bank_reconciliation.view" },
+      { key: "ar", label: "AR Ageing", permission: "accounting.ageing.view" },
+      { key: "ap", label: "AP Ageing", permission: "accounting.ageing.view" },
+      { key: "fx", label: "Exchange Rates", permission: "accounting.exchange_rate.view" },
+      { key: "close", label: "Period Close", permission: "accounting.fiscal_period.view" },
+      { key: "budgets", label: "Budgets", permission: "accounting.budget.view" },
     ],
   },
   {
