@@ -38,7 +38,7 @@ const terminateSchema = z.object({ terminationDate: z.string().regex(/^\d{4}-\d{
 export async function hrRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/departments",
-    { preHandler: [app.authenticate, app.requirePermission("hr.employee.create")] },
+    { preHandler: [app.authenticate, app.requirePermission("hr.org_structure.manage")] },
     async (request, reply) => {
       const body = departmentSchema.parse(request.body);
       const id = await withTransaction(
@@ -61,7 +61,7 @@ export async function hrRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/positions",
-    { preHandler: [app.authenticate, app.requirePermission("hr.employee.create")] },
+    { preHandler: [app.authenticate, app.requirePermission("hr.org_structure.manage")] },
     async (request, reply) => {
       const body = positionSchema.parse(request.body);
       const id = await withTransaction(

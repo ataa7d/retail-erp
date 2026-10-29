@@ -49,7 +49,7 @@ const disposeSchema = z.object({
 export async function fixedAssetRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/asset-categories",
-    { preHandler: [app.authenticate, app.requirePermission("assets.fixed_asset.create")] },
+    { preHandler: [app.authenticate, app.requirePermission("assets.asset_category.manage")] },
     async (request, reply) => {
       const body = categorySchema.parse(request.body);
       const result = await pool.query<{ id: string }>(
