@@ -130,7 +130,7 @@ beforeAll(async () => {
 
   const role = await client.query(`INSERT INTO roles (company_id, name) VALUES ($1, 'Reports Access') RETURNING id`, [companyId]);
   await client.query(
-    `INSERT INTO role_permissions (role_id, permission_id) SELECT $1, id FROM permissions WHERE code IN ('accounting.reports.view', 'admin.users.manage', 'admin.audit_log.view', 'admin.roles.manage')`,
+    `INSERT INTO role_permissions (role_id, permission_id) SELECT $1, id FROM permissions WHERE code IN ('accounting.reports.trial_balance.view', 'accounting.reports.income_statement.view', 'accounting.reports.balance_sheet.view', 'admin.users.manage', 'admin.audit_log.view', 'admin.roles.manage')`,
     [role.rows[0].id],
   );
   await client.query(`INSERT INTO user_roles (user_id, company_id, role_id) VALUES ($1, $2, $3)`, [userId, companyId, role.rows[0].id]);
@@ -218,7 +218,7 @@ describe("reporting functions", () => {
     expect(Number(currentEarnings!.balance)).toBe(1000); // 1000 revenue, no expenses posted
   });
 
-  it("rejects a report request without accounting.reports.view", async () => {
+  it("rejects a report request without accounting.reports.trial_balance.view", async () => {
     const res = await app.inject({
       method: "GET", url: "/api/reports/trial-balance?asOfDate=2026-01-31",
       headers: { authorization: `Bearer ${noPermToken}`, "x-company-id": companyId },

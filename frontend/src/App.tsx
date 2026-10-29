@@ -282,7 +282,14 @@ export default function App() {
               </RequirePermission>
             }
           />
-          <Route path="reports" element={<Reports />} />
+          <Route
+            path="reports"
+            element={
+              <RequirePermission navPath="/reports">
+                <Reports />
+              </RequirePermission>
+            }
+          />
           <Route
             path="accounting"
             element={

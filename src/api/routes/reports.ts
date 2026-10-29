@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { pool } from "../db.js";
+import { userHasPermission } from "../permissions.js";
 
 const asOfSchema = z.object({ asOfDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
 const rangeSchema = z.object({
@@ -25,7 +26,7 @@ const budgetVsActualSchema = z.object({
 export async function reportRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     "/reports/trial-balance",
-    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.view")] },
+    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.trial_balance.view")] },
     async (request) => {
       const query = asOfSchema.parse(request.query);
       const result = await pool.query(`SELECT * FROM fn_trial_balance($1, $2)`, [request.companyId, query.asOfDate]);
@@ -35,7 +36,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
 
   app.get(
     "/reports/income-statement",
-    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.view")] },
+    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.income_statement.view")] },
     async (request) => {
       const query = rangeSchema.parse(request.query);
       const result = await pool.query(`SELECT * FROM fn_income_statement($1, $2, $3)`, [
@@ -49,7 +50,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
 
   app.get(
     "/reports/balance-sheet",
-    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.view")] },
+    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.balance_sheet.view")] },
     async (request) => {
       const query = asOfSchema.parse(request.query);
       const result = await pool.query(`SELECT * FROM fn_balance_sheet($1, $2)`, [request.companyId, query.asOfDate]);
@@ -65,7 +66,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
   // period elsewhere in this app.
   app.get(
     "/reports/customer-statement",
-    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.view")] },
+    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.customer_statement.view")] },
     async (request) => {
       const query = customerStatementSchema.parse(request.query);
       const result = await pool.query<{
@@ -105,7 +106,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
   // fn_* function.
   app.get(
     "/reports/stock-valuation",
-    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.view")] },
+    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.stock_valuation.view")] },
     async (request) => {
       const query = stockValuationSchema.parse(request.query);
       const result = await pool.query(
@@ -126,13 +127,24 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
         [request.companyId, query.storeId ?? null, query.groupId ?? null],
       );
       const totalValue = result.rows.reduce((sum, r) => sum + Number(r.total_value), 0);
-      return { totalValue: totalValue.toFixed(2), rows: result.rows };
+      const canViewCost = await userHasPermission(
+        request.authUser.id,
+        request.companyId,
+        "accounting.reports.stock_valuation.view_cost",
+      );
+      // total_value is cost-derived (qty_on_hand * avg_unit_cost) and would
+      // let a masked viewer back out the unit cost by division, so it's
+      // stripped alongside avg_unit_cost, not just avg_unit_cost alone.
+      const rows = result.rows.map(({ avg_unit_cost, total_value, ...row }) =>
+        canViewCost ? { ...row, avg_unit_cost, total_value } : row,
+      );
+      return { totalValue: canViewCost ? totalValue.toFixed(2) : null, rows };
     },
   );
 
   app.get(
     "/reports/budget-vs-actual",
-    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.view")] },
+    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.budget_vs_actual.view")] },
     async (request) => {
       const query = budgetVsActualSchema.parse(request.query);
       const result = await pool.query(`SELECT * FROM fn_budget_vs_actual($1, $2, $3, $4)`, [
@@ -147,7 +159,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
 
   app.get(
     "/reports/vat-summary",
-    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.view")] },
+    { preHandler: [app.authenticate, app.requirePermission("accounting.reports.vat_summary.view")] },
     async (request) => {
       const query = rangeSchema.parse(request.query);
       const result = await pool.query<{ direction: "output" | "input"; vat_rate: string; net_amount: string; vat_amount: string }>(

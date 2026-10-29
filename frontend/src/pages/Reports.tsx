@@ -315,12 +315,12 @@ interface StockValuationRow {
   item_name_en: string;
   group_name_en: string | null;
   qty_on_hand: string;
-  avg_unit_cost: string;
-  total_value: string;
+  avg_unit_cost?: string;
+  total_value?: string;
 }
 
 interface StockValuationResponse {
-  totalValue: string;
+  totalValue: string | null;
   rows: StockValuationRow[];
 }
 
@@ -464,7 +464,8 @@ function CashShiftsTab() {
 }
 
 function StockValuationTab() {
-  const { token, companyId } = useAuth();
+  const { token, companyId, hasPermission } = useAuth();
+  const canViewCost = hasPermission("accounting.reports.stock_valuation.view_cost");
   const { data: stores } = useApiList<Store>("/api/stores");
   const { data: groups } = useApiList<ItemGroup>("/api/item-groups");
   const [storeId, setStoreId] = useState("");
@@ -487,8 +488,17 @@ function StockValuationTab() {
     { key: "variant", header: "Variant", render: (r) => [r.color, r.size].filter(Boolean).join(" / ") || "—" },
     { key: "group", header: "Group", render: (r) => r.group_name_en ?? "—" },
     { key: "qty", header: "Qty on Hand", render: (r) => Number(r.qty_on_hand).toLocaleString(), numeric: true },
-    { key: "cost", header: "Avg Cost", render: (r) => Number(r.avg_unit_cost).toFixed(2), numeric: true },
-    { key: "value", header: "Total Value", render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{Number(r.total_value).toFixed(2)}</span>, numeric: true },
+    ...(canViewCost
+      ? [
+          { key: "cost", header: "Avg Cost", render: (r: StockValuationRow) => Number(r.avg_unit_cost).toFixed(2), numeric: true },
+          {
+            key: "value",
+            header: "Total Value",
+            render: (r: StockValuationRow) => <span className="font-medium text-slate-900 dark:text-slate-100">{Number(r.total_value).toFixed(2)}</span>,
+            numeric: true,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -525,7 +535,7 @@ function StockValuationTab() {
               emptyIcon={Boxes}
               emptyText="No stock on hand matches these filters."
             />
-            {data.rows.length > 0 && (
+            {data.rows.length > 0 && canViewCost && data.totalValue !== null && (
               <div className="flex justify-end border-t border-slate-100 dark:border-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
                 <span>Total Inventory Value: {Number(data.totalValue).toFixed(2)}</span>
               </div>
@@ -754,14 +764,14 @@ export default function Reports() {
         initialActive={(location.state as { fromTab?: string } | null)?.fromTab}
         hideHeader
         tabs={[
-          { key: "tb", label: "Trial Balance", content: <TrialBalanceTab /> },
-          { key: "is", label: "Income Statement", content: <IncomeStatementTab /> },
-          { key: "bs", label: "Balance Sheet", content: <BalanceSheetTab /> },
-          { key: "cs", label: "Customer Statement", content: <CustomerStatementTab /> },
-          { key: "sv", label: "Stock Valuation", content: <StockValuationTab /> },
-          { key: "cs2", label: "Cash Shifts", content: <CashShiftsTab /> },
-          { key: "bva", label: "Budget vs Actual", content: <BudgetVsActualTab /> },
-          { key: "vat", label: "VAT Summary", content: <VatSummaryTab /> },
+          { key: "tb", label: "Trial Balance", content: <TrialBalanceTab />, permission: "accounting.reports.trial_balance.view" },
+          { key: "is", label: "Income Statement", content: <IncomeStatementTab />, permission: "accounting.reports.income_statement.view" },
+          { key: "bs", label: "Balance Sheet", content: <BalanceSheetTab />, permission: "accounting.reports.balance_sheet.view" },
+          { key: "cs", label: "Customer Statement", content: <CustomerStatementTab />, permission: "accounting.reports.customer_statement.view" },
+          { key: "sv", label: "Stock Valuation", content: <StockValuationTab />, permission: "accounting.reports.stock_valuation.view" },
+          { key: "cs2", label: "Cash Shifts", content: <CashShiftsTab />, permission: "sales.cash_shift.view" },
+          { key: "bva", label: "Budget vs Actual", content: <BudgetVsActualTab />, permission: "accounting.reports.budget_vs_actual.view" },
+          { key: "vat", label: "VAT Summary", content: <VatSummaryTab />, permission: "accounting.reports.vat_summary.view" },
         ]}
       />
     </div>
