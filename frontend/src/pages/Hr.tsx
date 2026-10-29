@@ -20,7 +20,7 @@ interface Employee {
   full_name_en: string;
   full_name_ar: string;
   hire_date: string;
-  basic_salary: string;
+  basic_salary?: string;
   status: string;
 }
 
@@ -51,12 +51,12 @@ interface PayrollRunLine {
   employee_code: string;
   full_name_en: string;
   full_name_ar: string;
-  basic_salary: string;
-  housing_allowance: string;
-  other_allowances: string;
-  gross_pay: string;
-  gosi_employee_amount: string;
-  net_pay: string;
+  basic_salary?: string;
+  housing_allowance?: string;
+  other_allowances?: string;
+  gross_pay?: string;
+  gosi_employee_amount?: string;
+  net_pay?: string;
 }
 
 interface PayrollRunDetail extends PayrollRun {
@@ -205,6 +205,8 @@ function NewPayrollRunForm({ onClose, onCreated }: { onClose: () => void; onCrea
 
 function EmployeesTab() {
   const { i18n } = useTranslation();
+  const { hasPermission } = useAuth();
+  const canViewSalary = hasPermission("hr.employee.view_salary");
   const { data, error, reload } = useApiList<Employee>("/api/employees");
   const [showNew, setShowNew] = useState(false);
 
@@ -216,7 +218,9 @@ function EmployeesTab() {
       render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{i18n.language.startsWith("ar") ? r.full_name_ar : r.full_name_en}</span>,
     },
     { key: "hired", header: "Hired", render: (r) => new Date(r.hire_date).toLocaleDateString() },
-    { key: "salary", header: "Basic Salary", render: (r) => Number(r.basic_salary).toFixed(2), numeric: true },
+    ...(canViewSalary
+      ? [{ key: "salary", header: "Basic Salary", render: (r: Employee) => Number(r.basic_salary).toFixed(2), numeric: true }]
+      : []),
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.status} /> },
   ];
 
@@ -245,41 +249,48 @@ function EmployeesTab() {
 }
 
 function PayslipRow({ line, run, company }: { line: PayrollRunLine; run: PayrollRunDetail; company: CompanyInfo | null }) {
+  // Masked for viewers without hr.payroll.view_salary: the API omits every
+  // pay figure from the line entirely in that case, so there's nothing to
+  // show or print -- not a dash/zero, since that would misleadingly imply
+  // a real value of zero.
+  const hasSalaryData = line.net_pay !== undefined;
   return (
     <div className="flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 py-2 text-sm first:border-t-0">
       <div className="min-w-0">
         <div className="truncate font-medium text-slate-900 dark:text-slate-100">{line.full_name_en}</div>
         <div className="text-xs text-slate-400 dark:text-slate-500">{line.employee_code}</div>
       </div>
-      <div className="flex items-center gap-3">
-        <span className="tabular-nums text-slate-600 dark:text-slate-300">{Number(line.net_pay).toFixed(2)}</span>
-        <button
-          onClick={() => window.print()}
-          disabled={!company}
-          title={company ? "Print payslip" : "Loading company details..."}
-          className="rounded p-1.5 text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-brand-600 disabled:opacity-40"
-        >
-          <Printer size={14} />
-        </button>
-        {company && (
-          <PayslipPrintArea
-            companyNameEn={company.name_en}
-            companyNameAr={company.name_ar}
-            documentNumber={`${run.document_number} / ${line.employee_code}`}
-            payPeriodStart={new Date(run.pay_period_start).toLocaleDateString()}
-            payPeriodEnd={new Date(run.pay_period_end).toLocaleDateString()}
-            employeeCode={line.employee_code}
-            employeeNameEn={line.full_name_en}
-            employeeNameAr={line.full_name_ar}
-            basicSalary={Number(line.basic_salary)}
-            housingAllowance={Number(line.housing_allowance)}
-            otherAllowances={Number(line.other_allowances)}
-            grossPay={Number(line.gross_pay)}
-            gosiEmployeeAmount={Number(line.gosi_employee_amount)}
-            netPay={Number(line.net_pay)}
-          />
-        )}
-      </div>
+      {hasSalaryData && (
+        <div className="flex items-center gap-3">
+          <span className="tabular-nums text-slate-600 dark:text-slate-300">{Number(line.net_pay).toFixed(2)}</span>
+          <button
+            onClick={() => window.print()}
+            disabled={!company}
+            title={company ? "Print payslip" : "Loading company details..."}
+            className="rounded p-1.5 text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-brand-600 disabled:opacity-40"
+          >
+            <Printer size={14} />
+          </button>
+          {company && (
+            <PayslipPrintArea
+              companyNameEn={company.name_en}
+              companyNameAr={company.name_ar}
+              documentNumber={`${run.document_number} / ${line.employee_code}`}
+              payPeriodStart={new Date(run.pay_period_start).toLocaleDateString()}
+              payPeriodEnd={new Date(run.pay_period_end).toLocaleDateString()}
+              employeeCode={line.employee_code}
+              employeeNameEn={line.full_name_en}
+              employeeNameAr={line.full_name_ar}
+              basicSalary={Number(line.basic_salary)}
+              housingAllowance={Number(line.housing_allowance)}
+              otherAllowances={Number(line.other_allowances)}
+              grossPay={Number(line.gross_pay)}
+              gosiEmployeeAmount={Number(line.gosi_employee_amount)}
+              netPay={Number(line.net_pay)}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -391,8 +402,8 @@ export default function Hr() {
         initialActive={(location.state as { fromTab?: string } | null)?.fromTab}
         hideHeader
         tabs={[
-          { key: "employees", label: "Employees", content: <EmployeesTab /> },
-          { key: "payroll", label: "Payroll Runs", content: <PayrollRunsTab /> },
+          { key: "employees", label: "Employees", content: <EmployeesTab />, permission: "hr.employee.view" },
+          { key: "payroll", label: "Payroll Runs", content: <PayrollRunsTab />, permission: "hr.payroll.view" },
         ]}
       />
     </div>

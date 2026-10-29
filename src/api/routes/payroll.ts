@@ -5,6 +5,24 @@ import { createPayrollRun, postPayrollRun } from "../../hr/payrollService.js";
 import { NotFoundError } from "../errors.js";
 import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
 import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
+import { userHasPermission } from "../permissions.js";
+
+const PAYROLL_LINE_SALARY_FIELDS = [
+  "basic_salary",
+  "housing_allowance",
+  "other_allowances",
+  "gross_pay",
+  "gosi_employee_amount",
+  "gosi_employer_amount",
+  "net_pay",
+  "national_id",
+] as const;
+
+function maskPayrollLineSalaryFields<T extends Record<string, unknown>>(line: T): Omit<T, (typeof PAYROLL_LINE_SALARY_FIELDS)[number]> {
+  const masked = { ...line };
+  for (const field of PAYROLL_LINE_SALARY_FIELDS) delete masked[field];
+  return masked;
+}
 
 const createSchema = z.object({
   payPeriodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -13,14 +31,18 @@ const createSchema = z.object({
 });
 
 export async function payrollRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/payroll-runs", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(
-      `SELECT id, document_number, pay_period_start, pay_period_end, run_date, document_status
+  app.get(
+    "/payroll-runs",
+    { preHandler: [app.authenticate, app.requirePermission("hr.payroll.view")] },
+    async (request) => {
+      const result = await pool.query(
+        `SELECT id, document_number, pay_period_start, pay_period_end, run_date, document_status
        FROM payroll_runs WHERE company_id = $1 ORDER BY run_date DESC`,
-      [request.companyId],
-    );
-    return result.rows;
-  });
+        [request.companyId],
+      );
+      return result.rows;
+    },
+  );
 
   app.post(
     "/payroll-runs",
@@ -44,25 +66,31 @@ export async function payrollRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get<{ Params: { id: string } }>("/payroll-runs/:id", { preHandler: app.authenticate }, async (request) => {
-    const header = await pool.query(`SELECT * FROM payroll_runs WHERE id = $1 AND company_id = $2`, [
-      request.params.id,
-      request.companyId,
-    ]);
-    if (header.rows.length === 0) throw new NotFoundError("payroll run not found");
-    // Joined with the employee for display/payslip purposes -- the raw
-    // line itself only carries employee_id, everything else here is what a
-    // payslip or a review screen needs to actually show who this is.
-    const lines = await pool.query(
-      `SELECT prl.*, e.employee_code, e.full_name_en, e.full_name_ar, e.national_id
+  app.get<{ Params: { id: string } }>(
+    "/payroll-runs/:id",
+    { preHandler: [app.authenticate, app.requirePermission("hr.payroll.view")] },
+    async (request) => {
+      const header = await pool.query(`SELECT * FROM payroll_runs WHERE id = $1 AND company_id = $2`, [
+        request.params.id,
+        request.companyId,
+      ]);
+      if (header.rows.length === 0) throw new NotFoundError("payroll run not found");
+      // Joined with the employee for display/payslip purposes -- the raw
+      // line itself only carries employee_id, everything else here is what a
+      // payslip or a review screen needs to actually show who this is.
+      const lines = await pool.query(
+        `SELECT prl.*, e.employee_code, e.full_name_en, e.full_name_ar, e.national_id
        FROM payroll_run_lines prl
        JOIN employees e ON e.id = prl.employee_id
        WHERE prl.payroll_run_id = $1
        ORDER BY e.employee_code`,
-      [request.params.id],
-    );
-    return { ...header.rows[0], lines: lines.rows };
-  });
+        [request.params.id],
+      );
+      const canViewSalary = await userHasPermission(request.authUser.id, request.companyId, "hr.payroll.view_salary");
+      const lineRows = canViewSalary ? lines.rows : lines.rows.map(maskPayrollLineSalaryFields);
+      return { ...header.rows[0], lines: lineRows };
+    },
+  );
 
   app.post<{ Params: { id: string } }>(
     "/payroll-runs/:id/post",

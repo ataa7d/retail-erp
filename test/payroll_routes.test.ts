@@ -78,6 +78,13 @@ beforeAll(async () => {
   userId = user.rows[0].id;
   await client.query(`INSERT INTO user_company_access (user_id, company_id) VALUES ($1, $2)`, [userId, companyId]);
 
+  const role = await client.query(`INSERT INTO roles (company_id, name) VALUES ($1, 'Payroll Route Test Role') RETURNING id`, [companyId]);
+  await client.query(
+    `INSERT INTO role_permissions (role_id, permission_id) SELECT $1, id FROM permissions WHERE code IN ('hr.payroll.view', 'hr.payroll.view_salary')`,
+    [role.rows[0].id],
+  );
+  await client.query(`INSERT INTO user_roles (user_id, company_id, role_id) VALUES ($1, $2, $3)`, [userId, companyId, role.rows[0].id]);
+
   await createEmployee(client, {
     companyId,
     departmentId: null,
@@ -120,6 +127,9 @@ afterAll(async () => {
   await client.query(`DELETE FROM journal_lines WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM journals WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM employees WHERE company_id = $1`, [companyId]);
+  await client.query(`DELETE FROM user_roles WHERE company_id = $1`, [companyId]);
+  await client.query(`DELETE FROM role_permissions WHERE role_id IN (SELECT id FROM roles WHERE company_id = $1)`, [companyId]);
+  await client.query(`DELETE FROM roles WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM user_company_access WHERE company_id = $1`, [companyId]);
   await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
   await client.query(`DELETE FROM chart_of_accounts WHERE company_id = $1`, [companyId]);

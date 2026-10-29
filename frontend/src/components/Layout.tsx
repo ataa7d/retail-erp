@@ -188,12 +188,12 @@ export const navItems = [
   {
     to: "/hr",
     label: "nav.hr",
-    permission: "hr.employee.manage",
+    permission: ["hr.employee.manage", "hr.employee.view", "hr.payroll.view"],
     icon: UserCog,
     color: "pink",
     subItems: [
-      { key: "employees", label: "Employees" },
-      { key: "payroll", label: "Payroll Runs" },
+      { key: "employees", label: "Employees", permission: "hr.employee.view" },
+      { key: "payroll", label: "Payroll Runs", permission: "hr.payroll.view" },
     ],
   },
   {

@@ -3,6 +3,15 @@ import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
 import { createDepartment, createPosition, createEmployee, terminateEmployee } from "../../hr/hrService.js";
 import { NotFoundError } from "../errors.js";
+import { userHasPermission } from "../permissions.js";
+
+const SALARY_FIELDS = ["basic_salary", "housing_allowance", "other_allowances", "gosi_employee_rate", "gosi_employer_rate", "national_id"] as const;
+
+function maskSalaryFields<T extends Record<string, unknown>>(row: T): Omit<T, (typeof SALARY_FIELDS)[number]> {
+  const masked = { ...row };
+  for (const field of SALARY_FIELDS) delete masked[field];
+  return masked;
+}
 
 const departmentSchema = z.object({ code: z.string().min(1), nameEn: z.string().min(1), nameAr: z.string().min(1) });
 const positionSchema = z.object({ code: z.string().min(1), nameEn: z.string().min(1), nameAr: z.string().min(1) });
@@ -41,10 +50,14 @@ export async function hrRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/departments", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(`SELECT * FROM departments WHERE company_id = $1 ORDER BY code`, [request.companyId]);
-    return result.rows;
-  });
+  app.get(
+    "/departments",
+    { preHandler: [app.authenticate, app.requirePermission("hr.employee.view")] },
+    async (request) => {
+      const result = await pool.query(`SELECT * FROM departments WHERE company_id = $1 ORDER BY code`, [request.companyId]);
+      return result.rows;
+    },
+  );
 
   app.post(
     "/positions",
@@ -60,10 +73,14 @@ export async function hrRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/positions", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(`SELECT * FROM positions WHERE company_id = $1 ORDER BY code`, [request.companyId]);
-    return result.rows;
-  });
+  app.get(
+    "/positions",
+    { preHandler: [app.authenticate, app.requirePermission("hr.employee.view")] },
+    async (request) => {
+      const result = await pool.query(`SELECT * FROM positions WHERE company_id = $1 ORDER BY code`, [request.companyId]);
+      return result.rows;
+    },
+  );
 
   app.post(
     "/employees",
@@ -97,19 +114,29 @@ export async function hrRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/employees", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(`SELECT * FROM employees WHERE company_id = $1 ORDER BY employee_code`, [request.companyId]);
-    return result.rows;
-  });
+  app.get(
+    "/employees",
+    { preHandler: [app.authenticate, app.requirePermission("hr.employee.view")] },
+    async (request) => {
+      const result = await pool.query(`SELECT * FROM employees WHERE company_id = $1 ORDER BY employee_code`, [request.companyId]);
+      const canViewSalary = await userHasPermission(request.authUser.id, request.companyId, "hr.employee.view_salary");
+      return canViewSalary ? result.rows : result.rows.map(maskSalaryFields);
+    },
+  );
 
-  app.get<{ Params: { id: string } }>("/employees/:id", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(`SELECT * FROM employees WHERE id = $1 AND company_id = $2`, [
-      request.params.id,
-      request.companyId,
-    ]);
-    if (result.rows.length === 0) throw new NotFoundError("employee not found");
-    return result.rows[0];
-  });
+  app.get<{ Params: { id: string } }>(
+    "/employees/:id",
+    { preHandler: [app.authenticate, app.requirePermission("hr.employee.view")] },
+    async (request) => {
+      const result = await pool.query(`SELECT * FROM employees WHERE id = $1 AND company_id = $2`, [
+        request.params.id,
+        request.companyId,
+      ]);
+      if (result.rows.length === 0) throw new NotFoundError("employee not found");
+      const canViewSalary = await userHasPermission(request.authUser.id, request.companyId, "hr.employee.view_salary");
+      return canViewSalary ? result.rows[0] : maskSalaryFields(result.rows[0]!);
+    },
+  );
 
   app.post<{ Params: { id: string } }>(
     "/employees/:id/terminate",

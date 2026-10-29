@@ -192,7 +192,7 @@ export default function Dashboard() {
     apiRequest<DashboardSummary>("/api/dashboard/summary", { token, companyId }).then(setSummary);
     apiRequest<unknown[]>("/api/items", { token, companyId }).then((r) => setItemCount(r.length));
     apiRequest<unknown[]>("/api/customers", { token, companyId }).then((r) => setCustomerCount(r.length));
-    if (hasPermission("hr.employee.manage")) {
+    if (hasPermission("hr.employee.view")) {
       apiRequest<unknown[]>("/api/employees", { token, companyId }).then((r) => setEmployeeCount(r.length));
     }
     if (hasPermission("assets.fixed_asset.manage")) {
@@ -284,7 +284,7 @@ export default function Dashboard() {
           accent="indigo"
           loading={customerCount === null}
         />
-        {hasPermission("hr.employee.manage") && (
+        {hasPermission("hr.employee.view") && (
           <KpiTile to="/hr" label={t("nav.hr")} value={employeeCount ?? "—"} icon={UserCog} accent="pink" loading={employeeCount === null} />
         )}
         {hasPermission("assets.fixed_asset.manage") && (
