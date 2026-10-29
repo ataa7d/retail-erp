@@ -19,8 +19,8 @@ interface FixedAsset {
   name_en: string;
   name_ar: string;
   acquisition_date: string;
-  acquisition_cost: string;
-  accumulated_depreciation: string;
+  acquisition_cost?: string;
+  accumulated_depreciation?: string;
   status: string;
 }
 
@@ -149,8 +149,13 @@ function DisposeAssetForm({ asset, onClose, onDisposed }: { asset: FixedAsset; o
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const bookValue = Number(asset.acquisition_cost) - Number(asset.accumulated_depreciation);
-  const gainLoss = proceeds - bookValue;
+  // acquisition_cost/accumulated_depreciation are entirely absent from the
+  // API response for a viewer without assets.fixed_asset.view_cost -- the
+  // actual disposal gain/loss is still computed correctly server-side from
+  // the real values, this preview is just unavailable to show here.
+  const hasCostData = asset.acquisition_cost !== undefined && asset.accumulated_depreciation !== undefined;
+  const bookValue = hasCostData ? Number(asset.acquisition_cost) - Number(asset.accumulated_depreciation) : null;
+  const gainLoss = bookValue !== null ? proceeds - bookValue : null;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -175,8 +180,14 @@ function DisposeAssetForm({ asset, onClose, onDisposed }: { asset: FixedAsset; o
   return (
     <form onSubmit={handleSubmit}>
       <div className="mb-3 rounded-md bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-600 dark:text-slate-300">
-        Book value: {bookValue.toFixed(2)} (cost {Number(asset.acquisition_cost).toFixed(2)} − accum. depreciation{" "}
-        {Number(asset.accumulated_depreciation).toFixed(2)})
+        {hasCostData ? (
+          <>
+            Book value: {bookValue!.toFixed(2)} (cost {Number(asset.acquisition_cost).toFixed(2)} − accum. depreciation{" "}
+            {Number(asset.accumulated_depreciation).toFixed(2)})
+          </>
+        ) : (
+          "Book value not visible with your current permissions."
+        )}
       </div>
       <Field label="Disposal Date" required>
         <TextInput type="date" required value={disposalDate} onChange={(e) => setDisposalDate(e.target.value)} />
@@ -184,11 +195,13 @@ function DisposeAssetForm({ asset, onClose, onDisposed }: { asset: FixedAsset; o
       <Field label="Proceeds" required>
         <TextInput type="number" min={0} step="0.01" required value={proceeds} onChange={(e) => setProceeds(Number(e.target.value))} />
       </Field>
-      <p className={`mb-3 text-xs ${gainLoss === 0 ? "text-slate-400 dark:text-slate-500" : gainLoss > 0 ? "text-emerald-600" : "text-red-600"}`}>
-        {gainLoss === 0
-          ? "Proceeds exactly match book value — no gain or loss."
-          : `${gainLoss > 0 ? "Gain" : "Loss"} on disposal: ${Math.abs(gainLoss).toFixed(2)}`}
-      </p>
+      {gainLoss !== null && (
+        <p className={`mb-3 text-xs ${gainLoss === 0 ? "text-slate-400 dark:text-slate-500" : gainLoss > 0 ? "text-emerald-600" : "text-red-600"}`}>
+          {gainLoss === 0
+            ? "Proceeds exactly match book value — no gain or loss."
+            : `${gainLoss > 0 ? "Gain" : "Loss"} on disposal: ${Math.abs(gainLoss).toFixed(2)}`}
+        </p>
+      )}
       <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">Removes accumulated depreciation, books proceeds, and posts the resulting gain/loss. Cannot be undone.</p>
       <FormActions error={error} submitting={submitting} submitLabel="Dispose Asset" />
     </form>
@@ -198,7 +211,8 @@ function DisposeAssetForm({ asset, onClose, onDisposed }: { asset: FixedAsset; o
 function AssetDetailModal({ asset, onClose, onDisposed }: { asset: FixedAsset; onClose: () => void; onDisposed: () => void }) {
   const { i18n } = useTranslation();
   const [showDispose, setShowDispose] = useState(false);
-  const bookValue = Number(asset.acquisition_cost) - Number(asset.accumulated_depreciation);
+  const hasCostData = asset.acquisition_cost !== undefined && asset.accumulated_depreciation !== undefined;
+  const bookValue = hasCostData ? Number(asset.acquisition_cost) - Number(asset.accumulated_depreciation) : null;
 
   return (
     <Modal title={i18n.language.startsWith("ar") ? asset.name_ar : asset.name_en} onClose={onClose}>
@@ -206,6 +220,7 @@ function AssetDetailModal({ asset, onClose, onDisposed }: { asset: FixedAsset; o
         <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{asset.asset_code}</span>
         <StatusBadge status={asset.status} />
       </div>
+      {hasCostData && (
       <div className="space-y-1 text-sm">
         <div className="flex justify-between text-slate-500 dark:text-slate-400">
           <span>Acquisition Cost</span>
@@ -217,9 +232,10 @@ function AssetDetailModal({ asset, onClose, onDisposed }: { asset: FixedAsset; o
         </div>
         <div className="flex justify-between text-base font-semibold text-slate-900 dark:text-slate-100">
           <span>Book Value</span>
-          <span className="tabular-nums">{bookValue.toFixed(2)}</span>
+          <span className="tabular-nums">{bookValue!.toFixed(2)}</span>
         </div>
       </div>
+      )}
       {asset.status === "active" && !showDispose && (
         <button
           onClick={() => setShowDispose(true)}
@@ -247,6 +263,8 @@ function AssetDetailModal({ asset, onClose, onDisposed }: { asset: FixedAsset; o
 
 function AssetsTab() {
   const { i18n } = useTranslation();
+  const { hasPermission } = useAuth();
+  const canViewCost = hasPermission("assets.fixed_asset.view_cost");
   const { data, error, reload } = useApiList<FixedAsset>("/api/fixed-assets");
   const [showNew, setShowNew] = useState(false);
   const [selected, setSelected] = useState<FixedAsset | null>(null);
@@ -258,9 +276,18 @@ function AssetsTab() {
       header: "Name",
       render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{i18n.language.startsWith("ar") ? r.name_ar : r.name_en}</span>,
     },
-    { key: "cost", header: "Cost", render: (r) => Number(r.acquisition_cost).toFixed(2), numeric: true },
-    { key: "depr", header: "Accum. Depreciation", render: (r) => Number(r.accumulated_depreciation).toFixed(2), numeric: true },
-    { key: "book", header: "Book Value", render: (r) => (Number(r.acquisition_cost) - Number(r.accumulated_depreciation)).toFixed(2), numeric: true },
+    ...(canViewCost
+      ? [
+          { key: "cost", header: "Cost", render: (r: FixedAsset) => Number(r.acquisition_cost).toFixed(2), numeric: true },
+          { key: "depr", header: "Accum. Depreciation", render: (r: FixedAsset) => Number(r.accumulated_depreciation).toFixed(2), numeric: true },
+          {
+            key: "book",
+            header: "Book Value",
+            render: (r: FixedAsset) => (Number(r.acquisition_cost) - Number(r.accumulated_depreciation)).toFixed(2),
+            numeric: true,
+          },
+        ]
+      : []),
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.status} /> },
   ];
 
@@ -351,8 +378,8 @@ export default function Assets() {
         initialActive={(location.state as { fromTab?: string } | null)?.fromTab}
         hideHeader
         tabs={[
-          { key: "assets", label: "Assets", content: <AssetsTab /> },
-          { key: "depreciation", label: "Depreciation Runs", content: <DepreciationRunsTab /> },
+          { key: "assets", label: "Assets", content: <AssetsTab />, permission: "assets.fixed_asset.view" },
+          { key: "depreciation", label: "Depreciation Runs", content: <DepreciationRunsTab />, permission: "assets.depreciation.view" },
         ]}
       />
     </div>

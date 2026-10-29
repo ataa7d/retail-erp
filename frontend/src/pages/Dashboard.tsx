@@ -195,7 +195,7 @@ export default function Dashboard() {
     if (hasPermission("hr.employee.view")) {
       apiRequest<unknown[]>("/api/employees", { token, companyId }).then((r) => setEmployeeCount(r.length));
     }
-    if (hasPermission("assets.fixed_asset.manage")) {
+    if (hasPermission("assets.fixed_asset.view")) {
       apiRequest<unknown[]>("/api/fixed-assets", { token, companyId }).then((r) => setAssetCount(r.length));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -287,7 +287,7 @@ export default function Dashboard() {
         {hasPermission("hr.employee.view") && (
           <KpiTile to="/hr" label={t("nav.hr")} value={employeeCount ?? "—"} icon={UserCog} accent="pink" loading={employeeCount === null} />
         )}
-        {hasPermission("assets.fixed_asset.manage") && (
+        {hasPermission("assets.fixed_asset.view") && (
           <KpiTile to="/assets" label={t("nav.assets")} value={assetCount ?? "—"} icon={Building2} accent="cyan" loading={assetCount === null} />
         )}
       </div>

@@ -199,12 +199,12 @@ export const navItems = [
   {
     to: "/assets",
     label: "nav.assets",
-    permission: "assets.fixed_asset.manage",
+    permission: ["assets.fixed_asset.manage", "assets.fixed_asset.view", "assets.depreciation.view"],
     icon: Building2,
     color: "cyan",
     subItems: [
-      { key: "assets", label: "Assets" },
-      { key: "depreciation", label: "Depreciation Runs" },
+      { key: "assets", label: "Assets", permission: "assets.fixed_asset.view" },
+      { key: "depreciation", label: "Depreciation Runs", permission: "assets.depreciation.view" },
     ],
   },
   {

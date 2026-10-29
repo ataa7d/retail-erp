@@ -5,6 +5,15 @@ import { acquireFixedAsset, createDepreciationRun, postDepreciationRun, disposeF
 import { NotFoundError } from "../errors.js";
 import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
 import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
+import { userHasPermission } from "../permissions.js";
+
+const FIXED_ASSET_COST_FIELDS = ["acquisition_cost", "salvage_value", "accumulated_depreciation", "disposal_proceeds"] as const;
+
+function maskFixedAssetCostFields<T extends Record<string, unknown>>(row: T): Omit<T, (typeof FIXED_ASSET_COST_FIELDS)[number]> {
+  const masked = { ...row };
+  for (const field of FIXED_ASSET_COST_FIELDS) delete masked[field];
+  return masked;
+}
 
 const categorySchema = z.object({
   code: z.string().min(1),
@@ -65,10 +74,14 @@ export async function fixedAssetRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/asset-categories", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(`SELECT * FROM asset_categories WHERE company_id = $1 ORDER BY code`, [request.companyId]);
-    return result.rows;
-  });
+  app.get(
+    "/asset-categories",
+    { preHandler: [app.authenticate, app.requirePermission("assets.fixed_asset.view")] },
+    async (request) => {
+      const result = await pool.query(`SELECT * FROM asset_categories WHERE company_id = $1 ORDER BY code`, [request.companyId]);
+      return result.rows;
+    },
+  );
 
   app.post(
     "/fixed-assets",
@@ -96,22 +109,32 @@ export async function fixedAssetRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/fixed-assets", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(
-      `SELECT * FROM fixed_assets WHERE company_id = $1 ORDER BY asset_code`,
-      [request.companyId],
-    );
-    return result.rows;
-  });
+  app.get(
+    "/fixed-assets",
+    { preHandler: [app.authenticate, app.requirePermission("assets.fixed_asset.view")] },
+    async (request) => {
+      const result = await pool.query(
+        `SELECT * FROM fixed_assets WHERE company_id = $1 ORDER BY asset_code`,
+        [request.companyId],
+      );
+      const canViewCost = await userHasPermission(request.authUser.id, request.companyId, "assets.fixed_asset.view_cost");
+      return canViewCost ? result.rows : result.rows.map(maskFixedAssetCostFields);
+    },
+  );
 
-  app.get<{ Params: { id: string } }>("/fixed-assets/:id", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(`SELECT * FROM fixed_assets WHERE id = $1 AND company_id = $2`, [
-      request.params.id,
-      request.companyId,
-    ]);
-    if (result.rows.length === 0) throw new NotFoundError("fixed asset not found");
-    return result.rows[0];
-  });
+  app.get<{ Params: { id: string } }>(
+    "/fixed-assets/:id",
+    { preHandler: [app.authenticate, app.requirePermission("assets.fixed_asset.view")] },
+    async (request) => {
+      const result = await pool.query(`SELECT * FROM fixed_assets WHERE id = $1 AND company_id = $2`, [
+        request.params.id,
+        request.companyId,
+      ]);
+      if (result.rows.length === 0) throw new NotFoundError("fixed asset not found");
+      const canViewCost = await userHasPermission(request.authUser.id, request.companyId, "assets.fixed_asset.view_cost");
+      return canViewCost ? result.rows[0] : maskFixedAssetCostFields(result.rows[0]!);
+    },
+  );
 
   app.post<{ Params: { id: string } }>(
     "/fixed-assets/:id/dispose",
@@ -154,23 +177,33 @@ export async function fixedAssetRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/depreciation-runs", { preHandler: app.authenticate }, async (request) => {
-    const result = await pool.query(
-      `SELECT id, document_number, run_date, document_status FROM depreciation_runs WHERE company_id = $1 ORDER BY run_date DESC`,
-      [request.companyId],
-    );
-    return result.rows;
-  });
+  app.get(
+    "/depreciation-runs",
+    { preHandler: [app.authenticate, app.requirePermission("assets.depreciation.view")] },
+    async (request) => {
+      const result = await pool.query(
+        `SELECT id, document_number, run_date, document_status FROM depreciation_runs WHERE company_id = $1 ORDER BY run_date DESC`,
+        [request.companyId],
+      );
+      return result.rows;
+    },
+  );
 
-  app.get<{ Params: { id: string } }>("/depreciation-runs/:id", { preHandler: app.authenticate }, async (request) => {
-    const header = await pool.query(`SELECT * FROM depreciation_runs WHERE id = $1 AND company_id = $2`, [
-      request.params.id,
-      request.companyId,
-    ]);
-    if (header.rows.length === 0) throw new NotFoundError("depreciation run not found");
-    const lines = await pool.query(`SELECT * FROM depreciation_run_lines WHERE depreciation_run_id = $1`, [request.params.id]);
-    return { ...header.rows[0], lines: lines.rows };
-  });
+  app.get<{ Params: { id: string } }>(
+    "/depreciation-runs/:id",
+    { preHandler: [app.authenticate, app.requirePermission("assets.depreciation.view")] },
+    async (request) => {
+      const header = await pool.query(`SELECT * FROM depreciation_runs WHERE id = $1 AND company_id = $2`, [
+        request.params.id,
+        request.companyId,
+      ]);
+      if (header.rows.length === 0) throw new NotFoundError("depreciation run not found");
+      const lines = await pool.query(`SELECT * FROM depreciation_run_lines WHERE depreciation_run_id = $1`, [request.params.id]);
+      const canViewCost = await userHasPermission(request.authUser.id, request.companyId, "assets.depreciation.view_cost");
+      const lineRows = canViewCost ? lines.rows : lines.rows.map(({ depreciation_amount, ...rest }) => rest);
+      return { ...header.rows[0], lines: lineRows };
+    },
+  );
 
   app.post<{ Params: { id: string } }>(
     "/depreciation-runs/:id/post",

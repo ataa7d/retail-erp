@@ -338,7 +338,14 @@ export default function App() {
               </RequirePermission>
             }
           />
-          <Route path="assets" element={<Assets />} />
+          <Route
+            path="assets"
+            element={
+              <RequirePermission navPath="/assets">
+                <Assets />
+              </RequirePermission>
+            }
+          />
           <Route path="admin" element={<Admin />} />
         </Route>
       </Routes>
