@@ -418,7 +418,7 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/customer-receipts",
-    { preHandler: [app.authenticate, app.requirePermission("accounting.journal.post")] },
+    { preHandler: [app.authenticate, app.requirePermission("accounting.receipt.create")] },
     async (request, reply) => {
       const body = receiptCreateSchema.parse(request.body);
       const id = await withTransaction(async (client) => {
@@ -463,7 +463,7 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/supplier-payments",
-    { preHandler: [app.authenticate, app.requirePermission("accounting.journal.post")] },
+    { preHandler: [app.authenticate, app.requirePermission("accounting.payment.create")] },
     async (request, reply) => {
       const body = paymentCreateSchema.parse(request.body);
       const id = await withTransaction(async (client) => {
@@ -530,7 +530,7 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/bank-statement-lines",
-    { preHandler: [app.authenticate, app.requirePermission("accounting.journal.post")] },
+    { preHandler: [app.authenticate, app.requirePermission("accounting.bank_reconciliation.manage")] },
     async (request, reply) => {
       const body = statementLineCreateSchema.parse(request.body);
       const id = await withTransaction(
@@ -571,7 +571,7 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/bank-statement-lines/:id/match",
-    { preHandler: [app.authenticate, app.requirePermission("accounting.journal.post")] },
+    { preHandler: [app.authenticate, app.requirePermission("accounting.bank_reconciliation.manage")] },
     async (request) => {
       const body = matchSchema.parse(request.body);
       await withTransaction(async (client) => {
@@ -626,7 +626,7 @@ export async function accountingRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/bank-reconciliations",
-    { preHandler: [app.authenticate, app.requirePermission("accounting.journal.post")] },
+    { preHandler: [app.authenticate, app.requirePermission("accounting.bank_reconciliation.manage")] },
     async (request, reply) => {
       const body = reconciliationCreateSchema.parse(request.body);
       const id = await withTransaction(

@@ -127,6 +127,9 @@ export const navItems = [
     label: "nav.accounting",
     permission: [
       "accounting.journal.post",
+      "accounting.receipt.create",
+      "accounting.payment.create",
+      "accounting.bank_reconciliation.manage",
       "accounting.coa.view",
       "sales.customer.view",
       "accounting.tax_code.view",
