@@ -177,7 +177,7 @@ export async function salesQuotationRoutes(app: FastifyInstance): Promise<void> 
     },
   );
 
-  app.get("/sales-quotations", { preHandler: app.authenticate }, async (request) => {
+  app.get("/sales-quotations", { preHandler: [app.authenticate, app.requirePermission("sales.quotation.view")] }, async (request) => {
     const result = await pool.query(
       `SELECT sq.id, sq.document_number, sq.quotation_date, sq.valid_until, sq.document_status,
               sq.gross_amount, sq.rejection_reason,
@@ -194,7 +194,7 @@ export async function salesQuotationRoutes(app: FastifyInstance): Promise<void> 
     return result.rows;
   });
 
-  app.get<{ Params: { id: string } }>("/sales-quotations/:id", { preHandler: app.authenticate }, async (request) => {
+  app.get<{ Params: { id: string } }>("/sales-quotations/:id", { preHandler: [app.authenticate, app.requirePermission("sales.quotation.view")] }, async (request) => {
     const header = await pool.query(
       `SELECT sq.*, c.name_en AS customer_name_en, c.name_ar AS customer_name_ar,
               u.email AS created_by_email, du.email AS decided_by_email

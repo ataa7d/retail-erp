@@ -40,7 +40,7 @@ export async function customerDepositRoutes(app: FastifyInstance): Promise<void>
     },
   );
 
-  app.get<{ Querystring: { customerId?: string } }>("/customer-deposits", { preHandler: app.authenticate }, async (request) => {
+  app.get<{ Querystring: { customerId?: string } }>("/customer-deposits", { preHandler: [app.authenticate, app.requirePermission("sales.deposit.view")] }, async (request) => {
     const query = z.object({ customerId: z.string().uuid().optional() }).parse(request.query);
     const result = await pool.query(
       `SELECT cd.id, cd.document_number, cd.reference, cd.initial_value, cd.balance, cd.status, cd.deposit_date,
@@ -79,7 +79,7 @@ export async function customerDepositRoutes(app: FastifyInstance): Promise<void>
     },
   );
 
-  app.get<{ Params: { id: string } }>("/customer-deposits/:id", { preHandler: app.authenticate }, async (request) => {
+  app.get<{ Params: { id: string } }>("/customer-deposits/:id", { preHandler: [app.authenticate, app.requirePermission("sales.deposit.view")] }, async (request) => {
     const header = await pool.query(
       `SELECT cd.*, s.name_en AS store_name_en, c.name_en AS customer_name_en, c.name_ar AS customer_name_ar
        FROM customer_deposits cd

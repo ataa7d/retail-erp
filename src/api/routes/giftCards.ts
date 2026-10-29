@@ -42,7 +42,7 @@ export async function giftCardRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.get("/gift-cards", { preHandler: app.authenticate }, async (request) => {
+  app.get("/gift-cards", { preHandler: [app.authenticate, app.requirePermission("sales.gift_card.view")] }, async (request) => {
     const result = await pool.query(
       `SELECT gc.id, gc.card_number, gc.initial_value, gc.balance, gc.status, gc.issued_at, gc.expires_at,
               s.name_en AS store_name_en, c.name_en AS customer_name_en, c.name_ar AS customer_name_ar
@@ -71,7 +71,7 @@ export async function giftCardRoutes(app: FastifyInstance): Promise<void> {
     return result.rows[0];
   });
 
-  app.get<{ Params: { id: string } }>("/gift-cards/:id", { preHandler: app.authenticate }, async (request) => {
+  app.get<{ Params: { id: string } }>("/gift-cards/:id", { preHandler: [app.authenticate, app.requirePermission("sales.gift_card.view")] }, async (request) => {
     const header = await pool.query(
       `SELECT gc.*, s.name_en AS store_name_en, c.name_en AS customer_name_en, c.name_ar AS customer_name_ar
        FROM gift_cards gc

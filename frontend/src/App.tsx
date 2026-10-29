@@ -105,13 +105,62 @@ export default function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="items" element={<Navigate to="/inventory" state={{ fromTab: "items" }} replace />} />
-          <Route path="sales" element={<Sales />} />
-          <Route path="sales/invoices/new" element={<NewSalesInvoicePage />} />
-          <Route path="sales/credit-notes/new" element={<NewCreditNotePage />} />
-          <Route path="sales/quotations/new" element={<NewQuotationPage />} />
-          <Route path="sales/invoices/:id" element={<SalesInvoiceDetailPage />} />
-          <Route path="sales/credit-notes/:id" element={<SalesCreditNoteDetailPage />} />
-          <Route path="sales/quotations/:id" element={<QuotationDetailPage />} />
+          <Route
+            path="sales"
+            element={
+              <RequirePermission navPath="/sales">
+                <Sales />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="sales/invoices/new"
+            element={
+              <RequirePermission navPath="/sales">
+                <NewSalesInvoicePage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="sales/credit-notes/new"
+            element={
+              <RequirePermission navPath="/sales">
+                <NewCreditNotePage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="sales/quotations/new"
+            element={
+              <RequirePermission navPath="/sales">
+                <NewQuotationPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="sales/invoices/:id"
+            element={
+              <RequirePermission navPath="/sales">
+                <SalesInvoiceDetailPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="sales/credit-notes/:id"
+            element={
+              <RequirePermission navPath="/sales">
+                <SalesCreditNoteDetailPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="sales/quotations/:id"
+            element={
+              <RequirePermission navPath="/sales">
+                <QuotationDetailPage />
+              </RequirePermission>
+            }
+          />
           <Route path="customers" element={<Navigate to="/accounting" state={{ fromTab: "customers" }} replace />} />
           <Route
             path="inventory"

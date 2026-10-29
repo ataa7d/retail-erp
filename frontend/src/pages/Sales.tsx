@@ -2335,12 +2335,12 @@ export default function Sales() {
   const location = useLocation();
   const tabs = useMemo(
     () => [
-      { key: "quotations", label: "Quotations", content: <QuotationsTab /> },
-      { key: "invoices", label: "Sales Invoices", content: <SalesInvoicesTab /> },
-      { key: "credits", label: "Credit Notes", content: <CreditNotesTab /> },
-      { key: "gift-cards", label: "Gift Cards", content: <GiftCardsTab /> },
-      { key: "deposits", label: "Customer Deposits", content: <CustomerDepositsTab /> },
-      { key: "price-lists", label: "Price Lists", content: <PriceListsTab /> },
+      { key: "quotations", label: "Quotations", content: <QuotationsTab />, permission: "sales.quotation.view" },
+      { key: "invoices", label: "Sales Invoices", content: <SalesInvoicesTab />, permission: "sales.invoice.view" },
+      { key: "credits", label: "Credit Notes", content: <CreditNotesTab />, permission: "sales.credit_note.view" },
+      { key: "gift-cards", label: "Gift Cards", content: <GiftCardsTab />, permission: "sales.gift_card.view" },
+      { key: "deposits", label: "Customer Deposits", content: <CustomerDepositsTab />, permission: "sales.deposit.view" },
+      { key: "price-lists", label: "Price Lists", content: <PriceListsTab />, permission: "sales.price_list.manage" },
     ],
     [],
   );

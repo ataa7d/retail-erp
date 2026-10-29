@@ -52,16 +52,23 @@ export const navItems = [
   {
     to: "/sales",
     label: "nav.sales",
-    permission: "sales.pos_invoice.create",
+    permission: [
+      "sales.pos_invoice.create",
+      "sales.invoice.view",
+      "sales.quotation.view",
+      "sales.credit_note.view",
+      "sales.gift_card.view",
+      "sales.deposit.view",
+    ],
     icon: Receipt,
     color: "violet",
     subItems: [
-      { key: "quotations", label: "Quotations" },
-      { key: "invoices", label: "Sales Invoices" },
-      { key: "credits", label: "Credit Notes" },
-      { key: "gift-cards", label: "Gift Cards" },
-      { key: "deposits", label: "Customer Deposits" },
-      { key: "price-lists", label: "Price Lists" },
+      { key: "quotations", label: "Quotations", permission: "sales.quotation.view" },
+      { key: "invoices", label: "Sales Invoices", permission: "sales.invoice.view" },
+      { key: "credits", label: "Credit Notes", permission: "sales.credit_note.view" },
+      { key: "gift-cards", label: "Gift Cards", permission: "sales.gift_card.view" },
+      { key: "deposits", label: "Customer Deposits", permission: "sales.deposit.view" },
+      { key: "price-lists", label: "Price Lists", permission: "sales.price_list.manage" },
       // Not a tab on Sales's own page -- POS Terminal is a separate,
       // full-screen route with no sidebar at all. `to` overrides the
       // default "navigate to the parent module with this fromTab" behavior

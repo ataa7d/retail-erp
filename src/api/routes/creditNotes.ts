@@ -30,7 +30,7 @@ const createSchema = z.object({
 });
 
 export async function creditNoteRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/credit-notes", { preHandler: app.authenticate }, async (request) => {
+  app.get("/credit-notes", { preHandler: [app.authenticate, app.requirePermission("sales.credit_note.view")] }, async (request) => {
     const result = await pool.query(
       `SELECT cn.id, cn.document_number, cn.credit_note_date, cn.document_status, cn.reason,
               cn.net_amount, cn.vat_amount, cn.gross_amount, cn.original_invoice_id,
@@ -76,7 +76,7 @@ export async function creditNoteRoutes(app: FastifyInstance): Promise<void> {
 
   app.get<{ Params: { id: string } }>(
     "/credit-notes/:id",
-    { preHandler: app.authenticate },
+    { preHandler: [app.authenticate, app.requirePermission("sales.credit_note.view")] },
     async (request) => {
       const header = await pool.query(
         `SELECT cn.*, c.name_en AS company_name_en, c.vat_registration_number AS company_vat_number
@@ -156,7 +156,7 @@ export async function creditNoteRoutes(app: FastifyInstance): Promise<void> {
 
   // ZATCA Phase 2 XML export -- see src/zatca/ublXml.ts for the scope
   // boundary (structurally correct, unsigned; not a certified submission).
-  app.get<{ Params: { id: string } }>("/credit-notes/:id/xml", { preHandler: app.authenticate }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>("/credit-notes/:id/xml", { preHandler: [app.authenticate, app.requirePermission("sales.credit_note.view")] }, async (request, reply) => {
     const existing = await pool.query(`SELECT document_number FROM credit_notes WHERE id = $1 AND company_id = $2`, [
       request.params.id,
       request.companyId,

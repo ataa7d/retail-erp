@@ -124,7 +124,7 @@ beforeAll(async () => {
   const role = await client.query(`INSERT INTO roles (company_id, name) VALUES ($1, 'Gift Card Manager') RETURNING id`, [companyId]);
   await client.query(
     `INSERT INTO role_permissions (role_id, permission_id)
-     SELECT $1, id FROM permissions WHERE code IN ('sales.gift_card.issue', 'sales.pos_invoice.create')`,
+     SELECT $1, id FROM permissions WHERE code IN ('sales.gift_card.issue', 'sales.pos_invoice.create', 'sales.gift_card.view')`,
     [role.rows[0].id],
   );
   await client.query(`INSERT INTO user_roles (user_id, company_id, role_id) VALUES ($1, $2, $3)`, [userId, companyId, role.rows[0].id]);
