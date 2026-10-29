@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
 import { acquireFixedAsset, createDepreciationRun, postDepreciationRun, disposeFixedAsset } from "../../assets/fixedAssetService.js";
-import { NotFoundError } from "../errors.js";
+import { NotFoundError, BusinessRuleError } from "../errors.js";
 import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
 import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 import { userHasPermission } from "../permissions.js";
@@ -215,7 +215,16 @@ export async function fixedAssetRoutes(app: FastifyInstance): Promise<void> {
           request.companyId,
         ]);
         if (existing.rows.length === 0) throw new NotFoundError("depreciation run not found");
-        await postDepreciationRun(client, request.params.id, request.authUser.id);
+        try {
+          await postDepreciationRun(client, request.params.id, request.authUser.id);
+        } catch (err) {
+          // postDepreciationRun throws a plain Error for its own JS-level
+          // validation (no eligible assets, everything already fully
+          // depreciated) -- never a server fault, so map it to 400
+          // instead of the default 500 a bare Error would otherwise get.
+          if (err instanceof Error && !(err instanceof NotFoundError)) throw new BusinessRuleError(err.message);
+          throw err;
+        }
       }, request.authUser.id);
       return { id: request.params.id, status: "posted" };
     },
