@@ -7,6 +7,7 @@ import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
 import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 import { renderZatcaQrDataUrl } from "../../zatca/qrCode.js";
 import { finalizeSalesInvoiceXmlHash, renderSalesInvoiceXml, finalizeCreditNoteXmlHash } from "../../zatca/invoiceXmlService.js";
+import { sendWhatsapp } from "../../notifications/senders/whatsapp.js";
 
 const lineSchema = z.object({
   itemVariantId: z.string().uuid().nullable(),
@@ -263,6 +264,58 @@ export async function salesInvoiceRoutes(app: FastifyInstance): Promise<void> {
 
       reply.status(201);
       return { creditNoteId, status: "posted" };
+    },
+  );
+
+  // Sends a plain-text summary via the WhatsApp sender stub
+  // (src/notifications/senders/whatsapp.ts) -- not a PDF/document
+  // attachment, since that depends entirely on whichever provider is
+  // eventually wired in. Logs every attempt to customer_communications
+  // regardless of the stub's (currently always-successful) outcome, so
+  // the comms log is accurate once a real provider starts actually
+  // failing sometimes.
+  app.post<{ Params: { id: string } }>(
+    "/sales-invoices/:id/send-whatsapp",
+    { preHandler: [app.authenticate, app.requirePermission("sales.customer.send_whatsapp")] },
+    async (request) => {
+      const invoice = await pool.query<{
+        document_number: string;
+        gross_amount: string;
+        base_currency: string;
+        customer_id: string | null;
+        customer_phone: string | null;
+      }>(
+        `SELECT si.document_number, si.gross_amount, c.base_currency, si.customer_id, cust.phone AS customer_phone
+         FROM sales_invoices si
+         JOIN companies c ON c.id = si.company_id
+         LEFT JOIN customers cust ON cust.id = si.customer_id
+         WHERE si.id = $1 AND si.company_id = $2`,
+        [request.params.id, request.companyId],
+      );
+      if (invoice.rows.length === 0) throw new NotFoundError("sales invoice not found");
+      const inv = invoice.rows[0]!;
+      if (!inv.customer_id) throw new BusinessRuleError("this invoice has no customer to send to");
+      if (!inv.customer_phone) throw new BusinessRuleError("this customer has no phone number on file");
+
+      const message = `Your invoice ${inv.document_number} for ${Number(inv.gross_amount).toFixed(2)} ${inv.base_currency} has been issued. Thank you for shopping with us.`;
+
+      let status: "sent" | "failed" = "sent";
+      let error: string | null = null;
+      try {
+        await sendWhatsapp(inv.customer_phone, message);
+      } catch (err) {
+        status = "failed";
+        error = err instanceof Error ? err.message : "unknown error";
+      }
+
+      await pool.query(
+        `INSERT INTO customer_communications (company_id, customer_id, channel, reference_type, reference_id, status, error, sent_by)
+         VALUES ($1, $2, 'whatsapp', 'sales_invoice', $3, $4, $5, $6)`,
+        [request.companyId, inv.customer_id, request.params.id, status, error, request.authUser.id],
+      );
+
+      if (status === "failed") throw new BusinessRuleError(`failed to send WhatsApp message: ${error}`);
+      return { status: "sent" };
     },
   );
 

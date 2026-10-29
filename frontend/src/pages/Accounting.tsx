@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { BookOpen, ScrollText, Wallet, Banknote, Clock, Plus, Trash2, Link2, CheckCircle2, Lock, Unlock, CalendarCheck, Coins, Percent, Download } from "lucide-react";
+import { BookOpen, ScrollText, Wallet, Banknote, Clock, Plus, Trash2, Link2, CheckCircle2, Lock, Unlock, CalendarCheck, Coins, Percent, Download, Award } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { apiRequest, ApiError } from "../lib/api";
@@ -514,6 +514,133 @@ function TaxCodesTab() {
       {showNew && (
         <Modal title="New Tax Code" onClose={() => setShowNew(false)}>
           <NewTaxCodeForm onClose={() => setShowNew(false)} onCreated={reload} />
+        </Modal>
+      )}
+    </>
+  );
+}
+
+interface LoyaltyTier {
+  id: string;
+  name: string;
+  min_lifetime_points: string;
+  earn_multiplier: string;
+  is_active: boolean;
+}
+
+function NewLoyaltyTierForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { token, companyId } = useAuth();
+  const [name, setName] = useState("");
+  const [minLifetimePoints, setMinLifetimePoints] = useState("0");
+  const [earnMultiplier, setEarnMultiplier] = useState("1");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/loyalty-tiers", {
+        method: "POST",
+        token,
+        companyId,
+        body: { name, minLifetimePoints: Number(minLifetimePoints), earnMultiplier: Number(earnMultiplier) },
+      });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create loyalty tier");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Field label="Name" required>
+        <TextInput required value={name} onChange={(e) => setName(e.target.value)} placeholder="Gold" />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Min. Lifetime Points" required>
+          <TextInput type="number" min={0} step="1" required value={minLifetimePoints} onChange={(e) => setMinLifetimePoints(e.target.value)} />
+        </Field>
+        <Field label="Earn Multiplier" required>
+          <TextInput type="number" min={0.01} step="0.1" required value={earnMultiplier} onChange={(e) => setEarnMultiplier(e.target.value)} />
+        </Field>
+      </div>
+      <p className="mb-3 mt-1 text-xs text-slate-400 dark:text-slate-500">
+        A customer is auto-assigned this tier once their lifetime points earned (never reduced by redemption) reaches
+        this threshold, and every later sale earns points at this multiplier. Tiers only ever move up automatically.
+      </p>
+      <FormActions error={error} submitting={submitting} submitLabel="Create Tier" />
+    </form>
+  );
+}
+
+function LoyaltyTiersTab() {
+  const { token, companyId } = useAuth();
+  const { data, error, reload } = useApiList<LoyaltyTier>("/api/loyalty-tiers");
+  const [showNew, setShowNew] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function toggleActive(tier: LoyaltyTier) {
+    setBusyId(tier.id);
+    try {
+      await apiRequest(`/api/loyalty-tiers/${tier.id}/${tier.is_active ? "deactivate" : "reactivate"}`, {
+        method: "POST",
+        token,
+        companyId,
+      });
+      reload();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const columns: Column<LoyaltyTier>[] = [
+    { key: "name", header: "Name", render: (r) => <span className="font-medium text-slate-900 dark:text-slate-100">{r.name}</span> },
+    { key: "threshold", header: "Min. Lifetime Points", render: (r) => Number(r.min_lifetime_points).toLocaleString(), numeric: true },
+    { key: "multiplier", header: "Earn Multiplier", render: (r) => `${Number(r.earn_multiplier)}×`, numeric: true },
+    {
+      key: "status",
+      header: "Status",
+      render: (r) => (
+        <div className="flex items-center gap-2">
+          <StatusBadge status={r.is_active ? "active" : "inactive"} />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleActive(r);
+            }}
+            disabled={busyId === r.id}
+            className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50"
+          >
+            {r.is_active ? "Deactivate" : "Reactivate"}
+          </button>
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <ListPage
+        title=""
+        data={data}
+        error={error}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        getSearchText={(r) => r.name}
+        emptyIcon={Award}
+        emptyText="No loyalty tiers yet — every member earns at the standard rate."
+        searchPlaceholder="Search tiers..."
+        actionLabel="New Tier"
+        onAction={() => setShowNew(true)}
+      />
+      {showNew && (
+        <Modal title="New Loyalty Tier" onClose={() => setShowNew(false)}>
+          <NewLoyaltyTierForm onClose={() => setShowNew(false)} onCreated={reload} />
         </Modal>
       )}
     </>
@@ -2221,6 +2348,7 @@ export default function Accounting() {
       { key: "coa", label: "Chart of Accounts", content: <ChartOfAccountsTab /> },
       { key: "customers", label: "Customers", content: <Customers /> },
       { key: "tax-codes", label: "Tax Codes", content: <TaxCodesTab /> },
+      { key: "loyalty-tiers", label: "Loyalty Tiers", content: <LoyaltyTiersTab /> },
       { key: "journals", label: "Journals", content: <JournalsTab /> },
       { key: "receipts", label: "Customer Receipts", content: <CustomerReceiptsTab /> },
       { key: "payments", label: "Supplier Payments", content: <SupplierPaymentsTab /> },

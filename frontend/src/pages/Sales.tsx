@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Receipt, RotateCcw, Plus, Trash2, Tag, FileText, Wallet, Printer, Download } from "lucide-react";
+import { Receipt, RotateCcw, Plus, Trash2, Tag, FileText, Wallet, Printer, Download, MessageCircle } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { useDefaultVatRate } from "../lib/useDefaultVatRate";
@@ -207,6 +207,8 @@ export function SalesInvoiceDetailModal({ invoiceId, onVoided }: { invoiceId: st
   const [showVoid, setShowVoid] = useState(false);
   const [busy, setBusy] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
+  const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
+  const [whatsappMessage, setWhatsappMessage] = useState<string | null>(null);
 
   function reload() {
     return apiRequest<FullSalesInvoice>(`/api/sales-invoices/${invoiceId}`, { token, companyId }).then(setDetail);
@@ -227,6 +229,19 @@ export function SalesInvoiceDetailModal({ invoiceId, onVoided }: { invoiceId: st
       setPostError(err instanceof ApiError ? err.message : "Failed to post");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function sendWhatsapp() {
+    setWhatsappMessage(null);
+    setSendingWhatsapp(true);
+    try {
+      await apiRequest(`/api/sales-invoices/${invoiceId}/send-whatsapp`, { method: "POST", token, companyId });
+      setWhatsappMessage("Sent (logged to the customer's communication history).");
+    } catch (err) {
+      setWhatsappMessage(err instanceof ApiError ? err.message : "Failed to send");
+    } finally {
+      setSendingWhatsapp(false);
     }
   }
 
@@ -285,6 +300,18 @@ export function SalesInvoiceDetailModal({ invoiceId, onVoided }: { invoiceId: st
             >
               <Printer size={14} /> Print Invoice
             </button>
+          )}
+          {detail.document_status === "posted" && hasPermission("sales.customer.send_whatsapp") && (
+            <>
+              <button
+                onClick={sendWhatsapp}
+                disabled={sendingWhatsapp}
+                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+              >
+                <MessageCircle size={14} /> {sendingWhatsapp ? "Sending..." : "Send via WhatsApp"}
+              </button>
+              {whatsappMessage && <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">{whatsappMessage}</p>}
+            </>
           )}
           {canVoid && !showVoid && (
             <button

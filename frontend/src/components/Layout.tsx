@@ -126,6 +126,7 @@ export const navItems = [
       { key: "coa", label: "Chart of Accounts" },
       { key: "customers", label: "Customers" },
       { key: "tax-codes", label: "Tax Codes" },
+      { key: "loyalty-tiers", label: "Loyalty Tiers" },
       { key: "journals", label: "Journals" },
       { key: "receipts", label: "Customer Receipts" },
       { key: "payments", label: "Supplier Payments" },

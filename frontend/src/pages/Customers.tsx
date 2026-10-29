@@ -34,6 +34,9 @@ interface Customer {
   is_loyalty_member: boolean;
   loyalty_card_number: string | null;
   loyalty_points_balance: number;
+  lifetime_points_earned: number;
+  loyalty_tier_id: string | null;
+  tags: string[];
   is_active: boolean;
 }
 
@@ -44,6 +47,29 @@ interface LoyaltyTransaction {
   balance_after: number;
   sales_invoice_number: string | null;
   created_at: string;
+}
+
+interface CustomerNote {
+  id: string;
+  note: string;
+  created_at: string;
+  author_email: string | null;
+}
+
+interface PurchaseHistoryLine {
+  description: string;
+  qty: string;
+  grossAmount: string;
+}
+
+interface PurchaseHistoryRow {
+  id: string;
+  document_number: string;
+  invoice_date: string;
+  document_status: string;
+  gross_amount: string;
+  currency: string;
+  lines: PurchaseHistoryLine[];
 }
 
 function NewCustomerForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
@@ -256,11 +282,13 @@ function EditTermsForm({ customer, onChanged }: { customer: Customer; onChanged:
 
 function LoyaltyPanel({ customer, onChanged }: { customer: Customer; onChanged: () => void }) {
   const { token, companyId } = useAuth();
+  const { data: tiers } = useApiList<{ id: string; name: string }>("/api/loyalty-tiers");
   const [isLoyaltyMember, setIsLoyaltyMember] = useState(customer.is_loyalty_member);
   const [loyaltyCardNumber, setLoyaltyCardNumber] = useState(customer.loyalty_card_number ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [transactions, setTransactions] = useState<LoyaltyTransaction[] | null>(null);
+  const tierName = tiers?.find((t) => t.id === customer.loyalty_tier_id)?.name ?? null;
 
   useEffect(() => {
     apiRequest<LoyaltyTransaction[]>(`/api/customers/${customer.id}/loyalty-transactions`, { token, companyId }).then(setTransactions);
@@ -311,6 +339,16 @@ function LoyaltyPanel({ customer, onChanged }: { customer: Customer; onChanged: 
             <span className="text-slate-500 dark:text-slate-400">Current Balance</span>
             <span className="font-semibold text-slate-900 dark:text-slate-100">{customer.loyalty_points_balance} points</span>
           </div>
+          {tierName && (
+            <div className="mb-2 flex items-center justify-between text-sm">
+              <span className="text-slate-500 dark:text-slate-400">Tier</span>
+              <span className="font-semibold text-brand-600 dark:text-brand-400">{tierName}</span>
+            </div>
+          )}
+          <div className="mb-2 flex items-center justify-between text-xs">
+            <span className="text-slate-400 dark:text-slate-500">Lifetime Points Earned</span>
+            <span className="text-slate-500 dark:text-slate-400">{customer.lifetime_points_earned}</span>
+          </div>
           {transactions === null ? (
             <p className="text-xs text-slate-400 dark:text-slate-500">Loading history...</p>
           ) : transactions.length === 0 ? (
@@ -330,6 +368,198 @@ function LoyaltyPanel({ customer, onChanged }: { customer: Customer; onChanged: 
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NotesPanel({ customer }: { customer: Customer }) {
+  const { token, companyId, hasPermission } = useAuth();
+  const [notes, setNotes] = useState<CustomerNote[] | null>(null);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function reload() {
+    apiRequest<CustomerNote[]>(`/api/customers/${customer.id}/notes`, { token, companyId }).then(setNotes);
+  }
+
+  useEffect(reload, [customer.id, token, companyId]);
+
+  async function addNote() {
+    if (!draft.trim()) return;
+    setError(null);
+    setSaving(true);
+    try {
+      await apiRequest(`/api/customers/${customer.id}/notes`, { method: "POST", token, companyId, body: { note: draft.trim() } });
+      setDraft("");
+      reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to add note");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t border-slate-200 dark:border-slate-700 pt-4">
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Notes</p>
+      {hasPermission("sales.customer.notes.manage") && (
+        <div className="mb-2 flex gap-2">
+          <TextInput value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Add a note..." />
+          <button
+            onClick={addNote}
+            disabled={saving || !draft.trim()}
+            className="shrink-0 rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            Add
+          </button>
+        </div>
+      )}
+      {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
+      {notes === null ? (
+        <p className="text-xs text-slate-400 dark:text-slate-500">Loading...</p>
+      ) : notes.length === 0 ? (
+        <p className="text-xs text-slate-400 dark:text-slate-500">No notes yet.</p>
+      ) : (
+        <div className="max-h-40 space-y-2 overflow-y-auto">
+          {notes.map((n) => (
+            <div key={n.id} className="rounded-md border border-slate-200 dark:border-slate-700 p-2 text-xs">
+              <p className="text-slate-700 dark:text-slate-200">{n.note}</p>
+              <p className="mt-1 text-slate-400 dark:text-slate-500">
+                {n.author_email ?? "Unknown"} · {new Date(n.created_at).toLocaleString()}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TagsPanel({ customer, onChanged }: { customer: Customer; onChanged: () => void }) {
+  const { token, companyId, hasPermission } = useAuth();
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function setTags(tags: string[]) {
+    setSaving(true);
+    try {
+      await apiRequest(`/api/customers/${customer.id}/tags`, { method: "POST", token, companyId, body: { tags } });
+      onChanged();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function addTag() {
+    const tag = draft.trim();
+    if (!tag || customer.tags.includes(tag)) return;
+    setDraft("");
+    setTags([...customer.tags, tag]);
+  }
+
+  const canManage = hasPermission("sales.customer.tags.manage");
+
+  return (
+    <div className="mt-4 border-t border-slate-200 dark:border-slate-700 pt-4">
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Tags</p>
+      <div className="mb-2 flex flex-wrap gap-1.5">
+        {customer.tags.length === 0 && <span className="text-xs text-slate-400 dark:text-slate-500">No tags.</span>}
+        {customer.tags.map((tag) => (
+          <span
+            key={tag}
+            className="flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
+          >
+            {tag}
+            {canManage && (
+              <button
+                onClick={() => setTags(customer.tags.filter((t) => t !== tag))}
+                disabled={saving}
+                className="text-brand-500 hover:text-brand-700"
+              >
+                ×
+              </button>
+            )}
+          </span>
+        ))}
+      </div>
+      {canManage && (
+        <div className="flex gap-2">
+          <TextInput
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addTag();
+              }
+            }}
+            placeholder="e.g. VIP, Frequent Buyer"
+          />
+          <button
+            onClick={addTag}
+            disabled={saving || !draft.trim()}
+            className="shrink-0 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+          >
+            Add Tag
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PurchaseHistoryPanel({ customer }: { customer: Customer }) {
+  const { token, companyId } = useAuth();
+  const [result, setResult] = useState<{ rows: PurchaseHistoryRow[]; total: number } | null>(null);
+
+  useEffect(() => {
+    apiRequest<{ rows: PurchaseHistoryRow[]; total: number }>(`/api/customers/${customer.id}/purchase-history`, {
+      token,
+      companyId,
+    }).then(setResult);
+  }, [customer.id, token, companyId]);
+
+  return (
+    <div className="mt-4 border-t border-slate-200 dark:border-slate-700 pt-4">
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Purchase History</p>
+      {result === null ? (
+        <p className="text-xs text-slate-400 dark:text-slate-500">Loading...</p>
+      ) : result.rows.length === 0 ? (
+        <p className="text-xs text-slate-400 dark:text-slate-500">No orders yet.</p>
+      ) : (
+        <div className="max-h-56 space-y-2 overflow-y-auto">
+          {result.rows.map((r) => (
+            <div key={r.id} className="rounded-md border border-slate-200 dark:border-slate-700 p-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-mono text-slate-500 dark:text-slate-400">{r.document_number}</span>
+                <span className="text-slate-400 dark:text-slate-500">{new Date(r.invoice_date).toLocaleDateString()}</span>
+              </div>
+              <div className="mt-1 space-y-0.5">
+                {r.lines.map((l, i) => (
+                  <div key={i} className="flex justify-between text-xs text-slate-600 dark:text-slate-300">
+                    <span>
+                      {l.description} × {l.qty}
+                    </span>
+                    <span className="tabular-nums">{Number(l.grossAmount).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-1 flex justify-between border-t border-slate-100 dark:border-slate-800 pt-1 text-xs font-medium text-slate-900 dark:text-slate-100">
+                <span>Total</span>
+                <span className="tabular-nums">
+                  {Number(r.gross_amount).toFixed(2)} {r.currency}
+                </span>
+              </div>
+            </div>
+          ))}
+          {result.total > result.rows.length && (
+            <p className="text-center text-xs text-slate-400 dark:text-slate-500">
+              Showing {result.rows.length} of {result.total} orders.
+            </p>
           )}
         </div>
       )}
@@ -388,6 +618,9 @@ export default function Customers() {
         <Modal title={detailCustomer.name_en} onClose={() => setDetailId(null)}>
           <EditTermsForm customer={detailCustomer} onChanged={reload} />
           <LoyaltyPanel customer={detailCustomer} onChanged={reload} />
+          <TagsPanel customer={detailCustomer} onChanged={reload} />
+          <NotesPanel customer={detailCustomer} />
+          <PurchaseHistoryPanel customer={detailCustomer} />
         </Modal>
       )}
     </>

@@ -32,7 +32,10 @@ const invoiceSyncSchema = z.object({
   // 400 from the trigger instead of being silently overridden.
   zatcaInvoiceCategory: z.enum(["simplified", "standard"]),
   invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  customerId: z.string().uuid().nullable().optional(),
+  // Required, unlike the general salesInvoices.ts createSchema (also used
+  // by wholesale invoices) -- every POS sale must now have a real
+  // customer (Pos.tsx enforces capture by phone number before charging).
+  customerId: z.string().uuid(),
   salespersonId: z.string().uuid().nullable().optional(),
   priceListId: z.string().uuid().nullable().optional(),
   lines: z.array(lineSchema).min(1),
@@ -213,7 +216,7 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
     const itemsWithVariants = items.rows.map((item) => ({ ...item, variants: variantsByItem.get(item.id) ?? [] }));
 
     const customers = await pool.query(
-      `SELECT id, customer_code, name_en, name_ar, customer_type, vat_registration_number,
+      `SELECT id, customer_code, name_en, name_ar, customer_type, phone, vat_registration_number,
               credit_limit, payment_terms_days, is_loyalty_member, loyalty_card_number, is_active
        FROM customers WHERE company_id = $1 ORDER BY name_en`,
       [request.companyId],

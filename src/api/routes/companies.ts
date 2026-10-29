@@ -80,7 +80,7 @@ export async function companyRoutes(app: FastifyInstance): Promise<void> {
   // X-Company-Id like every other authenticated route.
   app.get("/companies/current", { preHandler: app.authenticate }, async (request) => {
     const result = await pool.query(
-      `SELECT id, company_code, name_en, name_ar, vat_registration_number, cr_number, address, base_currency, logo_path
+      `SELECT id, company_code, name_en, name_ar, vat_registration_number, cr_number, address, base_currency, logo_path, country
        FROM companies WHERE id = $1`,
       [request.companyId],
     );

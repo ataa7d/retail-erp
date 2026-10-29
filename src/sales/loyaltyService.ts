@@ -24,15 +24,21 @@ export interface EarnLoyaltyPointsParams {
 // the invoice's own journal, since it's a distinct accounting event (a
 // marketing cost incurred by the sale, not part of the sale itself).
 export async function earnLoyaltyPoints(client: Client, p: EarnLoyaltyPointsParams): Promise<void> {
-  const pointsEarned = Math.floor(p.netAmount * POINTS_PER_CURRENCY_UNIT);
-  if (pointsEarned <= 0) return;
-
-  const customer = await client.query<{ loyalty_points_balance: number }>(
-    `SELECT loyalty_points_balance FROM customers WHERE id = $1 FOR UPDATE`,
+  const customer = await client.query<{ loyalty_points_balance: number; lifetime_points_earned: number; earn_multiplier: string | null }>(
+    `SELECT c.loyalty_points_balance, c.lifetime_points_earned, lt.earn_multiplier
+     FROM customers c
+     LEFT JOIN loyalty_tiers lt ON lt.id = c.loyalty_tier_id
+     WHERE c.id = $1 FOR UPDATE OF c`,
     [p.customerId],
   );
   if (customer.rows.length === 0) throw new NotFoundError(`customer ${p.customerId} not found`);
+  const earnMultiplier = Number(customer.rows[0]!.earn_multiplier ?? 1);
+  const basePoints = Math.floor(p.netAmount * POINTS_PER_CURRENCY_UNIT);
+  const pointsEarned = Math.floor(basePoints * earnMultiplier);
+  if (pointsEarned <= 0) return;
+
   const newBalance = customer.rows[0]!.loyalty_points_balance + pointsEarned;
+  const newLifetimePoints = customer.rows[0]!.lifetime_points_earned + pointsEarned;
 
   const expenseAccountId = await getAccountId(client, p.companyId, "5130");
   const liabilityAccountId = await getAccountId(client, p.companyId, "2160");
@@ -62,7 +68,25 @@ export async function earnLoyaltyPoints(client: Client, p: EarnLoyaltyPointsPara
     p.earnedBy,
   ]);
 
-  await client.query(`UPDATE customers SET loyalty_points_balance = $2 WHERE id = $1`, [p.customerId, newBalance]);
+  // Tiers only ever go up here, automatically, as lifetime points cross a
+  // threshold -- never down, even if a tier is later deactivated or a
+  // higher one removed, since standing already earned shouldn't regress
+  // from an admin's catalog change.
+  const nextTier = await client.query<{ id: string }>(
+    `SELECT id FROM loyalty_tiers
+     WHERE company_id = $1 AND is_active = true AND min_lifetime_points <= $2
+     ORDER BY min_lifetime_points DESC LIMIT 1`,
+    [p.companyId, newLifetimePoints],
+  );
+  const newTierId = nextTier.rows[0]?.id ?? null;
+
+  await client.query(
+    `UPDATE customers
+     SET loyalty_points_balance = $2, lifetime_points_earned = $3,
+         loyalty_tier_id = COALESCE($4, loyalty_tier_id)
+     WHERE id = $1`,
+    [p.customerId, newBalance, newLifetimePoints, newTierId],
+  );
   await client.query(
     `INSERT INTO loyalty_points_transactions (company_id, customer_id, transaction_type, points, balance_after, sales_invoice_id, journal_id, created_by)
      VALUES ($1, $2, 'earn', $3, $4, $5, $6, $7)`,

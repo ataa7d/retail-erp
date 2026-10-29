@@ -4,6 +4,7 @@ import { Search, Plus, Minus, Trash2, WifiOff, Wifi, RefreshCw, LogOut, X, Shopp
 import { useAuth } from "../lib/auth";
 import { useApiList } from "../lib/useApiList";
 import { useDefaultVatRate } from "../lib/useDefaultVatRate";
+import { normalizePhone } from "../lib/phone";
 import { apiRequest, ApiError, API_URL } from "../lib/api";
 import { InvoicePrintArea } from "../components/InvoicePrint";
 
@@ -28,6 +29,7 @@ interface Store {
 interface Customer {
   id: string;
   name_en: string;
+  phone: string | null;
   is_loyalty_member: boolean;
   loyalty_points_balance: number;
 }
@@ -275,6 +277,104 @@ function DiscountModal({ subtotal, onClose, onApply }: { subtotal: number; onClo
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+// Mirrors Purchasing.tsx's QuickAddItemModal -- phone + name only, posts to
+// the ordinary POST /api/customers (already accepts just those fields),
+// hands the new id straight back so checkout continues without a trip to
+// the Customers screen. Online only -- a brand-new customer created while
+// offline has no way to sync until a real offline customer queue exists
+// (not built; the existing offline invoice queue is untouched).
+function QuickAddCustomerModal({
+  initialPhone,
+  onClose,
+  onCreated,
+}: {
+  initialPhone: string;
+  onClose: () => void;
+  onCreated: (customer: { id: string; name_en: string; phone: string | null }) => void;
+}) {
+  const { token, companyId } = useAuth();
+  const [nameEn, setNameEn] = useState("");
+  const [nameAr, setNameAr] = useState("");
+  const [phone, setPhone] = useState(initialPhone);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const result = await apiRequest<{ id: string }>("/api/customers", {
+        method: "POST",
+        token,
+        companyId,
+        body: {
+          customerCode: `C-${phone.replace(/\D/g, "")}`,
+          nameEn,
+          nameAr: nameAr || nameEn,
+          customerType: "retail",
+          phone,
+          paymentTermsDays: 0,
+        },
+      });
+      onCreated({ id: result.id, name_en: nameEn, phone });
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create customer");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-sm rounded-lg bg-white p-4 shadow-xl dark:bg-slate-800">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">New Customer</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+            <X size={16} />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <input
+            type="text"
+            autoFocus
+            required
+            value={nameEn}
+            onChange={(e) => setNameEn(e.target.value)}
+            placeholder="Name"
+            className="mb-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900"
+          />
+          <input
+            type="text"
+            dir="rtl"
+            value={nameAr}
+            onChange={(e) => setNameAr(e.target.value)}
+            placeholder="الاسم (اختياري)"
+            className="mb-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900"
+          />
+          <input
+            type="tel"
+            required
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="Phone number"
+            className="mb-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900"
+          />
+          {error && <p className="mb-3 text-xs text-red-600 dark:text-red-400">{error}</p>}
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {submitting ? "Creating..." : "Create & Use Customer"}
+          </button>
+        </form>
       </div>
     </div>
   );
@@ -549,10 +649,11 @@ export default function Pos() {
     name_ar: string;
     vat_registration_number: string | null;
     logo_path: string | null;
+    country: string;
   } | null>(null);
   useEffect(() => {
     if (!token || !companyId) return;
-    apiRequest<{ name_en: string; name_ar: string; vat_registration_number: string | null; logo_path: string | null }>(
+    apiRequest<{ name_en: string; name_ar: string; vat_registration_number: string | null; logo_path: string | null; country: string }>(
       "/api/companies/current",
       { token, companyId },
     ).then(setCompany);
@@ -573,6 +674,14 @@ export default function Pos() {
 
   const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [showQuickAddCustomer, setShowQuickAddCustomer] = useState(false);
+  const companyCountry = company?.country ?? "Saudi Arabia";
+  const normalizedPhoneInput = phoneInput.trim() ? normalizePhone(phoneInput, companyCountry) : "";
+  const matchedCustomer =
+    normalizedPhoneInput && customers
+      ? customers.find((c) => c.phone && normalizePhone(c.phone, companyCountry) === normalizedPhoneInput) ?? null
+      : null;
   const [cart, setCart] = useState<CartLine[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "gift_card" | "points" | "deposit">("cash");
   const [tendered, setTendered] = useState("");
@@ -827,7 +936,7 @@ export default function Pos() {
   }, [online, device?.id]);
 
   async function charge() {
-    if (!device || cart.length === 0 || !shiftId) return;
+    if (!device || cart.length === 0 || !shiftId || !customerId) return;
     if (paymentMethod === "gift_card" && (!online || !giftCardReady)) return;
     if (paymentMethod === "points" && (!online || !pointsReady)) return;
     if (paymentMethod === "deposit" && (!online || !depositReady)) return;
@@ -1035,19 +1144,66 @@ export default function Pos() {
         {/* Cart / checkout panel */}
         <div className="flex w-96 shrink-0 flex-col border-s border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
           <div className="border-b border-slate-200 dark:border-slate-700 p-3">
-            <select
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              className="w-full rounded-md border border-slate-300 dark:border-slate-600 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
-            >
-              <option value="">Walk-in Customer</option>
-              {customers?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name_en}
-                </option>
-              ))}
-            </select>
+            {customerId ? (
+              <div className="flex items-center justify-between rounded-md border border-brand-200 bg-brand-50 px-2.5 py-1.5 text-sm dark:border-brand-500/30 dark:bg-brand-500/10">
+                <span className="truncate font-medium text-brand-700 dark:text-brand-300">
+                  {customers?.find((c) => c.id === customerId)?.name_en ?? "Customer"}
+                </span>
+                <button
+                  onClick={() => {
+                    setCustomerId("");
+                    setPhoneInput("");
+                  }}
+                  className="shrink-0 text-xs font-medium text-brand-600 hover:text-brand-800 dark:text-brand-400"
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <>
+                <input
+                  type="tel"
+                  value={phoneInput}
+                  onChange={(e) => setPhoneInput(e.target.value)}
+                  placeholder="Customer phone number (required)"
+                  className="w-full rounded-md border border-slate-300 dark:border-slate-600 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+                />
+                {normalizedPhoneInput &&
+                  (matchedCustomer ? (
+                    <button
+                      onClick={() => {
+                        setCustomerId(matchedCustomer.id);
+                        setPhoneInput("");
+                      }}
+                      className="mt-1.5 w-full rounded-md bg-brand-500 px-2.5 py-1.5 text-start text-sm font-medium text-white hover:bg-brand-600"
+                    >
+                      Use {matchedCustomer.name_en} ({matchedCustomer.phone})
+                    </button>
+                  ) : online ? (
+                    <button
+                      onClick={() => setShowQuickAddCustomer(true)}
+                      className="mt-1.5 w-full rounded-md border border-dashed border-brand-300 px-2.5 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50 dark:border-brand-500/40 dark:text-brand-400 dark:hover:bg-brand-500/10"
+                    >
+                      + No match — add new customer
+                    </button>
+                  ) : (
+                    <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
+                      No cached customer for this number. Reconnect to add a new customer.
+                    </p>
+                  ))}
+              </>
+            )}
           </div>
+          {showQuickAddCustomer && (
+            <QuickAddCustomerModal
+              initialPhone={normalizedPhoneInput}
+              onClose={() => setShowQuickAddCustomer(false)}
+              onCreated={(c) => {
+                setCustomerId(c.id);
+                setPhoneInput("");
+              }}
+            />
+          )}
 
           <div className="flex-1 overflow-y-auto p-3">
             {cart.length === 0 ? (
@@ -1283,6 +1439,9 @@ export default function Pos() {
               </div>
             )}
 
+            {!customerId && cart.length > 0 && (
+              <p className="mb-2 text-xs text-amber-600 dark:text-amber-400">Enter the customer's phone number above to charge this sale.</p>
+            )}
             {chargeError && <p className="mb-2 text-xs text-red-600">{chargeError}</p>}
 
             <button
@@ -1291,6 +1450,7 @@ export default function Pos() {
                 cart.length === 0 ||
                 charging ||
                 !shiftId ||
+                !customerId ||
                 (paymentMethod === "cash" && Number(tendered || 0) < total) ||
                 (paymentMethod === "gift_card" && !giftCardReady) ||
                 (paymentMethod === "points" && !pointsReady) ||
