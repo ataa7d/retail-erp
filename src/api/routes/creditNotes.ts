@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { pool, withTransaction } from "../db.js";
 import { createCreditNote, postCreditNote } from "../../sales/salesService.js";
-import { NotFoundError } from "../errors.js";
+import { NotFoundError, BusinessRuleError } from "../errors.js";
 import { bulkIdsSchema, runBulkAction } from "./bulkHelpers.js";
 import { resolveFiscalPeriodId } from "../../accounting/fiscalPeriods.js";
 import { renderZatcaQrDataUrl } from "../../zatca/qrCode.js";
@@ -126,7 +126,16 @@ export async function creditNoteRoutes(app: FastifyInstance): Promise<void> {
         );
         if (existing.rows.length === 0) throw new NotFoundError("credit note not found");
 
-        await postCreditNote(client, request.params.id, request.authUser.id);
+        try {
+          await postCreditNote(client, request.params.id, request.authUser.id);
+        } catch (err) {
+          // postCreditNote throws a plain Error for its own JS-level
+          // validation (e.g. no original issue movement found for a
+          // source line) -- never a server fault, so map it to 400
+          // instead of the default 500 a bare Error would otherwise get.
+          if (err instanceof Error && !(err instanceof NotFoundError)) throw new BusinessRuleError(err.message);
+          throw err;
+        }
         await finalizeCreditNoteXmlHash(client, request.params.id);
       }, request.authUser.id);
 

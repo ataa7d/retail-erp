@@ -740,22 +740,32 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: [app.authenticate, app.requirePermission("purchasing.goods_receipt.post")] },
     async (request, reply) => {
       const body = goodsReceiptCreateSchema.parse(request.body);
-      const id = await withTransaction(
-        async (client) =>
-          createGoodsReceipt(client, {
-            companyId: request.companyId,
-            storeId: body.storeId,
-            purchaseOrderId: body.purchaseOrderId,
-            supplierId: body.supplierId,
-            receiptDate: body.receiptDate,
-            fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.receiptDate),
-            createdBy: request.authUser.id,
-            lines: body.lines,
-            charges: body.charges,
-            exchangeRate: body.exchangeRate ?? null,
-          }),
-        request.authUser.id,
-      );
+      let id: string;
+      try {
+        id = await withTransaction(
+          async (client) =>
+            createGoodsReceipt(client, {
+              companyId: request.companyId,
+              storeId: body.storeId,
+              purchaseOrderId: body.purchaseOrderId,
+              supplierId: body.supplierId,
+              receiptDate: body.receiptDate,
+              fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.receiptDate),
+              createdBy: request.authUser.id,
+              lines: body.lines,
+              charges: body.charges,
+              exchangeRate: body.exchangeRate ?? null,
+            }),
+          request.authUser.id,
+        );
+      } catch (err) {
+        // createGoodsReceipt throws a plain Error if purchaseOrderId or a
+        // line's purchaseOrderLineId doesn't resolve -- a bad client-
+        // supplied reference, not a server fault, so map it to 400
+        // instead of the default 500 a bare Error would otherwise get.
+        if (err instanceof Error && !(err instanceof NotFoundError)) throw new BusinessRuleError(err.message);
+        throw err;
+      }
       reply.status(201);
       return { id };
     },
@@ -771,7 +781,17 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
           request.companyId,
         ]);
         if (existing.rows.length === 0) throw new NotFoundError("goods receipt not found");
-        await postGoodsReceipt(client, request.params.id, request.authUser.id);
+        try {
+          await postGoodsReceipt(client, request.params.id, request.authUser.id);
+        } catch (err) {
+          // postGoodsReceipt throws a plain Error for its own JS-level
+          // validation (no lines, or a weight-based landed-cost
+          // allocation requiring items.weight_kg to be set) -- never a
+          // server fault, so map it to 400 instead of the default 500 a
+          // bare Error would otherwise get.
+          if (err instanceof Error && !(err instanceof NotFoundError)) throw new BusinessRuleError(err.message);
+          throw err;
+        }
       }, request.authUser.id);
       return { id: request.params.id, status: "posted" };
     },
@@ -840,21 +860,31 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: [app.authenticate, app.requirePermission("purchasing.goods_receipt.post")] },
     async (request, reply) => {
       const body = supplierInvoiceCreateSchema.parse(request.body);
-      const id = await withTransaction(
-        async (client) =>
-          createSupplierInvoice(client, {
-            companyId: request.companyId,
-            supplierId: body.supplierId,
-            purchaseOrderId: body.purchaseOrderId,
-            supplierInvoiceNumber: body.supplierInvoiceNumber,
-            invoiceDate: body.invoiceDate,
-            fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.invoiceDate),
-            createdBy: request.authUser.id,
-            lines: body.lines,
-            exchangeRate: body.exchangeRate ?? null,
-          }),
-        request.authUser.id,
-      );
+      let id: string;
+      try {
+        id = await withTransaction(
+          async (client) =>
+            createSupplierInvoice(client, {
+              companyId: request.companyId,
+              supplierId: body.supplierId,
+              purchaseOrderId: body.purchaseOrderId,
+              supplierInvoiceNumber: body.supplierInvoiceNumber,
+              invoiceDate: body.invoiceDate,
+              fiscalPeriodId: await resolveFiscalPeriodId(client, request.companyId, body.invoiceDate),
+              createdBy: request.authUser.id,
+              lines: body.lines,
+              exchangeRate: body.exchangeRate ?? null,
+            }),
+          request.authUser.id,
+        );
+      } catch (err) {
+        // createSupplierInvoice throws a plain Error if purchaseOrderId
+        // doesn't resolve -- a bad client-supplied reference, not a
+        // server fault, so map it to 400 instead of the default 500 a
+        // bare Error would otherwise get.
+        if (err instanceof Error && !(err instanceof NotFoundError)) throw new BusinessRuleError(err.message);
+        throw err;
+      }
       reply.status(201);
       return { id };
     },
