@@ -857,7 +857,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/supplier-invoices",
-    { preHandler: [app.authenticate, app.requirePermission("purchasing.goods_receipt.post")] },
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier_invoice.post")] },
     async (request, reply) => {
       const body = supplierInvoiceCreateSchema.parse(request.body);
       let id: string;
@@ -892,7 +892,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/supplier-invoices/:id/post",
-    { preHandler: [app.authenticate, app.requirePermission("purchasing.goods_receipt.post")] },
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier_invoice.post")] },
     async (request) => {
       await withTransaction(async (client) => {
         const existing = await client.query(`SELECT id FROM supplier_invoices WHERE id = $1 AND company_id = $2`, [
@@ -908,7 +908,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/supplier-invoices/bulk-post",
-    { preHandler: [app.authenticate, app.requirePermission("purchasing.goods_receipt.post")] },
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.supplier_invoice.post")] },
     async (request) => {
       const body = bulkIdsSchema.parse(request.body);
       const results = await runBulkAction(body.ids, "posted", (id) =>
@@ -1006,7 +1006,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/supplier-credit-notes",
-    { preHandler: [app.authenticate, app.requirePermission("purchasing.goods_receipt.post")] },
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.return.post")] },
     async (request, reply) => {
       const body = creditNoteCreateSchema.parse(request.body);
       const id = await withTransaction(
@@ -1031,7 +1031,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/supplier-credit-notes/:id/post",
-    { preHandler: [app.authenticate, app.requirePermission("purchasing.goods_receipt.post")] },
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.return.post")] },
     async (request) => {
       await withTransaction(async (client) => {
         const existing = await client.query(`SELECT id FROM supplier_credit_notes WHERE id = $1 AND company_id = $2`, [
@@ -1047,7 +1047,7 @@ export async function purchasingRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/supplier-credit-notes/bulk-post",
-    { preHandler: [app.authenticate, app.requirePermission("purchasing.goods_receipt.post")] },
+    { preHandler: [app.authenticate, app.requirePermission("purchasing.return.post")] },
     async (request) => {
       const body = bulkIdsSchema.parse(request.body);
       const results = await runBulkAction(body.ids, "posted", (id) =>
