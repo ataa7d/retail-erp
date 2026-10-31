@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Plus, Minus, Trash2, WifiOff, Wifi, RefreshCw, LogOut, X, ShoppingCart, Wallet, PauseCircle, Printer, Percent } from "lucide-react";
+import { Search, Plus, Minus, Trash2, WifiOff, Wifi, RefreshCw, LogOut, X, ShoppingCart, Wallet, PauseCircle, Printer, Percent, Sun, Moon } from "lucide-react";
 import { useAuth } from "../lib/auth";
+import { useTheme } from "../lib/theme";
 import { useApiList } from "../lib/useApiList";
 import { useDefaultVatRate } from "../lib/useDefaultVatRate";
 import { normalizePhone } from "../lib/phone";
@@ -147,12 +148,25 @@ interface Discount {
 }
 
 /**
- * Two-step flow: the cashier enters what discount to apply, then a
- * manager/supervisor (not necessarily the cashier) must authenticate with
- * their own email+password. verify-step-up checks that login against
- * sales.pos_invoice.discount without touching the cashier's own session.
+ * A cashier who personally holds sales.pos_invoice.discount applies a
+ * discount directly -- no extra step. A cashier who doesn't falls back to
+ * the manager/supervisor step-up: a second person signs in with their own
+ * email+password, checked against sales.pos_invoice.discount without
+ * touching the cashier's own session (verify-step-up).
  */
-function DiscountModal({ subtotal, onClose, onApply }: { subtotal: number; onClose: () => void; onApply: (d: Discount) => void }) {
+function DiscountModal({
+  subtotal,
+  onClose,
+  onApply,
+  canApplyDirectly,
+  cashierEmail,
+}: {
+  subtotal: number;
+  onClose: () => void;
+  onApply: (d: Discount) => void;
+  canApplyDirectly: boolean;
+  cashierEmail: string;
+}) {
   const { token, companyId } = useAuth();
   const [step, setStep] = useState<"amount" | "auth">("amount");
   const [type, setType] = useState<"amount" | "percent">("percent");
@@ -179,6 +193,10 @@ function DiscountModal({ subtotal, onClose, onApply }: { subtotal: number; onClo
       return;
     }
     setError(null);
+    if (canApplyDirectly) {
+      onApply({ type, value: numericValue, authorizedByEmail: cashierEmail });
+      return;
+    }
     setStep("auth");
   }
 
@@ -238,8 +256,11 @@ function DiscountModal({ subtotal, onClose, onApply }: { subtotal: number; onClo
             />
             {numericValue > 0 && <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">Discount amount: {previewAmount.toFixed(2)}</p>}
             {error && <p className="mb-3 text-xs text-red-600 dark:text-red-400">{error}</p>}
-            <button onClick={proceed} className="w-full rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600">
-              Continue
+            <button
+              onClick={proceed}
+              className="w-full rounded-md bg-brand-500 px-3 py-2 text-sm font-medium text-white transition-transform duration-100 ease-out hover:bg-brand-600 active:scale-[0.97]"
+            >
+              {canApplyDirectly ? "Apply Discount" : "Continue"}
             </button>
           </>
         ) : (
@@ -633,7 +654,8 @@ function CloseShiftModal({ shiftId, onClose, onClosed }: { shiftId: string; onCl
 }
 
 export default function Pos() {
-  const { token, companyId, logout } = useAuth();
+  const { token, companyId, logout, me, hasPermission } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const online = useOnlineStatus();
 
@@ -1065,7 +1087,7 @@ export default function Pos() {
         </div>
         <button
           onClick={() => setShowCloseShift(true)}
-          className="flex items-center gap-1 rounded-full bg-white dark:bg-slate-800/10 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white dark:bg-slate-800/20"
+          className="flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-white/80 transition-colors hover:bg-white/20"
         >
           <Wallet size={12} /> Close Shift
         </button>
@@ -1081,7 +1103,7 @@ export default function Pos() {
         {held.length > 0 && (
           <button
             onClick={() => setShowHeld(true)}
-            className="flex items-center gap-1 rounded-full bg-white dark:bg-slate-800/10 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white dark:bg-slate-800/20"
+            className="flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-white/80 transition-colors hover:bg-white/20"
           >
             <PauseCircle size={12} /> {held.length} held
           </button>
@@ -1092,6 +1114,13 @@ export default function Pos() {
           </button>
           <button onClick={() => navigate("/")} className="text-xs text-white/60 hover:text-white">
             Back Office
+          </button>
+          <button
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            className="rounded-full p-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           </button>
           <button onClick={() => logout()} className="flex items-center gap-1 text-xs text-white/60 hover:text-white">
             <LogOut size={13} /> Log out
@@ -1126,7 +1155,7 @@ export default function Pos() {
               <button
                 key={g.variantId}
                 onClick={() => addToCart(g)}
-                className="flex flex-col items-start justify-between rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-start shadow-sm hover:border-brand-400 hover:shadow-md"
+                className="flex flex-col items-start justify-between rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-start shadow-sm transition-[transform,box-shadow,border-color] duration-100 ease-out hover:border-brand-400 hover:shadow-md active:scale-[0.96]"
               >
                 <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{g.label}</span>
                 <span className="mt-2 text-sm font-semibold text-brand-600">{g.price.toFixed(2)}</span>
@@ -1143,68 +1172,6 @@ export default function Pos() {
 
         {/* Cart / checkout panel */}
         <div className="flex w-96 shrink-0 flex-col border-s border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-          <div className="border-b border-slate-200 dark:border-slate-700 p-3">
-            {customerId ? (
-              <div className="flex items-center justify-between rounded-md border border-brand-200 bg-brand-50 px-2.5 py-1.5 text-sm dark:border-brand-500/30 dark:bg-brand-500/10">
-                <span className="truncate font-medium text-brand-700 dark:text-brand-300">
-                  {customers?.find((c) => c.id === customerId)?.name_en ?? "Customer"}
-                </span>
-                <button
-                  onClick={() => {
-                    setCustomerId("");
-                    setPhoneInput("");
-                  }}
-                  className="shrink-0 text-xs font-medium text-brand-600 hover:text-brand-800 dark:text-brand-400"
-                >
-                  Change
-                </button>
-              </div>
-            ) : (
-              <>
-                <input
-                  type="tel"
-                  value={phoneInput}
-                  onChange={(e) => setPhoneInput(e.target.value)}
-                  placeholder="Customer phone number (required)"
-                  className="w-full rounded-md border border-slate-300 dark:border-slate-600 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
-                />
-                {normalizedPhoneInput &&
-                  (matchedCustomer ? (
-                    <button
-                      onClick={() => {
-                        setCustomerId(matchedCustomer.id);
-                        setPhoneInput("");
-                      }}
-                      className="mt-1.5 w-full rounded-md bg-brand-500 px-2.5 py-1.5 text-start text-sm font-medium text-white hover:bg-brand-600"
-                    >
-                      Use {matchedCustomer.name_en} ({matchedCustomer.phone})
-                    </button>
-                  ) : online ? (
-                    <button
-                      onClick={() => setShowQuickAddCustomer(true)}
-                      className="mt-1.5 w-full rounded-md border border-dashed border-brand-300 px-2.5 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50 dark:border-brand-500/40 dark:text-brand-400 dark:hover:bg-brand-500/10"
-                    >
-                      + No match — add new customer
-                    </button>
-                  ) : (
-                    <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
-                      No cached customer for this number. Reconnect to add a new customer.
-                    </p>
-                  ))}
-              </>
-            )}
-          </div>
-          {showQuickAddCustomer && (
-            <QuickAddCustomerModal
-              initialPhone={normalizedPhoneInput}
-              onClose={() => setShowQuickAddCustomer(false)}
-              onCreated={(c) => {
-                setCustomerId(c.id);
-                setPhoneInput("");
-              }}
-            />
-          )}
-
           <div className="flex-1 overflow-y-auto p-3">
             {cart.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-300">
@@ -1254,6 +1221,65 @@ export default function Pos() {
           </div>
 
           <div className="border-t border-slate-200 dark:border-slate-700 p-3">
+            {customerId ? (
+              <div className="mb-3 flex items-center justify-between rounded-md border border-brand-200 bg-brand-50 px-2.5 py-1.5 text-sm dark:border-brand-500/30 dark:bg-brand-500/10">
+                <span className="truncate font-medium text-brand-700 dark:text-brand-300">
+                  {customers?.find((c) => c.id === customerId)?.name_en ?? "Customer"}
+                </span>
+                <button
+                  onClick={() => {
+                    setCustomerId("");
+                    setPhoneInput("");
+                  }}
+                  className="shrink-0 text-xs font-medium text-brand-600 hover:text-brand-800 dark:text-brand-400"
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <div className="mb-3">
+                <input
+                  type="tel"
+                  value={phoneInput}
+                  onChange={(e) => setPhoneInput(e.target.value)}
+                  placeholder="Customer phone number (required)"
+                  className="w-full rounded-md border border-slate-300 dark:border-slate-600 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+                />
+                {normalizedPhoneInput &&
+                  (matchedCustomer ? (
+                    <button
+                      onClick={() => {
+                        setCustomerId(matchedCustomer.id);
+                        setPhoneInput("");
+                      }}
+                      className="mt-1.5 w-full rounded-md bg-brand-500 px-2.5 py-1.5 text-start text-sm font-medium text-white transition-transform duration-100 ease-out hover:bg-brand-600 active:scale-[0.98]"
+                    >
+                      Use {matchedCustomer.name_en} ({matchedCustomer.phone})
+                    </button>
+                  ) : online ? (
+                    <button
+                      onClick={() => setShowQuickAddCustomer(true)}
+                      className="mt-1.5 w-full rounded-md border border-dashed border-brand-300 px-2.5 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50 dark:border-brand-500/40 dark:text-brand-400 dark:hover:bg-brand-500/10"
+                    >
+                      + No match — add new customer
+                    </button>
+                  ) : (
+                    <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
+                      No cached customer for this number. Reconnect to add a new customer.
+                    </p>
+                  ))}
+              </div>
+            )}
+            {showQuickAddCustomer && (
+              <QuickAddCustomerModal
+                initialPhone={normalizedPhoneInput}
+                onClose={() => setShowQuickAddCustomer(false)}
+                onCreated={(c) => {
+                  setCustomerId(c.id);
+                  setPhoneInput("");
+                }}
+              />
+            )}
             <div className="mb-2 space-y-1 text-sm">
               <div className="flex items-center justify-between">
                 <button
@@ -1295,6 +1321,8 @@ export default function Pos() {
                   setDiscount(d);
                   setShowDiscount(false);
                 }}
+                canApplyDirectly={hasPermission("sales.pos_invoice.discount")}
+                cashierEmail={me?.user.email ?? ""}
               />
             )}
 
@@ -1456,7 +1484,7 @@ export default function Pos() {
                 (paymentMethod === "points" && !pointsReady) ||
                 (paymentMethod === "deposit" && !depositReady)
               }
-              className="w-full rounded-md bg-brand-500 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-40"
+              className="w-full rounded-md bg-brand-500 py-2.5 text-sm font-semibold text-white transition-transform duration-100 ease-out hover:bg-brand-600 active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100"
             >
               {charging ? "Charging..." : `Charge ${total.toFixed(2)}`}
             </button>
