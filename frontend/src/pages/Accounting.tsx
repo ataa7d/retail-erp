@@ -297,6 +297,8 @@ function EditAccountForm({ account, onClose, onSaved }: { account: Account; onCl
 }
 
 function ChartOfAccountsTab() {
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("accounting.coa.manage");
   const { data, error, reload } = useApiList<Account>("/api/chart-of-accounts");
   const [showNew, setShowNew] = useState(false);
   const [editing, setEditing] = useState<Account | null>(null);
@@ -326,8 +328,8 @@ function ChartOfAccountsTab() {
         emptyIcon={BookOpen}
         emptyText="No accounts found."
         searchPlaceholder="Search accounts..."
-        actionLabel="New Account"
-        onAction={() => setShowNew(true)}
+        actionLabel={canCreate ? "New Account" : undefined}
+        onAction={canCreate ? () => setShowNew(true) : undefined}
         onRowClick={setEditing}
       />
       {showNew && (
@@ -422,7 +424,8 @@ function NewTaxCodeForm({ onClose, onCreated }: { onClose: () => void; onCreated
 }
 
 function TaxCodesTab() {
-  const { token, companyId } = useAuth();
+  const { token, companyId, hasPermission } = useAuth();
+  const canManage = hasPermission("accounting.tax_code.manage");
   const { data, error, reload } = useApiList<TaxCode>("/api/tax-codes");
   const [showNew, setShowNew] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -508,8 +511,8 @@ function TaxCodesTab() {
         emptyIcon={Percent}
         emptyText="No tax codes yet."
         searchPlaceholder="Search tax codes..."
-        actionLabel="New Tax Code"
-        onAction={() => setShowNew(true)}
+        actionLabel={canManage ? "New Tax Code" : undefined}
+        onAction={canManage ? () => setShowNew(true) : undefined}
       />
       {showNew && (
         <Modal title="New Tax Code" onClose={() => setShowNew(false)}>
@@ -579,7 +582,8 @@ function NewLoyaltyTierForm({ onClose, onCreated }: { onClose: () => void; onCre
 }
 
 function LoyaltyTiersTab() {
-  const { token, companyId } = useAuth();
+  const { token, companyId, hasPermission } = useAuth();
+  const canManage = hasPermission("sales.loyalty_tier.manage");
   const { data, error, reload } = useApiList<LoyaltyTier>("/api/loyalty-tiers");
   const [showNew, setShowNew] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -635,8 +639,8 @@ function LoyaltyTiersTab() {
         emptyIcon={Award}
         emptyText="No loyalty tiers yet — every member earns at the standard rate."
         searchPlaceholder="Search tiers..."
-        actionLabel="New Tier"
-        onAction={() => setShowNew(true)}
+        actionLabel={canManage ? "New Tier" : undefined}
+        onAction={canManage ? () => setShowNew(true) : undefined}
       />
       {showNew && (
         <Modal title="New Loyalty Tier" onClose={() => setShowNew(false)}>
@@ -785,6 +789,8 @@ export function NewJournalForm({ onClose, onCreated }: { onClose: () => void; on
 
 function JournalsTab() {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("accounting.journal.post");
   const { data, error } = useApiList<Journal>("/api/journals");
 
   const columns: Column<Journal>[] = [
@@ -806,8 +812,8 @@ function JournalsTab() {
         emptyIcon={ScrollText}
         emptyText="No journals yet."
         searchPlaceholder="Search journals..."
-        actionLabel="New Journal Entry"
-        onAction={() => navigate("/accounting/journals/new", { state: { fromTab: "journals" } })}
+        actionLabel={canCreate ? "New Journal Entry" : undefined}
+        onAction={canCreate ? () => navigate("/accounting/journals/new", { state: { fromTab: "journals" } }) : undefined}
         toolbarExtra={
           <button
             onClick={() =>
@@ -1035,6 +1041,8 @@ export function NewReceiptForm({ onClose, onCreated }: { onClose: () => void; on
 
 function CustomerReceiptsTab() {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("accounting.receipt.create");
   const { data, error } = useApiList<Receipt>("/api/customer-receipts");
 
   const columns: Column<Receipt>[] = [
@@ -1057,8 +1065,8 @@ function CustomerReceiptsTab() {
         emptyIcon={Wallet}
         emptyText="No customer receipts yet."
         searchPlaceholder="Search receipts..."
-        actionLabel="New Receipt"
-        onAction={() => navigate("/accounting/receipts/new", { state: { fromTab: "receipts" } })}
+        actionLabel={canCreate ? "New Receipt" : undefined}
+        onAction={canCreate ? () => navigate("/accounting/receipts/new", { state: { fromTab: "receipts" } }) : undefined}
       />
     </>
   );
@@ -1183,6 +1191,8 @@ export function NewPaymentForm({ onClose, onCreated }: { onClose: () => void; on
 
 function SupplierPaymentsTab() {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("accounting.payment.create");
   const { data, error } = useApiList<Payment>("/api/supplier-payments");
   const baseCurrency = useBaseCurrency();
 
@@ -1212,8 +1222,8 @@ function SupplierPaymentsTab() {
         emptyIcon={Banknote}
         emptyText="No supplier payments yet."
         searchPlaceholder="Search payments..."
-        actionLabel="New Payment"
-        onAction={() => navigate("/accounting/payments/new", { state: { fromTab: "payments" } })}
+        actionLabel={canCreate ? "New Payment" : undefined}
+        onAction={canCreate ? () => navigate("/accounting/payments/new", { state: { fromTab: "payments" } }) : undefined}
       />
     </>
   );
@@ -1319,6 +1329,8 @@ function NewExchangeRateForm({ onClose, onCreated }: { onClose: () => void; onCr
 }
 
 function ExchangeRatesTab() {
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission("accounting.exchange_rate.manage");
   const { data, error, reload } = useApiList<ExchangeRate>("/api/exchange-rates");
   const baseCurrency = useBaseCurrency();
   const [showNew, setShowNew] = useState(false);
@@ -1345,8 +1357,8 @@ function ExchangeRatesTab() {
         emptyIcon={Coins}
         emptyText="No exchange rates entered yet."
         searchPlaceholder="Search currency..."
-        actionLabel="New Rate"
-        onAction={() => setShowNew(true)}
+        actionLabel={canManage ? "New Rate" : undefined}
+        onAction={canManage ? () => setShowNew(true) : undefined}
       />
       {showNew && (
         <Modal title="New Exchange Rate" onClose={() => setShowNew(false)}>
@@ -2304,6 +2316,8 @@ export function BudgetDetailModal({ budgetId, onChanged }: { budgetId: string; o
 
 function BudgetsTab() {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission("accounting.budget.manage");
   const { data, error, reload } = useApiList<Budget>("/api/budgets");
   const [showNew, setShowNew] = useState(false);
 
@@ -2327,8 +2341,8 @@ function BudgetsTab() {
         emptyIcon={Coins}
         emptyText="No budgets yet."
         searchPlaceholder="Search budgets..."
-        actionLabel="New Budget"
-        onAction={() => setShowNew(true)}
+        actionLabel={canManage ? "New Budget" : undefined}
+        onAction={canManage ? () => setShowNew(true) : undefined}
         onRowClick={(r) => navigate(`/accounting/budgets/${r.id}`, { state: { fromTab: "budgets" } })}
       />
       {showNew && (

@@ -1007,8 +1007,8 @@ function SalesInvoicesTab() {
         emptyIcon={Receipt}
         emptyText="No sales invoices yet."
         searchPlaceholder="Search sales invoices..."
-        actionLabel="New Sales Invoice"
-        onAction={() => navigate("/sales/invoices/new", { state: { fromTab: "invoices" } })}
+        actionLabel={canPost ? "New Sales Invoice" : undefined}
+        onAction={canPost ? () => navigate("/sales/invoices/new", { state: { fromTab: "invoices" } }) : undefined}
         onRowClick={(r) => navigate(`/sales/invoices/${r.id}`, { state: { fromTab: "invoices" } })}
         selectable={canPost}
         selectedKeys={selected}
@@ -1075,8 +1075,8 @@ function CreditNotesTab() {
         emptyIcon={RotateCcw}
         emptyText="No credit notes yet."
         searchPlaceholder="Search credit notes..."
-        actionLabel="New Credit Note"
-        onAction={() => navigate("/sales/credit-notes/new", { state: { fromTab: "credits" } })}
+        actionLabel={canPost ? "New Credit Note" : undefined}
+        onAction={canPost ? () => navigate("/sales/credit-notes/new", { state: { fromTab: "credits" } }) : undefined}
         onRowClick={(r) => navigate(`/sales/credit-notes/${r.id}`, { state: { fromTab: "credits" } })}
         selectable={canPost}
         selectedKeys={selected}
@@ -1550,6 +1550,8 @@ export function QuotationDetailModal({ quotationId, onChanged }: { quotationId: 
 
 function QuotationsTab() {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("sales.quotation.create");
   const { data, error } = useApiList<SalesQuotation>("/api/sales-quotations");
 
   const columns: Column<SalesQuotation>[] = [
@@ -1572,8 +1574,8 @@ function QuotationsTab() {
         emptyIcon={FileText}
         emptyText="No sales quotations yet."
         searchPlaceholder="Search quotations..."
-        actionLabel="New Quotation"
-        onAction={() => navigate("/sales/quotations/new", { state: { fromTab: "quotations" } })}
+        actionLabel={canCreate ? "New Quotation" : undefined}
+        onAction={canCreate ? () => navigate("/sales/quotations/new", { state: { fromTab: "quotations" } }) : undefined}
         onRowClick={(r) => navigate(`/sales/quotations/${r.id}`, { state: { fromTab: "quotations" } })}
       />
     </>
@@ -1809,7 +1811,8 @@ function PriceListDetail({ list, onChanged }: { list: PriceListRow; onChanged: (
 }
 
 function PriceListsTab() {
-  const { token, companyId } = useAuth();
+  const { token, companyId, hasPermission } = useAuth();
+  const canManage = hasPermission("sales.price_list.manage");
   const { data, error, reload } = useApiList<PriceListRow>("/api/price-lists");
   const { data: taxCodes } = useApiList<TaxCodeOption>("/api/tax-codes");
   const taxCodeLabel = (id: string | null) => {
@@ -1877,8 +1880,8 @@ function PriceListsTab() {
         emptyIcon={Tag}
         emptyText="No price lists yet."
         searchPlaceholder="Search price lists..."
-        actionLabel="New Price List"
-        onAction={() => setShowNew(true)}
+        actionLabel={canManage ? "New Price List" : undefined}
+        onAction={canManage ? () => setShowNew(true) : undefined}
         onRowClick={(r) => setDetailId(r.id)}
       />
       {showNew && (

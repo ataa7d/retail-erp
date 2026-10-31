@@ -569,6 +569,8 @@ function PurchaseHistoryPanel({ customer }: { customer: Customer }) {
 
 export default function Customers() {
   const { t, i18n } = useTranslation();
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("sales.customer.create");
   const { data, error, reload } = useApiList<Customer>("/api/customers");
   const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
   const [showNew, setShowNew] = useState(false);
@@ -605,8 +607,8 @@ export default function Customers() {
         emptyIcon={Users}
         emptyText="No customers found."
         searchPlaceholder="Search by code or name..."
-        actionLabel="New Customer"
-        onAction={() => setShowNew(true)}
+        actionLabel={canCreate ? "New Customer" : undefined}
+        onAction={canCreate ? () => setShowNew(true) : undefined}
         onRowClick={(r) => setDetailId(r.id)}
       />
       {showNew && (

@@ -534,6 +534,7 @@ function TransfersTab() {
   const navigate = useNavigate();
   const { data, error } = useApiList<Transfer>("/api/stock-transfers");
   const { hasPermission } = useAuth();
+  const canCreate = hasPermission("inventory.transfer.post");
 
   const columns: Column<Transfer>[] = [
     { key: "date", header: "Date", render: (r) => new Date(r.movement_at).toLocaleString() },
@@ -561,8 +562,8 @@ function TransfersTab() {
         emptyIcon={ArrowLeftRight}
         emptyText="No transfers yet."
         searchPlaceholder="Search transfers..."
-        actionLabel="New Transfer"
-        onAction={() => navigate("/inventory/transfers/new", { state: { fromTab: "transfers" } })}
+        actionLabel={canCreate ? "New Transfer" : undefined}
+        onAction={canCreate ? () => navigate("/inventory/transfers/new", { state: { fromTab: "transfers" } }) : undefined}
       />
     </>
   );
@@ -863,8 +864,8 @@ function TransferOrdersTab() {
         emptyIcon={Truck}
         emptyText="No transfer orders yet."
         searchPlaceholder="Search transfer orders..."
-        actionLabel="New Transfer Order"
-        onAction={() => navigate("/inventory/transfer-orders/new", { state: { fromTab: "transfer-orders" } })}
+        actionLabel={canPost ? "New Transfer Order" : undefined}
+        onAction={canPost ? () => navigate("/inventory/transfer-orders/new", { state: { fromTab: "transfer-orders" } }) : undefined}
         onRowClick={(r) => navigate(`/inventory/transfer-orders/${r.id}`, { state: { fromTab: "transfer-orders" } })}
         selectable={canPost}
         selectedKeys={selected}
@@ -1092,6 +1093,8 @@ export function CountStocktakeForm({ stocktakeId, onClose, onPosted }: { stockta
 
 function AdjustmentsTab() {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("inventory.adjustment.post");
   const { data, error } = useApiList<Stocktake>("/api/stocktakes");
 
   const columns: Column<Stocktake>[] = [
@@ -1114,8 +1117,8 @@ function AdjustmentsTab() {
         emptyIcon={ClipboardList}
         emptyText="No stocktakes yet."
         searchPlaceholder="Search stocktakes..."
-        actionLabel="New Stocktake"
-        onAction={() => navigate("/inventory/stocktakes/new", { state: { fromTab: "adjustments" } })}
+        actionLabel={canCreate ? "New Stocktake" : undefined}
+        onAction={canCreate ? () => navigate("/inventory/stocktakes/new", { state: { fromTab: "adjustments" } }) : undefined}
         onRowClick={(r) => {
           if (r.document_status === "draft") navigate(`/inventory/stocktakes/${r.id}/count`, { state: { fromTab: "adjustments" } });
         }}

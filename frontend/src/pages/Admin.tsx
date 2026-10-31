@@ -683,7 +683,8 @@ function StoreDefaultPriceLists() {
 }
 
 function PosDevicesTab() {
-  const { token, companyId } = useAuth();
+  const { token, companyId, hasPermission } = useAuth();
+  const canManage = hasPermission("sales.pos_device.manage");
   const { data, error, reload } = useApiList<PosDevice>("/api/pos-devices");
   const { data: stores } = useApiList<Store>("/api/stores");
   const { data: priceLists } = useApiList<PriceList>("/api/price-lists");
@@ -782,8 +783,8 @@ function PosDevicesTab() {
         emptyIcon={Smartphone}
         emptyText="No POS devices registered."
         searchPlaceholder="Search devices..."
-        actionLabel="Register Device"
-        onAction={() => setShowNew(true)}
+        actionLabel={canManage ? "Register Device" : undefined}
+        onAction={canManage ? () => setShowNew(true) : undefined}
       />
       {showNew && (
         <Modal title="Register POS Device" onClose={() => setShowNew(false)}>

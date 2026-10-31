@@ -1295,8 +1295,8 @@ function GoodsReceiptsTab() {
         emptyIcon={PackageCheck}
         emptyText="No goods receipts yet."
         searchPlaceholder="Search goods receipts..."
-        actionLabel="New Goods Receipt"
-        onAction={() => navigate("/purchasing/goods-receipts/new", { state: { fromTab: "receipts" } })}
+        actionLabel={canPost ? "New Goods Receipt" : undefined}
+        onAction={canPost ? () => navigate("/purchasing/goods-receipts/new", { state: { fromTab: "receipts" } }) : undefined}
         selectable={canPost}
         selectedKeys={selected}
         onSelectionChange={setSelected}
@@ -1351,8 +1351,8 @@ function SupplierInvoicesTab() {
         emptyIcon={ReceiptText}
         emptyText="No supplier invoices yet."
         searchPlaceholder="Search supplier invoices..."
-        actionLabel="New Supplier Invoice"
-        onAction={() => navigate("/purchasing/supplier-invoices/new", { state: { fromTab: "invoices" } })}
+        actionLabel={canPost ? "New Supplier Invoice" : undefined}
+        onAction={canPost ? () => navigate("/purchasing/supplier-invoices/new", { state: { fromTab: "invoices" } }) : undefined}
         selectable={canPost}
         selectedKeys={selected}
         onSelectionChange={setSelected}
@@ -1608,8 +1608,8 @@ function PurchaseReturnsTab() {
         emptyIcon={Undo2}
         emptyText="No purchase returns yet."
         searchPlaceholder="Search purchase returns..."
-        actionLabel="New Purchase Return"
-        onAction={() => navigate("/purchasing/returns/new", { state: { fromTab: "returns" } })}
+        actionLabel={canPost ? "New Purchase Return" : undefined}
+        onAction={canPost ? () => navigate("/purchasing/returns/new", { state: { fromTab: "returns" } }) : undefined}
         onRowClick={(r) => navigate(`/purchasing/returns/${r.id}`, { state: { fromTab: "returns" } })}
         selectable={canPost}
         selectedKeys={selected}
@@ -2101,6 +2101,7 @@ function RequisitionsTab() {
   ];
 
   const canApprove = hasPermission("purchasing.requisition.approve");
+  const canCreate = hasPermission("purchasing.requisition.create");
 
   async function bulkApprove() {
     setBulkMessage(await runBulkAction("/api/purchase-requisitions/bulk-approve", [...selected], { token, companyId }));
@@ -2149,8 +2150,8 @@ function RequisitionsTab() {
         emptyIcon={ClipboardList}
         emptyText="No purchase requisitions yet."
         searchPlaceholder="Search requisitions..."
-        actionLabel="New Requisition"
-        onAction={() => navigate("/purchasing/requisitions/new", { state: { fromTab: "requisitions" } })}
+        actionLabel={canCreate ? "New Requisition" : undefined}
+        onAction={canCreate ? () => navigate("/purchasing/requisitions/new", { state: { fromTab: "requisitions" } }) : undefined}
         onRowClick={(r) => navigate(`/purchasing/requisitions/${r.id}`, { state: { fromTab: "requisitions" } })}
         selectable={canApprove}
         selectedKeys={selected}
@@ -2350,8 +2351,8 @@ function PurchaseOrdersTab() {
         emptyIcon={ShoppingCart}
         emptyText="No purchase orders yet."
         searchPlaceholder="Search purchase orders..."
-        actionLabel="New Purchase Order"
-        onAction={() => navigate("/purchasing/orders/new", { state: { fromTab: "pos" } })}
+        actionLabel={canPost ? "New Purchase Order" : undefined}
+        onAction={canPost ? () => navigate("/purchasing/orders/new", { state: { fromTab: "pos" } }) : undefined}
         onRowClick={(r) => navigate(`/purchasing/orders/${r.id}`, { state: { fromTab: "pos" } })}
         selectable={canPost}
         selectedKeys={selected}
@@ -2702,7 +2703,8 @@ function SupplierPriceCatalog({ supplier, onChanged }: { supplier: Supplier; onC
 }
 
 function SuppliersTab() {
-  const { token, companyId } = useAuth();
+  const { token, companyId, hasPermission } = useAuth();
+  const canCreate = hasPermission("purchasing.supplier.create");
   const { data, error, reload } = useApiList<Supplier>("/api/suppliers");
   const [showNew, setShowNew] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -2764,8 +2766,8 @@ function SuppliersTab() {
         emptyIcon={Truck}
         emptyText="No suppliers yet."
         searchPlaceholder="Search suppliers..."
-        actionLabel="New Supplier"
-        onAction={() => setShowNew(true)}
+        actionLabel={canCreate ? "New Supplier" : undefined}
+        onAction={canCreate ? () => setShowNew(true) : undefined}
         onRowClick={(r) => {
           setEditing(false);
           setDetailId(r.id);

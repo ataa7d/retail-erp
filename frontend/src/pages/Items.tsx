@@ -830,6 +830,8 @@ function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImpor
 
 function ItemsTab() {
   const { t, i18n } = useTranslation();
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("inventory.items.create");
   const { data, error, reload } = useApiList<Item>("/api/items");
   const [showNew, setShowNew] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -860,17 +862,19 @@ function ItemsTab() {
         emptyIcon={Package}
         emptyText="No items found."
         searchPlaceholder="Search by code or name..."
-        actionLabel="New Item"
-        onAction={() => setShowNew(true)}
+        actionLabel={canCreate ? "New Item" : undefined}
+        onAction={canCreate ? () => setShowNew(true) : undefined}
         onRowClick={(r) => setDetailItemId(r.id)}
         toolbarExtra={
           <>
-            <button
-              onClick={() => setShowImport(true)}
-              className="flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
-            >
-              <Upload size={14} /> Bulk Import
-            </button>
+            {canCreate && (
+              <button
+                onClick={() => setShowImport(true)}
+                className="flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+              >
+                <Upload size={14} /> Bulk Import
+              </button>
+            )}
             <button
               onClick={() =>
                 data &&
@@ -996,7 +1000,8 @@ function ClassificationTab({
   emptyText: string;
   showParent?: boolean;
 }) {
-  const { token, companyId } = useAuth();
+  const { token, companyId, hasPermission } = useAuth();
+  const canManage = hasPermission("inventory.items.edit");
   const { data, error, reload } = useApiList<ClassificationEntity & { parent_id?: string | null }>(basePath);
   const [showNew, setShowNew] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -1059,8 +1064,8 @@ function ClassificationTab({
         emptyIcon={Tag}
         emptyText={emptyText}
         searchPlaceholder="Search by code or name..."
-        actionLabel="New"
-        onAction={() => setShowNew(true)}
+        actionLabel={canManage ? "New" : undefined}
+        onAction={canManage ? () => setShowNew(true) : undefined}
       />
       {showNew && (
         <Modal title={`New ${title}`} onClose={() => setShowNew(false)}>
